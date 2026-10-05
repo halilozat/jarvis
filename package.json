@@ -1,0 +1,14 @@
+{
+  "name": "jarvis",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "npm --prefix server install && npm --prefix web install && node -e \"const fs=require('fs');if(!fs.existsSync('server/.env'))fs.copyFileSync('server/.env.example','server/.env')\"",
+    "dev": "node scripts/dev.mjs",
+    "build": "npm --prefix web run build",
+    "start": "npm run build && npm --prefix server start",
+    "test": "npm --prefix server run test",
+    "models": "npm --prefix server run models",
+    "voices": "npm --prefix server run voices"
+  }
+}

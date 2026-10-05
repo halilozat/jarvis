@@ -1,0 +1,27 @@
+{
+  "name": "jarvis-server",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "models": "tsx src/listModels.ts",
+    "test": "tsx src/selftest.ts",
+    "voices": "tsx src/voices.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^18.0.5",
+    "express": "^5.2.1",
+    "rss-parser": "^3.13.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "type": "module"
+}
