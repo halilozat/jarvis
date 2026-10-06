@@ -136,3 +136,185 @@ Telefon / Tablet / Bilgisayar (React PWA)
 4. Arayüz sahneleri sırayla seslendirir, her sahnenin görselini o anda canlandırır.
 
 Sistem prompt'u: `server/src/prompt.ts` (açıklamalı hâli: `docs/jarvis-system-prompt.md`). Haber kaynakları: `server/src/news.ts`. **Önceki oturumun tüm kararları: `docs/DEVIR-NOTU.md`.**
+
+---
+
+## Kolay Kurulum
+
+*Yazılımcı değilsen bu bölüm senin için.*
+
+Bu rehber, daha önce hiç kod çalıştırmamış biri için hazırlandı. Adımları sırayla izlersen yaklaşık **15-20 dakikada** Jarvis bilgisayarında çalışır.
+
+> **Kısaca ne yapacağız?**
+> 1. Bilgisayara Node.js kuracağız (Jarvis'i çalıştıran program).
+> 2. Jarvis'i GitHub'dan indireceğiz.
+> 3. Abacus AI'dan bir API anahtarı alacağız (Jarvis'in beyni).
+> 4. Tek bir komutla Jarvis'i başlatacağız.
+
+---
+
+### Başlamadan önce
+
+**Gerekenler:**
+- Mac ya da Windows bilgisayar
+- İnternet bağlantısı
+- **Abacus AI ChatLLM aboneliği** (ücretli; güncel fiyatı abacus.ai sitesinde görebilirsin). Jarvis'in beyni olan RouteLLM API bu aboneliğin içinde geliyor.
+
+**Abonelik olmadan da deneyebilirsin:** API anahtarı eklemezsen Jarvis **demo modunda** açılır. Arayüzü, animasyonları ve örnek (kurgusal) bir haber özetini görebilirsin. Gerçek haberleri anlatması için anahtar gerekiyor.
+
+---
+
+### Adım 1: Node.js'i kur
+
+Node.js, Jarvis'i bilgisayarında çalıştıran ücretsiz bir programdır.
+
+1. **https://nodejs.org** adresine git.
+2. **LTS** yazan sürümü indir (yeşil düğme).
+3. İndirilen dosyayı aç ve kurulumu "İleri / Continue" diyerek tamamla. Hiçbir ayarı değiştirmene gerek yok.
+
+**Kurulduğunu kontrol et:**
+- **Mac:** Spotlight'ı aç (⌘ + Boşluk), **Terminal** yaz ve aç.
+- **Windows:** Başlat menüsüne **PowerShell** yaz ve aç.
+
+Açılan pencereye şunu yaz ve Enter'a bas:
+
+```
+node -v
+```
+
+`v22.x.x` gibi bir sürüm numarası görüyorsan tamamdır. "Komut bulunamadı" gibi bir hata alırsan pencereyi kapatıp yeniden aç ve tekrar dene.
+
+---
+
+### Adım 2: Jarvis'i indir
+
+1. **https://github.com/halilozat/jarvis** adresine git.
+2. Yeşil **Code** düğmesine tıkla → **Download ZIP**.
+3. İndirilen ZIP dosyasına çift tıklayıp aç.
+4. Çıkan klasörün adını **jarvis** yap ve kolay bulacağın bir yere taşı. Örneğin **Masaüstü**.
+
+---
+
+### Adım 3: Jarvis'i kur
+
+Terminal'de (Mac) ya da PowerShell'de (Windows) Jarvis klasörüne gitmemiz gerekiyor.
+
+**Mac:**
+```
+cd ~/Desktop/jarvis
+```
+
+**Windows:**
+```
+cd $HOME\Desktop\jarvis
+```
+
+> Klasörü Masaüstü dışında bir yere koyduysan: `cd ` yazıp bir boşluk bırak, sonra klasörü sürükleyip pencerenin içine bırak ve Enter'a bas.
+
+Şimdi kurulumu başlat:
+
+```
+npm run setup
+```
+
+Bu birkaç dakika sürebilir, ekranda çok sayıda yazı akacak. Normaldir. Bittiğinde yeniden komut yazabileceğin satır gelir.
+
+---
+
+### Adım 4: Abacus AI API anahtarını al
+
+1. **https://apps.abacus.ai** adresine git ve ChatLLM hesabınla giriş yap.
+2. Sol menüden **LLM APIs** sayfasını aç.
+3. **Create API key** düğmesine tıkla.
+4. Çıkan anahtarı **hemen kopyala**. Anahtar bir daha gösterilmez; kaybedersen yenisini oluşturman gerekir.
+
+> ⚠️ API anahtarı bir şifre gibidir. Kimseyle paylaşma, ekran görüntüsünde gösterme. Anahtarın başkasının eline geçerse senin kredini harcayabilir.
+
+---
+
+### Adım 5: Anahtarı Jarvis'e ver
+
+Jarvis'in ayar dosyasını aç:
+
+**Mac:**
+```
+open -e server/.env
+```
+
+**Windows:**
+```
+notepad server\.env
+```
+
+Açılan dosyada şu satırı bul:
+
+```
+ABACUS_API_KEY=
+```
+
+Eşittir işaretinin hemen arkasına, **boşluk bırakmadan** kopyaladığın anahtarı yapıştır:
+
+```
+ABACUS_API_KEY=s2_xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+Dosyayı kaydet (**⌘ + S** ya da **Ctrl + S**) ve kapat.
+
+> İstersen aynı dosyadaki `USER_NAME=Halil` satırını kendi adınla değiştir. Jarvis sana adınla hitap eder.
+
+---
+
+### Adım 6: Jarvis'i başlat 🚀
+
+Aynı pencereye yaz:
+
+```
+npm run dev
+```
+
+Birkaç saniye sonra tarayıcında (tercihen **Google Chrome**) şu adresi aç:
+
+```
+http://localhost:5173
+```
+
+Jarvis karşında! Mikrofon izni isterse **İzin ver** de.
+
+Dene:
+- 🎙️ Mikrofon düğmesine bas (bilgisayarda **boşluk tuşu**) ve **"Jarvis, interneti tara ve bana gündemi özetle"** de.
+- Ya da alttaki kutuya yazarak sor.
+
+**Kapatmak için:** Terminal/PowerShell penceresinde **Ctrl + C**.
+**Bir dahaki sefere açmak için:** Adım 3'teki `cd` komutuyla klasöre git, sonra `npm run dev`.
+
+---
+
+### Sık karşılaşılan sorunlar
+
+**"npm: command not found" / "npm tanınmıyor"**
+Node.js kurulduktan sonra Terminal/PowerShell penceresini kapatıp yeniden aç. Olmadıysa bilgisayarı yeniden başlat.
+
+**"No such file or directory" / "Yol bulunamadı"**
+Doğru klasörde değilsin. Adım 3'teki "klasörü sürükleyip bırak" yöntemini kullan.
+
+**Jarvis açılıyor ama üstte DEMO yazıyor**
+API anahtarı okunamamış. `server/.env` dosyasında anahtarın `ABACUS_API_KEY=` satırına boşluksuz yapıştırıldığından ve dosyanın kaydedildiğinden emin ol. Sonra Terminal'de **Ctrl + C** ile durdurup `npm run dev` ile yeniden başlat.
+
+**Mikrofon çalışmıyor**
+Chrome'da adres çubuğunun solundaki kilit simgesine tıkla → Mikrofon → İzin ver. Safari yerine Chrome kullan.
+
+**Ses robotik geliyor**
+Bu, tarayıcının kendi sesi. Daha doğal bir ses için Jarvis'te ☰ → Ayarlar → Ses bölümünden bir seslendirici seç. Ayrıntılar yukarıdaki "Seslendiren" bölümünde.
+
+**"Port 5173 is in use"**
+Jarvis zaten açık. Diğer Terminal penceresini kapat ya da tarayıcıda adresi yenile.
+
+---
+
+### Telefonda ve tablette kullanmak
+
+Bu biraz daha teknik bir adım: Jarvis'in bilgisayarında çalışması ve telefonunun ona güvenli (HTTPS) bir bağlantıyla ulaşması gerekiyor. Önce bilgisayarda çalıştığından emin ol, sonra yukarıdaki **"Telefon ve tablette kullanmak"** bölümünü izle.
+
+---
+
+Takıldığın bir yer olursa videonun altına **hangi adımda takıldığını ve ekranda ne yazdığını** yorum olarak yaz. Sık sorulanları bu rehbere ekliyorum. 🙌
