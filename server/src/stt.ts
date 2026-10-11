@@ -50,6 +50,10 @@ export async function transcribe(audio: Buffer, mime: string): Promise<{ text: s
   });
   const raw = String(resp.choices?.[0]?.message?.content ?? '').trim();
   // Model bazen {"text": "..."} biçiminde dönüyor
-  const text = (/^\{\s*"(?:text|transcript(?:ion)?)"\s*:\s*"([\s\S]*)"\s*\}$/.exec(raw)?.[1] ?? raw).replace(/^["“]|["”]$/g, '').trim();
+  let text = (/^\{\s*"(?:text|transcript(?:ion)?)"\s*:\s*"([\s\S]*)"\s*\}$/.exec(raw)?.[1] ?? raw).replace(/^["“]|["”]$/g, '').trim();
+  // Sessiz kayıtta model bazen kendi talimatını geri döndürüyor ("Türkçeyi kelimesi kelimesine yazıya dök"):
+  // bu, kullanıcının sözü değil. Boş say (istemci "Sizi duyamadım" der).
+  const f = text.toLocaleLowerCase('tr');
+  if (/kelimesi kelimesine|yazıya dök|duyduğun metni|konuşma yok|ses yok|^\W*$/.test(f)) text = '';
   return { text, model: resp.model ?? STT_MODEL, ms: Date.now() - t0 };
 }

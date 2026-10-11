@@ -90,6 +90,97 @@ Notlar:
 - **W** / **S**: test uyanışı / uyku modu (aşağıda)
 - ☰ → **Detay**: gündemin uzun özeti ve kaynakları · **Geçmiş**: tüm cihazlardaki konuşma, her cevabı bu cihazda yeniden oynatabilirsin
 
+### Akıllı ev
+
+Alt şeritteki **Ev** düğmesi panelini açar. Panelde dört cihaz var:
+- Salon ışığı ve çalışma odası ışığı: aç/kapat, parlaklık, sıcak/nötr/soğuk ton.
+- Türk kahve makinesi: köpük, şeker, "Pişir".
+- Filtre kahve makinesi: 1–4 fincan, "Demle", demleme bitince sıcak tutma.
+
+Sesle de çalışır: "Jarvis, salonun ışığını aç", "çalışma odasını yüzde otuz yap, soğuk beyaz", "filtre kahveyi iki fincan demle", "kahvem hazır mı?", "tüm ışıkları kapat". "Bana bol köpüklü bir Türk kahvesi yap" Türk kahve makinesini de çalıştırır. Mark 2'nin sağ sütunundaki **EV** kutusu anlık durumu gösterir. Jarvis bir cihazı değiştirince bütün ekranlarda kısa bir bildirim çıkar.
+
+- **Simülasyon (varsayılan):** Cihazlar sunucuda canlandırılır; kahve makineleri gerçekçi sürede ilerler (Türk kahvesi ~75 sn, filtre fincan başına ~40 sn). Panelde "simülasyon" etiketi görünür. Jarvis bunu her cevapta söylemez, sorulursa dürüstçe söyler.
+- **Gerçek cihazlar (Home Assistant):** `.env`'ye `HOME_ASSISTANT_URL`, `HOME_ASSISTANT_TOKEN` ve `HA_ENTITIES` eşlemesini yazın. Işıklar `light.turn_on/off` (parlaklık, renk sıcaklığı) ile, kahve makineleri akıllı priz (`switch`) ile açılıp kapanır. Bu köprü henüz gerçek bir Home Assistant ile denenmedi.
+
+### Kamera cihazı (Jarvis'in gözü)
+
+Eski bir iPhone Jarvis'in gözü olur. Görüntüsü bilgisayarda ve tablette canlı izlenir; "Jarvis, mutfakta ne var?" deyince Jarvis anlık bir kareye bakıp yorumlar.
+
+**Önce: erişim anahtarı.** Kamera görüntü taşıdığı için `server/.env` dosyasında `ACCESS_TOKEN` yoksa özelliğin tamamı kapalıdır; bütün kamera uç noktaları 403 döner. Uzun ve rastgele bir değer yazın. Ardından her cihazda Jarvis'i bir kez `https://…/?token=DEĞER` adresiyle açın; token o cihazda saklanır.
+
+**iPhone kurulumu (iPhone 11, Safari):**
+1. Safari'de Jarvis'i HTTPS adresinden açın (Tailscale: `https://<bilgisayar-adı>.<tailnet>.ts.net/?token=…`). Kamera düz HTTP'de çalışmaz.
+2. Ayarlar → **Bu cihazın rolü → Kamera**. Sayfa kamera ekranına geçer.
+3. **Kamerayı başlat**'a dokunun ve izin verin. Sonraki açılışlarda kendiliğinden başlar; Safari izni sorarsa Safari → aA → Web Sitesi Ayarları → Kamera: İzin Ver yapın.
+4. Kamera ekranında Ayarlar'dan ad (CAM-01), konum (MUTFAK), ön/arka kamera ve hareket hassasiyetini girin.
+5. Ekranın kapanmaması için: iOS 16.4 ve sonrasında Jarvis ekranı kendisi açık tutar. Tutamazsa ekranda uyarı çıkar; o durumda *Ayarlar → Ekran ve Parlaklık → Otomatik Kilit: Asla* yapın ya da *Rehberli Erişim*'i açın (Erişilebilirlik → Rehberli Erişim; Safari açıkken yan tuşa üç kez basın).
+6. Telefonu şarjda tutun. Kamera ekranı ısınmayı azaltmak için karanlık ve önizleme küçüktür. Kare hızı düşerse çözünürlük kendiliğinden 480p'ye iner.
+
+**İzleme:** Kamera bağlanınca ekran cihazlarının sol altında `● CAM-01 · MUTFAK` düğmesi belirir. Alt şeritteki **Kamera** düğmesi de paneli açar; **Fotoğraf** düğmesi ise eskisi gibi Jarvis'e fotoğraf gönderir. Tıklayınca küçük pencere açılır, görüntüye tıklayınca tam ekran olur.
+- Önce doğrudan WebRTC (**P2P**) denenir; görüntü sunucudan geçmez.
+- 7 sn'de kurulamazsa panel saniyede bir kare alan yedek moda (**KARE**) geçer.
+- Aynı anda en fazla 3 izleyici. Panel kapalıyken bağlantı açılmaz; izleyici yokken kamera düşük çözünürlükte yalnızca hareket algılar.
+- Birden fazla kamera varsa paneldeki sekmelerden geçilir.
+
+**Tailscale ve tüneller:** Tailscale'de cihazlar genellikle doğrudan bağlanır. Cloudflare tüneli gibi yalnızca HTTP taşıyan yollarda WebRTC TURN sunucusu olmadan kurulamayabilir. O durumda panel KARE moduna düşer; ya da `.env`'ye `TURN_URL / TURN_USERNAME / TURN_CREDENTIAL` girin.
+
+**Jarvis'in bakması:** "Jarvis, mutfakta ne var?", "Kahve makinesinin önünde fincan var mı?", "Kapıya bak".
+- Jarvis kameradan tek bir anlık kare ister; 5 sn'de gelmezse "kamera yanıt vermedi" der.
+- Kareyi RouteLLM görüntü modeli yorumlar: `VISION_MODEL`, boşsa `gemini-3.8-flash`. `npm run models` çıktısında `input_modalities` içinde `image` olan modeller kullanılabilir.
+- İzleyici ekranlarında panel öne gelir, tarama oynar ve analiz edilen kare 3 sn donar.
+- Jarvis yalnızca karede görüneni söyler; emin değilse "net göremiyorum" der, kişileri adıyla tanımlamaz. Kamera kapalıysa "CAM-01 çevrimdışı" der.
+
+**Kahve falı (eğlence):** Fincanın fotoğrafını **Fotoğraf** düğmesiyle gönderin ya da fincanı kamera cihazına gösterip "Jarvis, falıma bak" deyin. Jarvis telvede gerçekten görünen şekillerden esprili bir fal okur ve bunun bilim olmadığını bir kez söyler.
+
+**Hareket algılama:** Tamamen telefonda çalışır (küçük gri karelerin farkı); RouteLLM'e kare gitmez. Panelde "HAREKET" etiketi yanar. Kamera ekranından kapatılabilir.
+
+**Gizlilik:**
+- Hiçbir kare diske, loga ya da repoya yazılmaz.
+- Sunucu yalnızca son kareyi bellekte tutar; kamera çevrimdışı olunca siler.
+- Jarvis'in baktığı kare görüntü modeline (RouteLLM) gönderilir.
+- Kamera ekranında "CANLI · 2 izleyici" göstergesi, birinin izlediğini belli eder.
+- Evdeki diğer kişileri kameranın varlığından haberdar edin. Banyo ya da yatak odası gibi özel alanlara kurmayın.
+
+### YouTube: maç özeti ve video
+
+- **"Jarvis, Barça maçının özetini aç":** Takımın en yeni özetini resmi YouTube kanallarında bulur, kısa bir cümle söyler ve videoyu Jarvis'in içinde açar. Varsayılan branş futboldur; basketbol ve voleybol için açıkça söyleyin.
+  - Taranan kanallar: S Sport (La Liga, Serie A, Bundesliga Türkçe özetleri), beIN SPORTS Türkiye (Süper Lig, Ligue 1), TRT SPOR (Şampiyonlar Ligi), LALIGA, Serie A, UEFA, Premier League, FC Barcelona, Real Madrid.
+  - Aynı maçın özeti birden fazla kanalda varsa önce Türkçe yayıncı seçilir.
+  - S Sport ve LaLiga videolarını başka uygulamalarda oynatılmaya kapatıyor. Bu videolarda Jarvis içinde oynatıcı yerine "YouTube'da izle" kartı çıkar; telefonda YouTube uygulamasını açar. Oynatıcı bir kanalda engelle karşılaşırsa bunu öğrenir ve o kanalda bir daha denemez.
+  - Kanal eklemek için: `YOUTUBE_CHANNELS="Ad=UC…"`.
+- **"Son videomu aç":** Kendi kanalınızın son Shorts videosunu dikey çerçevede açar. Uzun video için "son uzun videoyu aç" deyin. Kanal `YOUTUBE_OWN_CHANNEL` ile tanımlanır; favori kanallar `YOUTUBE_FAVORITES` ile eklenir ("S Sport'un son videosu" da çalışır).
+- **"Şunu aç: <YouTube linki>":** Verilen videoyu doğrulayıp açar.
+- **"… ile ilgili bir video aç":** Genel arama için ücretsiz bir YouTube Data API anahtarı gerekir (`YOUTUBE_API_KEY`). Anahtar varsa maç özetleri de kanalın tüm geçmişinde aranır. Anahtar yoksa yalnızca son 15 video taranır.
+- Video bitince panel kendiliğinden kapanır; ✕ ya da Esc ile de kapanır. Yeni soru sorunca ya da mikrofona basınca kapanır.
+- Jarvis yalnızca araçların gerçekten bulduğu videoyu açabilir; video kimliği uyduramaz.
+- Reels uyarısı: maç görüntüleri telif korumalıdır, videoda kısa tutun.
+
+### ElevenLabs sesi (isteğe bağlı)
+
+Beyin RouteLLM'de kalır, yalnızca seslendirme ElevenLabs'ten gelir.
+
+1. elevenlabs.io'da hesap açın. Ticari kullanım (Reels) için en az **Starter** planı gerekir.
+2. *Profile → API Keys* bölümünden anahtar oluşturun. Gerekli izinler: Text to Speech, Voices, User.
+3. `server/.env` dosyasına şunu ekleyin: `ELEVENLABS_API_KEY=...` (isteğe bağlı: `ELEVENLABS_MODEL=eleven_v4_turbo`).
+4. `npm --prefix server run eleven` komutu kullanımı, hesaptaki sesleri ve kütüphanedeki Türkçe erkek sesleri listeler. Listeden bir sesi `npm --prefix server run eleven -- ekle <owner> <voice> "Ad"` komutuyla hesaba ekleyin.
+5. Ses *Ayarlar → Seslendiren* listesinde görünür. Aylık karakter kullanımı da orada yazar.
+
+Her cümle, önceki ve sonraki cümle bağlam olarak verilerek seslendirilir; böylece tonlama sahneden sahneye kopmaz. Hız ElevenLabs tarafında uygulanır, tarayıcıda hızlandırma yapılmaz. Aynı cümleler diske önbelleklenir, tekrar çalınması kredi harcamaz.
+
+### Ekran: Mark 1 / Mark 2
+
+*Ayarlar → Ekran* bölümünden seçilir ve tüm cihazlarda ortaktır. Ortak ayarı değiştirmeden yalnızca bir sekmede denemek için adresin sonuna `?ui=mark2` (ya da `?ui=mark1`) ekleyin.
+
+- **Mark 1:** sade ekran. Çekirdek, dört pano ve haber şeridi.
+- **Mark 2:** yoğun HUD.
+  - Üstte ayın günleri cetveli; solda tarih ve saat halkası, sistem durumu, pil ve ağ göstergeleri.
+  - Ortada pusula halkalı çekirdek ve etrafındaki veri dilimleri: piyasa, gündem dağılımı, 12 saatlik hava, kaynak durumları.
+  - Sağda gün doğumu ve batımı işaretli hava halkası, gündem listesi ve oturum ölçümleri (FPS, bellek).
+  - Altta yuvarlak düğmeler.
+  - Ekrandaki her sayı gerçektir; tarayıcı bir değeri vermiyorsa (örneğin Safari'de pil) "yok" yazar.
+  - Konuşurken çekirdek sola kayar ve sahne görseli sağda çekirdeğe bağlı açılır. Sağ liste "Akış"a döner, fotoğraf sol üstteki çerçevede görünür, harita sahnesinde dünya o şehirlere döner, dolar ya da hava anılınca ilgili dilim parlar.
+  - Telefonda sade bir düzene geçer.
+
 ### İki alkışla uyanma
 
 Jarvis 5 dakika boşta kalınca (*Ayarlar → Uyanış → Boşta kalınca uyku*) ya da **S** tuşuyla uyku moduna geçer. Ekran neredeyse siyahtır, ortada nefes alan bir nokta vardır. Uyandırmak için:
@@ -135,7 +226,7 @@ Telefon / Tablet / Bilgisayar (React PWA)
 3. Sunucu her görseldeki sayının ve şehrin haber metninde **birebir geçtiğini doğrular**; geçmiyorsa görseli başlık kartına düşürür. Jarvis grafik uyduramaz.
 4. Arayüz sahneleri sırayla seslendirir, her sahnenin görselini o anda canlandırır.
 
-Sistem prompt'u: `server/src/prompt.ts` (açıklamalı hâli: `docs/jarvis-system-prompt.md`). Haber kaynakları: `server/src/news.ts`. **Önceki oturumun tüm kararları: `docs/DEVIR-NOTU.md`.**
+Sistem prompt'u: `server/src/prompt.ts` (açıklamalı hâli: `docs/jarvis-system-prompt.md`). Haber kaynakları: `server/src/news.ts`.
 
 ---
 

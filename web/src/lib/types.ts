@@ -16,6 +16,7 @@ export type Gorsel = (
   | { tip: 'adimlar'; baslik: string; adimlar: string[] }
   | { tip: 'alinti'; metin: string; kaynak: string }
   | { tip: 'kisi_yer'; baslik: string; ozet: string }
+  | { tip: 'video'; youtube_id: string; baslik: string; kanal: string; harici?: boolean; dikey?: boolean }
 ) & { haber_id?: string; foto_arama?: string; wiki?: string; foto?: Photo | null };
 
 /** Seslendiren. model 'browser' = tarayıcının kendi sesi (çevrimdışı yedek). */
@@ -48,7 +49,12 @@ export interface StoredMessage {
 
 export type CoreState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
+import type { CameraEvent } from './camera';
+import type { HomeState } from '../components/HomePanel';
+
 export type ServerEvent =
+  | CameraEvent
+  | ({ type: 'home' } & HomeState)
   | { type: 'presence'; online: Device[] }
   | { type: 'user'; message: StoredMessage; origin: string }
   | { type: 'progress'; line: string; origin: string }
@@ -59,13 +65,16 @@ export type ServerEvent =
   | { type: 'reply'; message: StoredMessage; origin: string }
   | { type: 'error'; error: string; origin: string }
   | { type: 'handoff'; from: Device | null; to: Device; toClient: string }
-  | { type: 'settings'; photoMode: 'haber' | 'video'; voice: VoiceSel; sfx: boolean; wake: WakeConfig }
+  | { type: 'settings'; photoMode: 'haber' | 'video'; voice: VoiceSel; sfx: boolean; wake: WakeConfig; ui: UiMode }
   | { type: 'attention'; ms: number; by: Device }
   | { type: 'attention_end' }
   | { type: 'wake'; at: number; greeting: { period: GreetingPeriod; text: string }; greeter: Device; brief: boolean; voice: VoiceSel; via: string }
   | { type: 'sleep' }
   | { type: 'dashboard'; data: Dashboard }
   | { type: 'cleared' };
+
+/** Ekran: mark1 sade, mark2 yoğun HUD (tüm cihazlarda ortak) */
+export type UiMode = 'mark1' | 'mark2';
 
 // ---------- İki alkışla uyanma (server/src/wake.ts ile aynı şekil) ----------
 export type WakeMode = 'clap+voice' | 'clap' | 'voice';
@@ -100,6 +109,10 @@ export interface Weather {
   icon: WeatherIcon;
   wind: number;
   today: { max: number; min: number; rain_prob: number | null; code: number };
+  /** Önümüzdeki 12 saat */
+  hourly: { time: string; temp: number; rain_prob: number | null }[];
+  sunrise: string | null;
+  sunset: string | null;
   updated_at: string;
 }
 
@@ -118,7 +131,8 @@ export interface NewsStats {
   sources_ok: number;
   sources_total: number;
   by_category: { category: string; count: number }[];
-  headlines: { title: string; source: string; category: string }[];
+  headlines: { title: string; source: string; category: string; image: string | null; published_at: string }[];
+  sources: { name: string; ok: boolean; count: number }[];
 }
 
 export interface SystemStats { routellm_ms: number | null; routellm_ok: boolean; devices_online: Device[]; model: string }

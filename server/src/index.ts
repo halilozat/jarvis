@@ -16,6 +16,11 @@ import {
 } from './tts.js';
 import { knownImageUrls, type PhotoMode } from './photos.js';
 import { DEFAULT_WAKE, greetingPeriod, health, mergeWake, type WakeConfig } from './wake.js';
+import { addMemory, getMemory, getProfile, removeMemory, saveProfile } from './profile.js';
+import { markBlocked } from './youtube.js';
+import { CAMERA_ENABLED, VISION_MODEL, cameraRouter, initCameras, onClientClosed } from './camera.js';
+import { control, homeState, initHome, type DeviceId, type HomeAction } from './home.js';
+import { ELEVEN_MODEL, ELEVEN_MODEL_LABEL, elevenReady, elevenUsage, elevenVoices, isEleven } from './eleven.js';
 import type { Device, StoredMessage } from './types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -28,6 +33,8 @@ const DEVICES: Device[] = ['masaustu', 'tablet', 'telefon'];
 interface State {
   messages: StoredMessage[];
   photoMode: PhotoMode;
+  /** Ekran: mark1 (sade) · mark2 (yoğun HUD); tüm cihazlarda ortak */
+  ui?: 'mark1' | 'mark2';
   lastClient: string | null;
   lastDevice: Device | null;
   /** Seslendiren: Ayarlar'dan seçilir, tüm cihazlarda ortak. .env yalnızca varsayılan. */
@@ -57,6 +64,8 @@ if (env.warning) console.warn(`[tts] UYARI: ${env.warning}`);
 function validVoice(v: VoiceSel | undefined): v is VoiceSel {
   if (!v || typeof v.model !== 'string' || typeof v.voice !== 'string') return false;
   if (v.model === BROWSER) return true;
+  // ElevenLabs: anahtar varsa ve ses kimliği biçimi doğruysa (sesler hesaptan gelir, npm run voices'tan değil)
+  if (isEleven(v.model)) return elevenReady() && /^[A-Za-z0-9]{8,40}$/.test(v.voice);
   if (isRoutedModel(v.model)) return false;
   const catalog = usableVoices();
   return !catalog.length || catalog.some(c => c.model === v.model && c.voice === v.voice);
@@ -79,15 +88,25 @@ function warmGreetings(v: VoiceSel = currentVoice()) {
 }
 
 // ---------- SSE: cihazlar arası anlık senkron ----------
-interface Client { id: string; device: Device; res: Response }
+/** role 'camera': Jarvis'in gözü olan cihaz (eski iPhone); ekran cihazı sayılmaz (presence, karşılama vb.) */
+interface Client { id: string; device: Device; role: 'screen' | 'camera'; res: Response }
 const clients = new Map<string, Client>();
 function broadcast(event: object) {
   const data = `data: ${JSON.stringify(event)}\n\n`;
   for (const c of clients.values()) c.res.write(data);
 }
-function presence() {
-  return DEVICES.filter(d => [...clients.values()].some(c => c.device === d));
+/** Yalnızca tek bir istemciye (WebRTC sinyali, kamera komutları) */
+function sendTo(clientId: string, event: object): boolean {
+  const c = clients.get(clientId);
+  if (!c) return false;
+  c.res.write(`data: ${JSON.stringify(event)}\n\n`);
+  return true;
 }
+function presence() {
+  return DEVICES.filter(d => [...clients.values()].some(c => c.device === d && c.role === 'screen'));
+}
+initCameras({ broadcast, sendTo });
+initHome(broadcast);
 
 const app = express();
 app.use(express.json({ limit: '12mb' })); // kamera fotoğrafı (istemci ~1280 px JPEG'e küçültür)
@@ -105,19 +124,24 @@ const asDevice = (d: unknown): Device => (DEVICES.includes(d as Device) ? (d as 
 app.get('/api/events', (req, res) => {
   const id = String(req.query.client || Math.random());
   const device = asDevice(req.query.device);
+  const role = req.query.role === 'camera' ? 'camera' : 'screen';
   res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
   res.write(': bağlandı\n\n');
-  clients.set(id, { id, device, res });
+  clients.set(id, { id, device, role, res });
   broadcast({ type: 'presence', online: presence() });
   const ping = setInterval(() => res.write(': ping\n\n'), 20000);
   req.on('close', () => {
     clearInterval(ping);
+    // Aynı istemci yeniden bağlandıysa eski bağlantının kapanışı yenisini silmesin
+    if (clients.get(id)?.res !== res) return;
     clients.delete(id);
+    onClientClosed(id);
     broadcast({ type: 'presence', online: presence() });
   });
 });
 
-const settingsEvent = () => ({ type: 'settings', photoMode: state.photoMode, voice: currentVoice(), sfx: sfx(), wake: wakeCfg() });
+const uiMode = () => state.ui ?? 'mark1';
+const settingsEvent = () => ({ type: 'settings', photoMode: state.photoMode, voice: currentVoice(), sfx: sfx(), wake: wakeCfg(), ui: uiMode() });
 
 app.get('/api/state', (_req, res) => {
   res.json({
@@ -128,6 +152,8 @@ app.get('/api/state', (_req, res) => {
     voice: currentVoice(),
     sfx: sfx(),
     wake: wakeCfg(),
+    ui: uiMode(),
+    camera: { enabled: CAMERA_ENABLED, vision: VISION_MODEL },
     mock: MOCK,
     model: CHAT_MODEL,
     online: presence(),
@@ -156,12 +182,23 @@ setInterval(() => {
 }, 5 * 60_000).unref();
 
 // ---------- Seslendiren ----------
-app.get('/api/voices', (_req, res) => {
+app.get('/api/voices', async (_req, res) => {
   const list = usableVoices().map(({ id, model, voice, label, provider, f0, wpm }) => ({
     id, model, voice, label, provider, wpm,
     f0: f0?.length ? Math.round(f0.reduce((a, b) => a + b, 0) / f0.length) : null,
   }));
-  res.json({ voices: list, current: currentVoice(), tested: loadCatalog().length });
+  // ElevenLabs hesabındaki sesler (anahtar varsa)
+  const [eleven, usage] = await Promise.all([elevenVoices(), elevenUsage()]);
+  const elevenList = eleven.map(v => ({
+    id: `${ELEVEN_MODEL}:${v.voice_id}`,
+    model: ELEVEN_MODEL,
+    voice: v.voice_id,
+    label: `${v.name.split(/\s+[-–]\s+/)[0]} · ${ELEVEN_MODEL_LABEL[ELEVEN_MODEL] ?? ELEVEN_MODEL}`,
+    provider: 'ElevenLabs',
+    wpm: null,
+    f0: null,
+  }));
+  res.json({ voices: [...elevenList, ...list], current: currentVoice(), tested: loadCatalog().length, eleven: usage });
 });
 
 app.get('/api/voices/preview', async (req, res) => {
@@ -178,6 +215,7 @@ app.get('/api/voices/preview', async (req, res) => {
 app.post('/api/settings', (req, res) => {
   if (req.body.photoMode === 'haber' || req.body.photoMode === 'video') state.photoMode = req.body.photoMode;
   if (typeof req.body.sfx === 'boolean') state.sfx = req.body.sfx;
+  if (req.body.ui === 'mark1' || req.body.ui === 'mark2') state.ui = req.body.ui;
   if (req.body.voice) {
     const v = req.body.voice;
     const sel: VoiceSel = { model: String(v.model ?? ''), voice: String(v.voice ?? ''), speed: clampRate(Number(v.speed ?? currentVoice().speed)) };
@@ -198,6 +236,46 @@ app.post('/api/settings', (req, res) => {
   saveState();
   broadcast(settingsEvent());
   res.json({ ok: true, voice: currentVoice(), sfx: sfx() });
+});
+
+// ---------- Kamera cihazları (WebRTC sinyali, aralıklı kare, kameraya_bak) ----------
+app.use(cameraRouter());
+
+// ---------- Akıllı ev ----------
+app.get('/api/home', (_req, res) => res.json(homeState()));
+app.post('/api/home/:id', (req, res) => {
+  const r = control(req.params.id as DeviceId, req.body as HomeAction);
+  if ('hata' in r) return res.status(400).json({ error: r.hata });
+  res.json(homeState());
+});
+
+// ---------- Profil (Hakkımda) ve hafıza ----------
+app.get('/api/profile', (_req, res) => res.json({ profile: getProfile(), memory: getMemory() }));
+app.post('/api/profile', (req, res) => {
+  if (typeof req.body?.text !== 'string' || !req.body.text.trim()) return res.status(400).json({ error: 'tanıtım boş olamaz' });
+  const p = saveProfile(req.body.text);
+  console.log(`[profil] güncellendi · ${p.text.length} karakter`);
+  res.json({ profile: p });
+});
+app.post('/api/memory', (req, res) => {
+  const item = addMemory(String(req.body?.text ?? ''));
+  if (!item) return res.status(400).json({ error: 'not boş ya da zaten var' });
+  console.log(`[hafıza] elle eklendi [${item.id}] ${item.text}`);
+  res.json({ item, memory: getMemory() });
+});
+app.delete('/api/memory/:id', (req, res) => {
+  const item = removeMemory(req.params.id);
+  if (!item) return res.status(404).json({ error: 'not bulunamadı' });
+  console.log(`[hafıza] elle silindi [${item.id}] ${item.text}`);
+  res.json({ memory: getMemory() });
+});
+
+// Oynatıcı "sahibi bu sitede oynatılmasını engelledi" dedi (oEmbed bunu göremiyor; ör. LaLiga): bir daha önerilmesin
+app.post('/api/video-blocked', (req, res) => {
+  const id = String(req.body?.id ?? '');
+  markBlocked(id);
+  console.log(`[youtube] Jarvis içinde oynamıyor (kod ${req.body?.code ?? '?'}): ${id}`);
+  res.json({ ok: true });
 });
 
 // ---------- İki alkışla uyanma ----------
@@ -317,7 +395,9 @@ app.get('/api/tts', async (req, res) => {
     const sel: VoiceSel = model && voice ? { model, voice, speed: currentVoice().speed } : currentVoice();
     if (!validVoice(sel) || !ttsEnabled(sel)) return res.status(204).end();
     const label = req.query.i ? `sahne ${req.query.i}/${req.query.n ?? '?'}` : 'istek';
-    const speech = await synthesize(String(req.query.text || '').slice(0, 1000), sel, label);
+    // ElevenLabs: önceki/sonraki cümle bağlamı (tonlama cümleden cümleye kopmasın)
+    const ctx = { prev: req.query.prev ? String(req.query.prev).slice(0, 500) : undefined, next: req.query.next ? String(req.query.next).slice(0, 500) : undefined };
+    const speech = await synthesize(String(req.query.text || '').slice(0, 1000), sel, label, false, ctx);
     if (!speech) return res.status(503).end(); // istemci bir kez yeniden dener, olmazsa cevabın kalanı tarayıcı sesine geçer
     res.setHeader('Content-Type', speech.mime);
     res.setHeader('Cache-Control', 'public, max-age=86400');

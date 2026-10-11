@@ -5,3 +5,8 @@ server/data
 dev-dist
 .DS_Store
 .claude/settings.local.json
+ses-ornekleri/*.html
+
+# Yerel notlar ve geliştirme ayarı (repoda yok; Halil GitHub'dan kaldırdı)
+docs/DEVIR-NOTU.md
+.claude/

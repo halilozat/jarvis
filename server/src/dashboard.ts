@@ -15,6 +15,10 @@ export interface Weather {
   icon: WeatherIcon;
   wind: number;
   today: { max: number; min: number; rain_prob: number | null; code: number };
+  /** Önümüzdeki 12 saat (şimdiki saatten başlar) */
+  hourly: { time: string; temp: number; rain_prob: number | null }[];
+  sunrise: string | null;
+  sunset: string | null;
   updated_at: string;
 }
 
@@ -37,7 +41,9 @@ export interface NewsStats {
   sources_ok: number;
   sources_total: number;
   by_category: { category: string; count: number }[];
-  headlines: { title: string; source: string; category: string }[];
+  headlines: { title: string; source: string; category: string; image: string | null; published_at: string }[];
+  /** Kaynak bazında son tarama */
+  sources: { name: string; ok: boolean; count: number }[];
 }
 
 export interface SystemStats {
@@ -128,8 +134,9 @@ export const getWeather = cached<Weather>(TEN_MIN, 60_000, 'hava', async () => {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     '&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m' +
-    '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code' +
-    '&timezone=Europe/Istanbul&forecast_days=1';
+    '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,sunrise,sunset' +
+    '&hourly=temperature_2m,precipitation_probability' +
+    '&timezone=Europe/Istanbul&forecast_days=2';
   const r = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT) });
   if (!r.ok) throw new Error(`Open-Meteo HTTP ${r.status}`);
   const j: any = await r.json();
@@ -142,6 +149,16 @@ export const getWeather = cached<Weather>(TEN_MIN, 60_000, 'hava', async () => {
     throw new Error('Open-Meteo cevabında eksik alan');
   }
   const [description, icon] = describeWeather(code);
+  // Saatlik: şimdiki saatten itibaren 12 saat (Open-Meteo saatleri yerel saatle "2026-10-10T14:00" verir)
+  const h = j.hourly ?? {};
+  const nowHour = String(c.time ?? '').slice(0, 13);
+  const start = Math.max(0, (h.time ?? []).findIndex((t: string) => t.slice(0, 13) === nowHour));
+  const hourly: Weather['hourly'] = [];
+  for (let i = start; i < (h.time ?? []).length && hourly.length < 12; i++) {
+    const t = num(h.temperature_2m?.[i]);
+    if (t === null) continue;
+    hourly.push({ time: String(h.time[i]).slice(11, 16), temp: t, rain_prob: num(h.precipitation_probability?.[i]) });
+  }
   return {
     city,
     temp,
@@ -151,6 +168,9 @@ export const getWeather = cached<Weather>(TEN_MIN, 60_000, 'hava', async () => {
     icon,
     wind,
     today: { max, min, rain_prob: num(d.precipitation_probability_max?.[0]), code: dayCode },
+    hourly,
+    sunrise: d.sunrise?.[0] ? String(d.sunrise[0]).slice(11, 16) : null,
+    sunset: d.sunset?.[0] ? String(d.sunset[0]).slice(11, 16) : null,
     updated_at: String(c.time ?? new Date().toISOString()),
   };
 });
@@ -237,7 +257,7 @@ export const getMarkets = cached<Markets>(TEN_MIN, 60_000, 'TCMB kurları', asyn
 
 async function getNewsStats(): Promise<NewsStats> {
   try {
-    const { items, scanned } = await newsSnapshot();
+    const { items, scanned, sources } = await newsSnapshot();
     const counts = new Map<string, number>();
     for (const it of items) counts.set(it.category, (counts.get(it.category) ?? 0) + 1);
     const seen = new Set<string>();
@@ -245,7 +265,7 @@ async function getNewsStats(): Promise<NewsStats> {
     for (const it of items) {
       if (seen.has(it.title)) continue;
       seen.add(it.title);
-      headlines.push({ title: it.title, source: it.source, category: it.category });
+      headlines.push({ title: it.title, source: it.source, category: it.category, image: it.image_url, published_at: it.published_at });
       if (headlines.length >= 15) break;
     }
     return {
@@ -254,10 +274,11 @@ async function getNewsStats(): Promise<NewsStats> {
       sources_total: SOURCE_COUNT,
       by_category: [...counts].map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count),
       headlines,
+      sources,
     };
   } catch (e) {
     console.warn('Pano: haber istatistiği alınamadı:', e instanceof Error ? e.message : e);
-    return { total: 0, sources_ok: 0, sources_total: SOURCE_COUNT, by_category: [], headlines: [] };
+    return { total: 0, sources_ok: 0, sources_total: SOURCE_COUNT, by_category: [], headlines: [], sources: [] };
   }
 }
 
@@ -285,18 +306,19 @@ function demoDashboard(devices: Device[]): Dashboard {
   return {
     demo: true,
     updated_at: new Date().toISOString(),
-    weather: { city: 'Demo şehir', temp: 21, feels_like: 19, code: 2, description, icon, wind: 12, today: { max: 23, min: 15, rain_prob: 10, code: 2 }, updated_at: new Date().toISOString() },
+    weather: { city: 'Demo şehir', temp: 21, feels_like: 19, code: 2, description, icon, wind: 12, today: { max: 23, min: 15, rain_prob: 10, code: 2 }, hourly: Array.from({ length: 12 }, (_, i) => ({ time: `${String((12 + i) % 24).padStart(2, '0')}:00`, temp: 21 - Math.abs(i - 3) * 0.6, rain_prob: 10 })), sunrise: '07:10', sunset: '18:40', updated_at: new Date().toISOString() },
     markets: { source: 'demo', date: days[days.length - 1], items: [item('USD', 41.6, 0.04), item('EUR', 48.9, 0.03), item('GBP', 55.8, -0.02)] },
     news: {
       total: 5,
       sources_ok: 4,
       sources_total: 4,
       by_category: [{ category: 'gundem', count: 2 }, { category: 'ekonomi', count: 2 }, { category: 'spor', count: 1 }],
+      sources: [{ name: 'Demo Ajans', ok: true, count: 2 }, { name: 'Demo Finans', ok: true, count: 1 }, { name: 'Demo Spor', ok: true, count: 1 }, { name: 'Demo TV', ok: false, count: 0 }],
       headlines: [
-        { title: 'Demo: Merkez Bankası faiz kararını açıkladı', source: 'Demo Ajans', category: 'ekonomi' },
-        { title: 'Demo: Dolar/TL haftayı yatay kapattı', source: 'Demo Finans', category: 'ekonomi' },
-        { title: "Demo: İzmir'de 4,6 büyüklüğünde deprem", source: 'Demo Ajans', category: 'gundem' },
-        { title: 'Demo: Milli takım kadrosu açıklandı', source: 'Demo Spor', category: 'spor' },
+        { title: 'Demo: Merkez Bankası faiz kararını açıkladı', source: 'Demo Ajans', category: 'ekonomi', image: null, published_at: new Date().toISOString() },
+        { title: 'Demo: Dolar/TL haftayı yatay kapattı', source: 'Demo Finans', category: 'ekonomi', image: null, published_at: new Date().toISOString() },
+        { title: "Demo: İzmir'de 4,6 büyüklüğünde deprem", source: 'Demo Ajans', category: 'gundem', image: null, published_at: new Date().toISOString() },
+        { title: 'Demo: Milli takım kadrosu açıklandı', source: 'Demo Spor', category: 'spor', image: null, published_at: new Date().toISOString() },
       ],
     },
     system: { routellm_ms: null, routellm_ok: false, devices_online: devices, model: 'demo' },

@@ -6,6 +6,10 @@ import { findNewsById } from './news.js';
 import { resolveFastPhoto, resolveSlowPhoto, type PhotoMode } from './photos.js';
 import { findWiki } from './wiki.js';
 import { mockReply } from './mock.js';
+import { getProfile, memoryForPrompt } from './profile.js';
+import { isEmbeddable, isShort } from './youtube.js';
+import { FAL_SON, findScripted, isFalTurn } from './scripted.js';
+import { cameraList } from './camera.js';
 import { BRIEF_OPENING, BRIEF_TRIGGER } from './brief.js';
 import type { Device, Gorsel, GorselWithPhoto, JarvisReply, Photo, Sahne, StoredMessage } from './types.js';
 
@@ -26,7 +30,8 @@ function contextVars(device: Device, prevDevice: Device | null) {
     cihaz: device,
     onceki_cihaz: prevDevice ?? device,
     kullanici: process.env.USER_NAME || 'Halil',
-    kullanici_hakkinda: process.env.USER_ABOUT || "Türkiye'de yaşıyor, yazılımcı ve içerik üreticisi.",
+    profil: getProfile().text,
+    hafiza: memoryForPrompt(),
   };
 }
 
@@ -97,7 +102,7 @@ export class SceneStream {
 
 // ---------------------------------------------------------------- Sahne doğrulama
 
-const TIPLER = new Set(['yok', 'baslik', 'sayi', 'grafik', 'harita', 'karsilastirma', 'zaman', 'liste', 'ikon', 'kart', 'adimlar', 'alinti', 'kisi_yer']);
+const TIPLER = new Set(['yok', 'baslik', 'sayi', 'grafik', 'harita', 'karsilastirma', 'zaman', 'liste', 'ikon', 'kart', 'adimlar', 'alinti', 'kisi_yer', 'video']);
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 
 /** Eksik ya da bozuk alanlı görseli "yok"a indirger (istemci asla yarım görsel çizmesin). */
@@ -116,6 +121,7 @@ function normalizeGorsel(g: any): GorselWithPhoto {
     }
     case 'alinti': return str(g.metin) ? { tip: 'alinti', metin: str(g.metin), kaynak: str(g.kaynak), ...meta } : { tip: 'yok' };
     case 'kisi_yer': return str(g.baslik) ? { tip: 'kisi_yer', baslik: str(g.baslik), ozet: str(g.ozet), ...meta } : { tip: 'yok' };
+    case 'video': return /^[\w-]{11}$/.test(str(g.youtube_id)) ? { tip: 'video', youtube_id: str(g.youtube_id), baslik: str(g.baslik), kanal: str(g.kanal) } : { tip: 'yok' };
     default: return { ...g, ...meta };
   }
 }
@@ -173,6 +179,10 @@ export function verifyVisual(g: GorselWithPhoto, toolText: string): GorselWithPh
     }
     case 'alinti':
       return toolText && squash(toolText).includes(squash(g.metin)) ? g : downgrade(g.kaynak || 'Alıntı');
+    case 'video':
+      // Yalnızca araçların gerçekten bulduğu video açılır (model kimlik uyduramaz)
+      // Gömme kapalıysa (S Sport) istemci "YouTube'da izle" kartı gösterir
+      return toolText.includes(`"video_id":"${g.youtube_id}"`) ? { ...g, harici: isEmbeddable(g.youtube_id) === false, dikey: isShort(g.youtube_id) } : downgrade(g.baslik || 'Video bulunamadı');
     case 'kisi_yer': {
       const w = findWiki(g.wiki) ?? findWiki(g.baslik);
       if (!w || !toolText.includes(w.baslik)) return downgrade(g.baslik);
@@ -208,6 +218,8 @@ export interface RunOptions {
 // Yapay zeka görseli yalnızca kart/adımlar/liste sahnelerine: "ikon" sahnesinde ikonun kendisi görsel ve tek sahnelik
 // sohbette ~9 sn'lik görsel, Jarvis konuşmayı bitirdikten sonra geliyordu (ölçüldü) — görünmeyen görsele kredi harcanmasın.
 const SYMBOLIC = new Set(['kart', 'adimlar', 'liste']);
+/** Falın sunucudan eklenen son sahnesi (sesi önceden hazır) */
+const FAL_FINAL = { __falSon: true, ses: FAL_SON, gorsel: { tip: 'ikon', ikon: 'users', baslik: '100 bin takipçi', alt: 'Falınızda görünen' } };
 
 export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
   const { text, device, prevDevice, history, photoMode, progress } = opts;
@@ -238,6 +250,8 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
     chain = chain.then(async () => {
       const sc = normalizeScene(raw);
       if (!sc) return;
+      // Fal turunda model kapanış cümlesini kendisi de yazarsa atla: o cümle sunucudan, birebir gelir
+      if (fal && !raw?.__falSon && /100\s*bin/i.test(sc.ses)) return;
       // Brifing her zaman sabit açılışla başlar; model yazmadıysa önüne eklenir.
       if (isBrief && firstScene && !isOpening(sc)) emit({ ses: BRIEF_OPENING, gorsel: { tip: 'yok' } });
       firstScene = false;
@@ -245,10 +259,10 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
       const news = g.haber_id ? findNewsById(g.haber_id) : undefined;
       const wiki = findWiki(g.wiki) ?? (g.tip === 'kisi_yer' ? findWiki(g.baslik) : undefined);
       const ctx = { mode: photoMode, news, query: g.foto_arama, wiki, symbolic: SYMBOLIC.has(g.tip) };
-      const foto = g.tip === 'yok' && !g.haber_id ? null : await resolveFastPhoto(ctx).catch(() => null);
+      const foto = (g.tip === 'yok' && !g.haber_id) || g.tip === 'video' ? null : await resolveFastPhoto(ctx).catch(() => null);
       const index = emitted.length;
       emit({ ses: sc.ses, gorsel: { ...(g as Gorsel), haber_id: g.haber_id, foto_arama: g.foto_arama, wiki: g.wiki, foto } });
-      if (!foto && g.tip !== 'yok') {
+      if (!foto && g.tip !== 'yok' && g.tip !== 'video') {
         slow.push(resolveSlowPhoto(ctx).then(p => {
           if (!p) return;
           emitted[index] = { ...emitted[index], gorsel: { ...emitted[index].gorsel, foto: p } };
@@ -275,6 +289,21 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
     };
   };
 
+  // Hazır komut (ör. "bana bir Türk kahvesi yap"): modele sorulmaz, birebir aynı cevap
+  const prev = [...history].reverse().find(m => m.role === 'assistant')?.text ?? '';
+  const sctx = { image: !!opts.image, prev, cameraOnline: cameraList().some(c => c.online && c.state !== 'durduruldu') };
+  const scripted = findScripted(text, sctx);
+  // Fal turu: model falı uydurur, son cümle (100 bin takipçi) sunucudan, birebir ve hazır sesle
+  const fal = !scripted && isFalTurn(text, sctx);
+  const FAL_NOTE = '[Sistem notu: Kahve falı turu. Eğlenceli, kısa bir fal uydur: 2-3 sahne. Fincandaki telveden ilham al. 100 bin takipçiden HİÇ bahsetme ve kapanış cümlesi yazma: "Falınızda 100 bin takipçi görüyorum efendim." cümlesini sistem en sona kendisi ekleyecek; son sahnen ona merak uyandıran bir geçiş olsun.]';
+  if (scripted) {
+    log(`hazır komut: ${scripted.name}`);
+    scripted.run?.(text.toLocaleLowerCase('tr').replace(/[çğıöşü]/g, c => ({ ç: 'c', ğ: 'g', ı: 'i', ö: 'o', ş: 's', ü: 'u' })[c] ?? c).replace(/[^a-z0-9]+/g, ' '));
+    scripted.sahneler.forEach(enqueue);
+    const r = await finish(scripted.detay);
+    return { ...r, model: 'hazır komut', router: 'hazır komut' };
+  }
+
   if (MOCK) {
     const m = await mockReply(text, device, progress);
     toolText = m.toolText;
@@ -286,8 +315,10 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
 
   // Sistem prompt'u: değişmeyen kısım başta, tarih/saat/cihaz sonda (RouteLLM prompt önbelleği her turda tutsun).
   const userContent: string | ContentPart[] = opts.image
-    ? [{ type: 'text', text: text || 'Bu ne?' }, { type: 'image_url', image_url: { url: opts.image } }]
-    : isBrief
+    ? [{ type: 'text', text: `${text || 'Bu ne?'}${fal ? `\n\n${FAL_NOTE}` : ''}` }, { type: 'image_url', image_url: { url: opts.image } }]
+    : fal
+      ? `${text}\n\n${FAL_NOTE}`
+      : isBrief
       ? `${text}\n\n[Sistem notu: Bu, gündem brifingi komutu. Gündem özeti protokolünü uygula.]`
       : text;
   const messages: ChatMessage[] = [
@@ -370,8 +401,11 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
       }
       // Son çare: düz metni tek sahne olarak göster.
       enqueue({ ses: content.slice(0, 400), gorsel: { tip: 'ikon', ikon: 'sparkles', baslik: 'Jarvis' } });
+      if (fal) enqueue(FAL_FINAL);
       return finish(content);
     }
+    // Model fotoğrafta telve görüp fal baktıysa ("fal": true) son cümle yine sunucudan
+    if (fal || parsed?.fal === true) enqueue(FAL_FINAL);
     return finish(typeof parsed?.detay === 'string' ? parsed.detay : '');
   }
   throw new Error('Çok fazla tur; cevap üretilemedi');

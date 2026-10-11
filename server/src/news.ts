@@ -32,7 +32,9 @@ const parser = new Parser({
   },
 });
 
-let cache: { at: number; items: NewsItem[]; scanned: number } | null = null;
+/** Kaynak bazında son tarama: o kaynağın en az bir beslemesi cevap verdi mi, kaç haber geldi */
+export interface SourceStatus { name: string; ok: boolean; count: number }
+let cache: { at: number; items: NewsItem[]; scanned: number; sources: SourceStatus[] } | null = null;
 const CACHE_MS = 10 * 60 * 1000;
 
 function stripHtml(s = ''): string {
@@ -57,7 +59,7 @@ function similar(a: string, b: string): boolean {
   return hit / Math.min(A.size, B.length) >= 0.6;
 }
 
-async function fetchAll(): Promise<{ items: NewsItem[]; scanned: number }> {
+async function fetchAll(): Promise<{ items: NewsItem[]; scanned: number; sources: SourceStatus[] }> {
   if (cache && Date.now() - cache.at < CACHE_MS) return cache;
   const results = await Promise.allSettled(FEEDS.map(f => parser.parseURL(f.url).then(feed => ({ f, feed }))));
   const items: NewsItem[] = [];
@@ -82,9 +84,14 @@ async function fetchAll(): Promise<{ items: NewsItem[]; scanned: number }> {
   items.sort((a, b) => b.published_at.localeCompare(a.published_at));
   items.forEach((it, i) => (it.id = 'n' + (i + 1)));
   const scanned = new Set(results.map((r, i) => (r.status === 'fulfilled' ? FEEDS[i].source : null)).filter(Boolean)).size;
+  const sources: SourceStatus[] = [...new Set(FEEDS.map(f => f.source))].map(name => ({
+    name,
+    ok: results.some((r, i) => FEEDS[i].source === name && r.status === 'fulfilled'),
+    count: items.filter(it => it.source === name).length,
+  }));
   // Hiçbir kaynak cevap vermediyse (internet yok) boş sonucu önbelleğe alma; bir sonraki istekte tekrar dene.
-  if (scanned === 0) return { items, scanned };
-  cache = { at: Date.now(), items, scanned };
+  if (scanned === 0) return { items, scanned, sources };
+  cache = { at: Date.now(), items, scanned, sources };
   return cache;
 }
 
@@ -97,7 +104,7 @@ export function newsCacheStats(): { scanned: number; at: number; items: number }
 }
 
 /** Pano için önbellekteki ham haber listesi (10 dk önbellek; boşsa çeker). */
-export function newsSnapshot(): Promise<{ items: NewsItem[]; scanned: number }> {
+export function newsSnapshot(): Promise<{ items: NewsItem[]; scanned: number; sources: SourceStatus[] }> {
   return fetchAll();
 }
 
@@ -139,5 +146,6 @@ export function findNewsById(id: string): NewsItem | undefined {
 
 // Test ve demo için
 export function __setCacheForTest(items: NewsItem[]) {
-  cache = { at: Date.now(), items, scanned: new Set(items.map(i => i.source)).size };
+  const names = [...new Set(items.map(i => i.source))];
+  cache = { at: Date.now(), items, scanned: names.length, sources: names.map(name => ({ name, ok: true, count: items.filter(i => i.source === name).length })) };
 }

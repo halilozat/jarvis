@@ -1,4 +1,4 @@
-import type { Dashboard, Device, Health, ServerEvent, StoredMessage, VoiceOption, VoiceSel, WakeConfig } from './types';
+import type { Dashboard, Device, Health, ServerEvent, StoredMessage, UiMode, VoiceOption, VoiceSel, WakeConfig } from './types';
 
 function safeGet(k: string) { try { return localStorage.getItem(k); } catch { return null; } }
 function safeSet(k: string, v: string) { try { localStorage.setItem(k, v); } catch { /* yok say */ } }
@@ -41,6 +41,8 @@ export interface AppState {
   voice: VoiceSel;
   sfx: boolean;
   wake: WakeConfig;
+  ui: UiMode;
+  camera?: { enabled: boolean; vision: string };
   mock: boolean;
   model: string;
   online: Device[];
@@ -58,7 +60,8 @@ export async function sendChat(text: string, device: Device, image?: string) {
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'hata');
 }
 
-export async function getVoices(): Promise<{ voices: VoiceOption[]; current: VoiceSel; tested: number }> {
+export interface ElevenUsage { used: number; limit: number; resetAt: string | null; tier: string }
+export async function getVoices(): Promise<{ voices: VoiceOption[]; current: VoiceSel; tested: number; eleven: ElevenUsage | null }> {
   const r = await fetch('/api/voices', { headers: headers() });
   if (!r.ok) throw new Error('ses listesi alınamadı');
   return r.json();
@@ -66,7 +69,7 @@ export async function getVoices(): Promise<{ voices: VoiceOption[]; current: Voi
 export const previewUrl = (id: string) => `/api/voices/preview?id=${encodeURIComponent(id)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
 
 /** Ses seçimi tüm cihazlarda ortaktır: sunucuda saklanır ve SSE ile herkese yayılır. */
-export async function saveSettings(patch: { voice?: VoiceSel; sfx?: boolean; wake?: Partial<WakeConfig> }) {
+export async function saveSettings(patch: { voice?: VoiceSel; sfx?: boolean; wake?: Partial<WakeConfig>; ui?: UiMode }) {
   const r = await fetch('/api/settings', { method: 'POST', headers: headers(), body: JSON.stringify(patch) });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'kaydedilemedi');
 }
@@ -82,6 +85,21 @@ export async function stt(audio: Blob): Promise<string> {
 export function metric(event: string, ms: number, detail?: string) {
   fetch('/api/metrics', { method: 'POST', headers: headers(), body: JSON.stringify({ event, ms, detail }), keepalive: true }).catch(() => {});
 }
+
+// ---------- Profil (Hakkımda) ve hafıza ----------
+export interface MemoryItem { id: string; text: string; at: string }
+export interface ProfileData { profile: { text: string; updated_at: string | null }; memory: MemoryItem[] }
+async function json<T>(r: Response): Promise<T> {
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'kaydedilemedi');
+  return r.json();
+}
+export const getProfile = () => fetch('/api/profile', { headers: headers() }).then(r => json<ProfileData>(r));
+export const saveProfile = (text: string) => fetch('/api/profile', { method: 'POST', headers: headers(), body: JSON.stringify({ text }) }).then(r => json<{ profile: ProfileData['profile'] }>(r));
+export const addMemory = (text: string) => fetch('/api/memory', { method: 'POST', headers: headers(), body: JSON.stringify({ text }) }).then(r => json<{ memory: MemoryItem[] }>(r));
+export const deleteMemory = (id: string) => fetch(`/api/memory/${encodeURIComponent(id)}`, { method: 'DELETE', headers: headers() }).then(r => json<{ memory: MemoryItem[] }>(r));
+
+/** Oynatıcı "sahibi bu sitede oynatılmasını engelledi" dedi: sunucu bir daha Jarvis içinde önermesin */
+export const reportVideoBlocked = (id: string, code: number) => post('/api/video-blocked', { id, code });
 
 // ---------- İki alkışla uyanma ----------
 const post = (url: string, body: object = {}) => fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify(body) }).then(r => r.ok);
@@ -117,9 +135,14 @@ export async function clearConversation() {
   await fetch('/api/clear', { method: 'POST', headers: headers() });
 }
 
+/** Önceki/sonraki cümle: ElevenLabs tonlamayı cümleler arasında sürdürsün diye */
+export interface TtsCtx { prev?: string; next?: string }
+
 /** v: cevaba sabitlenmiş ses; i/n yalnızca sunucu logu için ("sahne 3/6"). */
-export function ttsUrl(text: string, voice?: VoiceSel, i?: number, n?: number) {
+export function ttsUrl(text: string, voice?: VoiceSel, i?: number, n?: number, ctx: TtsCtx = {}) {
   const q = new URLSearchParams({ text });
+  if (ctx.prev) q.set('prev', ctx.prev);
+  if (ctx.next) q.set('next', ctx.next);
   if (voice) q.set('v', `${voice.model}:${voice.voice}`);
   if (i !== undefined) q.set('i', String(i));
   if (n !== undefined) q.set('n', String(n));
@@ -127,11 +150,11 @@ export function ttsUrl(text: string, voice?: VoiceSel, i?: number, n?: number) {
   return `/api/tts?${q}`;
 }
 
-export function subscribe(device: Device, onEvent: (e: ServerEvent) => void, onStatus: (ok: boolean) => void) {
+export function subscribe(device: Device, onEvent: (e: ServerEvent) => void, onStatus: (ok: boolean) => void, role: 'screen' | 'camera' = 'screen') {
   let es: EventSource | null = null;
   let closed = false;
   const open = () => {
-    es = new EventSource(`/api/events?client=${clientId}&device=${device}${token ? `&token=${encodeURIComponent(token)}` : ''}`);
+    es = new EventSource(`/api/events?client=${clientId}&device=${device}&role=${role}${token ? `&token=${encodeURIComponent(token)}` : ''}`);
     es.onopen = () => onStatus(true);
     es.onmessage = m => { try { onEvent(JSON.parse(m.data)); } catch { /* yok say */ } };
     es.onerror = () => {

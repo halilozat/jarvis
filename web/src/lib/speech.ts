@@ -1,4 +1,4 @@
-import { ttsUrl } from './api';
+import { ttsUrl, type TtsCtx } from './api';
 import type { VoiceSel } from './types';
 
 function safeGet(k: string) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -28,6 +28,8 @@ class VoiceEngine {
   serverTts = false;
   /** Konuşma hızı (playbackRate), 0.9–1.3 */
   rate = 1.08;
+  /** Bu çalmada kullanılan hız: ElevenLabs sesleri hızı sunucuda alır, tarayıcıda esnetilmez (1,0) */
+  private playRate = 1.08;
   /** "Jarvis efekti": sahne geçiş sesi */
   sfx = true;
   /** Bu cevap tarayıcı sesine geçti mi */
@@ -240,13 +242,13 @@ class VoiceEngine {
   private key(text: string, v?: VoiceSel) { return `${v ? `${v.model}:${v.voice}` : ''}\u0000${text}`; }
 
   /** Sahnenin sesini önden ister; aynı ses+metin için tek istek. force: cevabın yedeğe düşmesine bakma (karşılama). */
-  preload(text: string, v?: VoiceSel, i?: number, n?: number, force = false): Promise<string | null> {
+  preload(text: string, v?: VoiceSel, i?: number, n?: number, force = false, ctx: TtsCtx = {}): Promise<string | null> {
     if (!this.serverTts || (this.replyBrowser && !force)) return Promise.resolve(null);
     const k = this.key(text, v);
     if (!this.prefetch.has(k)) {
       this.prefetch.set(
         k,
-        fetch(ttsUrl(text, v, i, n))
+        fetch(ttsUrl(text, v, i, n, ctx))
           .then(r => (r.status === 200 ? r.blob() : null))
           .then(b => (b ? URL.createObjectURL(b) : null))
           .catch(() => null),
@@ -270,30 +272,37 @@ class VoiceEngine {
       // Chrome bazen dosyanın sonunda "pause" gönderip "ended"ı hiç göndermiyor; brifing orada kilitleniyordu.
       a.onpause = () => { if (a.duration && a.currentTime >= a.duration - 0.3) finish(true); };
       // Son emniyet: hiçbir olay gelmezse ses süresi + pay kadar sonra devam et.
-      a.onloadedmetadata = () => { if (Number.isFinite(a.duration)) guard = setTimeout(() => finish(true), (a.duration / this.rate + 1.5) * 1000); };
+      a.onloadedmetadata = () => { if (Number.isFinite(a.duration)) guard = setTimeout(() => finish(true), (a.duration / this.playRate + 1.5) * 1000); };
       a.src = url;
       // Tempo: perdeyi koruyarak hızlandır (src değişince bazı tarayıcılar hızı sıfırlıyor, ikisi de ayarlanır).
-      a.defaultPlaybackRate = a.playbackRate = this.rate;
+      a.defaultPlaybackRate = a.playbackRate = this.playRate;
       a.preservesPitch = true;
       (a as HTMLAudioElement & { webkitPreservesPitch?: boolean }).webkitPreservesPitch = true;
       a.play().then(() => { this.elUnlocked = true; }).catch(() => finish(false));
     });
   }
 
-  async speak(text: string, v?: VoiceSel, i?: number, n?: number): Promise<void> {
+  async speak(text: string, v?: VoiceSel, i?: number, n?: number, ctx: TtsCtx = {}): Promise<void> {
     this.stop();
+    const gen = this.gen;
+    this.playRate = v?.model.startsWith('eleven_') ? 1 : this.rate;
     if (this.serverTts && !this.replyBrowser) {
-      let url = await this.preload(text, v, i, n);
-      if (!url) {
-        this.prefetch.delete(this.key(text, v)); // bir kez yeniden dene
-        url = await this.preload(text, v, i, n);
+      // Seçili ses ASLA başka sese düşmez (Halil'in kuralı). Sunucu kısa süre cevap veremezse (ör. yeniden başlarken)
+      // artan aralıklarla tekrar denenir; yine olmazsa bu cümle sessiz geçer (altyazı ekranda kalır).
+      for (const wait of [0, 600, 1500, 3000]) {
+        if (wait) await new Promise(r => setTimeout(r, wait));
+        if (this.gen !== gen) return; // bu arada durduruldu / yeni cevap başladı
+        if (wait) this.prefetch.delete(this.key(text, v));
+        const url = await this.preload(text, v, i, n, false, ctx);
+        if (this.gen !== gen) return;
+        if (!url) continue;
+        const ok = await this.play(url);
+        this.cancelCurrent = null;
+        if (ok || this.gen !== gen) return;
       }
-      const ok = url ? await this.play(url) : false;
-      this.cancelCurrent = null;
-      if (ok) return;
-      // Sunucu sesi bu sahnede de alınamadı: cevabın KALANI tarayıcı sesine geçer (sahne sahne karışık ses yok).
-      this.replyBrowser = true;
-      this.onFallback?.(url ? 'ses çalınamadı' : 'sunucu sesi alınamadı');
+      this.onFallback?.('seçili ses alınamadı; bu cümle sessiz geçti');
+      // Altyazı okunabilsin diye cümle süresi kadar bekle
+      return new Promise(r => setTimeout(r, Math.min(8000, Math.max(1500, text.length * 60))));
     }
     return this.speakBrowser(text);
   }
@@ -322,7 +331,11 @@ class VoiceEngine {
     });
   }
 
+  /** stop() her çağrıldığında artar: bekleyen yeniden denemeler eski cümleyi çalmasın */
+  private gen = 0;
+
   stop() {
+    this.gen++;
     this.audio.pause();
     if ('speechSynthesis' in window) speechSynthesis.cancel();
     this.speakingBrowser = false;

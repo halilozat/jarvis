@@ -15,6 +15,7 @@ function visualTitle(g: Gorsel): string | null {
     case 'adimlar': return g.baslik;
     case 'alinti': return g.kaynak || g.metin;
     case 'kisi_yer': return g.baslik;
+    case 'video': return `▶ ${g.baslik}`;
     default: return null;
   }
 }

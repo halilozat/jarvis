@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Core } from './components/Core';
 import { Handoff, TopBar, Telemetry } from './components/Chrome';
 import { Visual } from './components/Visuals';
@@ -12,13 +12,18 @@ import { NewsStatsPanel } from './components/dashboard/NewsStatsPanel';
 import { SystemPanel } from './components/dashboard/SystemPanel';
 import { WeatherPanel } from './components/dashboard/WeatherPanel';
 import { SleepLayer, WakeChecks, WakeSettings, calibBus } from './components/Wake';
-import { clearConversation, detectDevice, getDashboard, getHealth, getState, getVoices, metric, postAttention, postSleep, postWake, previewUrl, saveDevice, saveSettings, sendChat, setPhotoMode, stt, subscribe, token, clientId } from './lib/api';
+import { ProfileSettings } from './components/Profile';
+import { VideoPanel, type VideoInfo } from './components/VideoPanel';
+import { CameraPanel } from './camera/CameraPanel';
+import { HomePanel, HomeToast, getHome, type HomeState } from './components/HomePanel';
+import { emitCamera, getCameras, getRole, isCameraEvent, onCamera, setRole, toggleCameraPanel } from './lib/camera';
+import { type ElevenUsage, clearConversation, detectDevice, getDashboard, getHealth, getState, getVoices, metric, postAttention, postSleep, postWake, previewUrl, saveDevice, saveSettings, sendChat, setPhotoMode, stt, subscribe, token, clientId } from './lib/api';
 import { startClapListener, type ClapListener } from './lib/clap';
 import { shrinkImage } from './lib/image';
 import { recorderSupported, startRecording } from './lib/recorder';
 import { Markdown } from './lib/markdown';
 import { createRecognizer, speechRecognitionSupported, voice } from './lib/speech';
-import { DEVICE_LABEL, type CoreState, type CurrencyCode, type Dashboard, type Device, type GreetingPeriod, type Health, type JarvisReply, type Sahne, type ServerEvent, type StoredMessage, type VoiceOption, type VoiceSel, type WakeConfig } from './lib/types';
+import { DEVICE_LABEL, type CoreState, type CurrencyCode, type Dashboard, type Device, type GreetingPeriod, type Health, type JarvisReply, type Sahne, type ServerEvent, type StoredMessage, type UiMode, type VoiceOption, type VoiceSel, type WakeConfig } from './lib/types';
 import { atServerTime, clockInfo, keepAwake, listenForCommand, preciseTimeout, startClockSync, syncClock, type CommandListen } from './lib/wake';
 
 type Highlight = CurrencyCode | 'weather';
@@ -45,6 +50,11 @@ const waitScene = (l: Live, i: number) => new Promise<void>(res => { if (l.scene
 const brainLabel = (r: JarvisReply) => (r.router && r.model && r.router !== r.model ? `${r.router} → ${r.model}` : r.model);
 const voiceGroup = (v: VoiceOption) => v.label.split(' · ').slice(1).join(' · ') || v.model;
 const voiceTone = (f0: number | null) => (f0 === null ? '' : f0 < 110 ? 'derin' : f0 < 160 ? 'orta' : 'ince');
+
+// Mark 2 (yoğun HUD) ayrı parça olarak yüklenir: Mark 1 kullanan cihaz onu indirmez.
+const Mark2 = lazy(() => import('./mark2/Mark2'));
+/** ?ui=mark2 ya da ?ui=mark1: ortak ayarı değiştirmeden yalnızca bu sekmede dene */
+const UI_OVERRIDE = ((q: string | null) => (q === 'mark1' || q === 'mark2' ? q : null))(new URLSearchParams(location.search).get('ui'));
 
 /** Çekirdeğe sabit bir fonksiyon: her render'da yeni `bind` çekirdeğin çizim döngüsünü baştan kuruyordu. */
 const coreLevel = () => voice.level();
@@ -92,6 +102,7 @@ export default function App() {
   const [voiceSel, setVoiceSel] = useState<VoiceSel | null>(null);
   const [sfxOn, setSfxOn] = useState(true);
   const [voices, setVoices] = useState<VoiceOption[] | null>(null);
+  const [elevenUse, setElevenUse] = useState<ElevenUsage | null>(null);
   const [bVoices, setBVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [speedDraft, setSpeedDraft] = useState<number | null>(null);
   const previewRef = useRef<HTMLAudioElement | null>(null);
@@ -102,7 +113,31 @@ export default function App() {
   const [dash, setDash] = useState<Dashboard | null>(null);
   const [dashTried, setDashTried] = useState(false);
   const [hl, setHl] = useState<Highlight[]>(NO_HIGHLIGHT);
+  // Jarvis içinde açılan YouTube videosu
+  const [video, setVideo] = useState<VideoInfo | null>(null);
+  const videoRef = useRef(video);
+  videoRef.current = video;
   // İki alkışla uyanma
+  const [uiShared, setUi] = useState<UiMode>('mark1');
+  const [cameraEnabled, setCameraEnabled] = useState(false);
+  // Akıllı ev
+  const [home, setHome] = useState<HomeState | null>(null);
+  const [homeOpen, setHomeOpen] = useState(false);
+  const [homeToast, setHomeToast] = useState<string | null>(null);
+  useEffect(() => { getHome().then(h => h && setHome(h)); }, []);
+  const [camCount, setCamCount] = useState(0);
+  useEffect(() => {
+    if (!cameraEnabled) return;
+    getCameras().then(r => r && setCamCount(r.cameras.length));
+    return onCamera(e => { if (e.type === 'cameras') setCamCount(e.cameras.length); });
+  }, [cameraEnabled]);
+  /** "Kamera" düğmesi: canlı kamera paneli; bağlı kamera yoksa nasıl bağlanacağını söyler */
+  const openLiveCamera = () => {
+    if (!cameraEnabled) return flash('Kamera özelliği kapalı: sunucuda ACCESS_TOKEN tanımlı değil.');
+    if (!camCount) return flash("Henüz kamera cihazı bağlı değil efendim. Eski iPhone'da Jarvis'i açıp Ayarlar → Bu cihazın rolü → Kamera seçin.");
+    toggleCameraPanel();
+  };
+  const ui: UiMode = UI_OVERRIDE ?? uiShared;
   const [wake, setWake] = useState<WakeConfig | null>(null);
   const [wstate, setWstate] = useState<WakeState>('awake');
   const [phase, setPhase] = useState<Phase>('done');
@@ -167,14 +202,21 @@ export default function App() {
       if (!sc) break;
       const n = l.ended ? l.scenes.length : undefined;
       // Sıradaki sahnelerin sesini önden iste (sunucu aynı anda en fazla 3 üretir, sıra korunur).
-      l.scenes.slice(i, i + 3).forEach((s, k) => voice.preload(s.ses, l.voice, i + k + 1, n));
+      // Önceki/sonraki cümle bağlamı: ElevenLabs tonlamayı sahneler arasında sürdürür (diğer seslerde yok sayılır)
+      const ctx = (j: number) => ({ prev: l.scenes[j - 1]?.ses, next: l.scenes[j + 1]?.ses });
+      l.scenes.slice(i, i + 3).forEach((s, k) => voice.preload(s.ses, l.voice, i + k + 1, n, false, ctx(i + k)));
       setSceneIdx(i);
       voice.blip();
       // Eskiden her sahneye max(2,6 sn, 45 ms × karakter) zorla bekleniyordu. Artık süreyi ses belirler;
       // yalnızca görselli sahnelerde animasyon tamamlansın diye en fazla 1,2 sn alt sınır var.
       const minMs = sc.gorsel.tip !== 'yok' ? 1200 : 0;
-      await Promise.all([voice.speak(sc.ses, l.voice, i + 1, n), new Promise(r => setTimeout(r, minMs))]);
+      await Promise.all([voice.speak(sc.ses, l.voice, i + 1, n, ctx(i)), new Promise(r => setTimeout(r, minMs))]);
       if (playToken.current !== my) return;
+      // Video sahnesi: cümleden sonra video Jarvis'in içinde açılır, cevap burada biter (sesler çakışmasın)
+      if (sc.gorsel.tip === 'video') {
+        setVideo({ id: sc.gorsel.youtube_id, title: sc.gorsel.baslik, channel: sc.gorsel.kanal, external: !!sc.gorsel.harici, vertical: !!sc.gorsel.dikey });
+        break;
+      }
       await new Promise(r => setTimeout(r, 80));
     }
     if (playToken.current === my) {
@@ -209,6 +251,7 @@ export default function App() {
   }, []);
 
   const stopPlayback = () => { playToken.current++; voice.stop(); setPreCaption(''); setCore('idle'); };
+  const closeVideo = useCallback(() => setVideo(null), []);
 
   // =================================================================== İki alkışla uyanma
   const clearSeq = () => { seqTimers.current.forEach(c => c()); seqTimers.current = []; };
@@ -228,6 +271,7 @@ export default function App() {
     cancelWakeRef.current?.();
     clearSeq();
     pendingGreet.current = null;
+    setVideo(null);
     setDrawer(null);
     setCalibrating(false);
     setChecks(null);
@@ -358,6 +402,8 @@ export default function App() {
         setVoiceSel(s.voice);
         setSfxOn(s.sfx);
         setWake(s.wake);
+        setUi(s.ui ?? 'mark1');
+        setCameraEnabled(!!s.camera?.enabled);
         const last = [...s.messages].reverse().find(m => m.reply);
         if (last?.reply) { setReply(last.reply); setModel(brainLabel(last.reply)); setSceneIdx(last.reply.sahneler.length); }
       })
@@ -366,6 +412,16 @@ export default function App() {
 
   useEffect(() => {
     return subscribe(device, (e: ServerEvent) => {
+      if (isCameraEvent(e)) { emitCamera(e); return; } // kamera paneli dinler
+      if (e.type === 'home') {
+        setHome(e);
+        if (e.last) {
+          const d = e.devices.find(x => x.id === e.last!.id);
+          setHomeToast(`${d?.ad ?? e.last.id} · ${e.last.ozet}`);
+          setTimeout(() => setHomeToast(t => (t?.startsWith(d?.ad ?? e.last!.id) ? null : t)), 2800);
+        }
+        return;
+      }
       const mine = 'origin' in e && e.origin === clientId;
       switch (e.type) {
         case 'presence': setOnline(e.online); break;
@@ -451,6 +507,7 @@ export default function App() {
         case 'sleep': enterSleep(); break;
         case 'settings':
           setWake(e.wake);
+          if (e.ui) setUi(e.ui);
           setMode(e.photoMode);
           setVoiceSel(e.voice);
           setSfxOn(e.sfx);
@@ -498,7 +555,7 @@ export default function App() {
       console.info(`[zaman] ilk ses çalmaya başladı · ${Math.round(ms)} ms`);
       metric('ilk ses çalmaya başladı', ms);
     };
-    voice.onFallback = reason => flash(`Sunucu sesi alınamadı (${reason}); bu cevap tarayıcı sesiyle sürüyor.`);
+    voice.onFallback = reason => flash(`Ses alınamadı (${reason}). Başka sese geçilmedi.`);
   }, []);
 
   // ---- Gönderme ----
@@ -507,6 +564,7 @@ export default function App() {
     if (!t && !image) return;
     voice.unlock(); // kullanıcı hareketi içinde sesi aç
     stopPlayback();
+    setVideo(null); // yeni soru: açık video kapanır
     setInput('');
     setInterim('');
     setTelemetry([]);
@@ -541,6 +599,7 @@ export default function App() {
     voice.unlock();
     if (core === 'listening') { recRef.current?.stop(); return; }
     stopPlayback();
+    setVideo(null); // mikrofon videonun sesini duymasın
     if (!recorderSupported()) return startWebSpeech();
     setInterim('');
     setCore('listening');
@@ -583,7 +642,7 @@ export default function App() {
   // ---- Ayarlar → Ses ----
   useEffect(() => {
     if (drawer !== 'ayarlar') return;
-    getVoices().then(r => setVoices(r.voices)).catch(() => setVoices([]));
+    getVoices().then(r => { setVoices(r.voices); setElevenUse(r.eleven); }).catch(() => setVoices([]));
     const load = () => setBVoices(voice.browserVoices());
     load();
     if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = load;
@@ -618,7 +677,7 @@ export default function App() {
   // Masaüstünde boşluk tuşu = bas-konuş (yazı alanı odakta değilken). Çekim kolaylığı: W = test uyanışı, S = uyku.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { stopPlayback(); return; }
+      if (e.key === 'Escape') { if (videoRef.current) setVideo(null); else stopPlayback(); return; }
       if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.code === 'KeyW' && !e.repeat) { postWake('test (W)'); return; }
       if (e.code === 'KeyS' && !e.repeat) { voice.unlock(); postSleep(); return; }
@@ -654,7 +713,7 @@ export default function App() {
     const id = setInterval(() => {
       const mins = wakeRef.current?.idleMinutes ?? 0;
       if (!mins || wstateRef.current !== 'awake') return;
-      if (coreRef.current !== 'idle' || calibRef.current || drawerRef.current) { lastActive.current = Date.now(); return; }
+      if (coreRef.current !== 'idle' || calibRef.current || drawerRef.current || videoRef.current) { lastActive.current = Date.now(); return; }
       if (Date.now() - lastActive.current > mins * 60_000) {
         console.info(`[uyanış] ${mins} dk boşta: uyku modu`);
         enterSleep();
@@ -751,7 +810,7 @@ export default function App() {
   // Görselsiz yorum sahnesinde bir önceki görsel ekranda kalır; çekirdek her sahnede büyüyüp küçülmez.
   const visualIdx = useMemo(() => {
     if (!reply || sceneIdx < 0 || sceneIdx >= reply.sahneler.length) return -1;
-    for (let i = sceneIdx; i >= 0; i--) if (reply.sahneler[i].gorsel.tip !== 'yok') return i;
+    for (let i = sceneIdx; i >= 0; i--) if (reply.sahneler[i].gorsel.tip !== 'yok' && reply.sahneler[i].gorsel.tip !== 'video') return i;
     return -1;
   }, [reply, sceneIdx]);
   const visualScene = visualIdx >= 0 ? reply!.sahneler[visualIdx] : null;
@@ -777,106 +836,153 @@ export default function App() {
 
   return (
     <div className={`app dev-${device} state-${core} w-${wstate}${uiHidden ? ' hide-ui' : ''}${entering ? ' ui-enter' : ''}${glow ? ' wake-glow' : ''}`}>
-      {/* Arka plan: sahne fotoğrafı (yavaş yakınlaşma) */}
-      <div className="backdrop">
-        <AnimatePresence>
-          {photo && (
-            <motion.div key={photo.url} className="photo" initial={{ opacity: 0, scale: 1.12 }} animate={{ opacity: 1, scale: 1.0 }} exit={{ opacity: 0 }} transition={{ opacity: { duration: 0.9 }, scale: { duration: 9, ease: 'linear' } }}>
-              <img src={photoSrc(photo.url)} alt="" onError={e => ((e.target as HTMLImageElement).style.display = 'none')} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <div className="grid-bg" />
-        <div className="vignette" />
-        <div className="scanlines" />
-      </div>
+      {ui === 'mark2' ? (
+        <Suspense fallback={null}>
+          <Mark2
+            device={device}
+            online={online}
+            connected={connected}
+            mock={mock}
+            model={model}
+            dash={dash}
+            core={core}
+            level={coreLevel}
+            introAt={(wstate === 'awake' || wstate === 'waking') ? introAt : null}
+            reply={reply}
+            sceneIdx={sceneIdx}
+            visualScene={visualScene}
+            visualKey={reply ? reply.id + visualIdx : ''}
+            photo={speakingReply ? photo : null}
+            photoSrc={photoSrc}
+            speakingReply={speakingReply}
+            agenda={agenda}
+            caption={caption}
+            telemetry={telemetry}
+            hl={hl}
+            checks={checks && <WakeChecks health={checks.health} failed={checks.failed} />}
+            panelKey={panelKey}
+            input={input}
+            setInput={setInput}
+            onSubmit={t => submit(t)}
+            onMic={toggleMic}
+            onCamera={() => { voice.unlock(); fileRef.current?.click(); }}
+            onLiveCamera={openLiveCamera}
+            home={home}
+            onHome={() => setHomeOpen(o => !o)}
+            onStop={stopPlayback}
+            onDrawer={d => setDrawer(drawer === d ? null : d)}
+            onSleep={() => { voice.unlock(); postSleep(); }}
+          />
+        </Suspense>
+      ) : (
+        <>
+        {/* Arka plan: sahne fotoğrafı (yavaş yakınlaşma) */}
+        <div className="backdrop">
+          <AnimatePresence>
+            {photo && (
+              <motion.div key={photo.url} className="photo" initial={{ opacity: 0, scale: 1.12 }} animate={{ opacity: 1, scale: 1.0 }} exit={{ opacity: 0 }} transition={{ opacity: { duration: 0.9 }, scale: { duration: 9, ease: 'linear' } }}>
+                <img src={photoSrc(photo.url)} alt="" onError={e => ((e.target as HTMLImageElement).style.display = 'none')} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <div className="grid-bg" />
+          <div className="vignette" />
+          <div className="scanlines" />
+        </div>
 
-      <TopBar me={device} online={online} model={model} connected={connected} mock={mock} />
-      <CompactStrip data={dash} />
+        <TopBar me={device} online={online} model={model} connected={connected} mock={mock} />
+        <CompactStrip data={dash} />
 
-      <main className="stage">
-        {/* Sol sütun: hava + sistem */}
-        <aside className="dash-col left" key={'l' + panelKey}>
-          <WeatherPanel index={0} data={dash?.weather ?? null} loading={dashLoading} demo={demo} highlight={hl.includes('weather')} />
-          <SystemPanel index={1} sys={dash?.system ?? null} news={dash?.news ?? null} online={online} demo={demo} loading={dashLoading} />
-        </aside>
+        <main className="stage">
+          {/* Sol sütun: hava + sistem */}
+          <aside className="dash-col left" key={'l' + panelKey}>
+            <WeatherPanel index={0} data={dash?.weather ?? null} loading={dashLoading} demo={demo} highlight={hl.includes('weather')} />
+            <SystemPanel index={1} sys={dash?.system ?? null} news={dash?.news ?? null} online={online} demo={demo} loading={dashLoading} />
+          </aside>
 
-        {/* Orta: çekirdek; konuşurken yanında büyük sahne görseli */}
-        {/* Görselli düzen: cevapta en az bir görsel varsa (akış listesinden bağımsız; yeni görsel tipleri de sayılır) */}
-        <div className={'focus' + (speakingReply && reply!.sahneler.some(s => s.gorsel.tip !== 'yok') ? ' has-visual' : '')}>
-          <div className="core-wrap">
-            {/* Uyurken çekirdek çizilmez (pil); uyanışta halkalar sırayla çizilerek gelir */}
-            {(wstate === 'awake' || wstate === 'waking') && <Core state={core} level={coreLevel} introAt={introAt} />}
-            <div className="core-label">{wstate === 'waking' ? 'başlatılıyor' : core === 'idle' ? 'hazır' : core === 'listening' ? 'dinliyor' : core === 'thinking' ? 'düşünüyor' : 'konuşuyor'}</div>
-            <Telemetry lines={core === 'thinking' || core === 'speaking' ? telemetry : []} />
-            {checks && <WakeChecks health={checks.health} failed={checks.failed} />}
+          {/* Orta: çekirdek; konuşurken yanında büyük sahne görseli */}
+          {/* Görselli düzen: cevapta en az bir görsel varsa (akış listesinden bağımsız; yeni görsel tipleri de sayılır) */}
+          <div className={'focus' + (speakingReply && reply!.sahneler.some(s => s.gorsel.tip !== 'yok' && s.gorsel.tip !== 'video') ? ' has-visual' : '')}>
+            <div className="core-wrap">
+              {/* Uyurken çekirdek çizilmez (pil); uyanışta halkalar sırayla çizilerek gelir */}
+              {(wstate === 'awake' || wstate === 'waking') && <Core state={core} level={coreLevel} introAt={introAt} />}
+              <div className="core-label">{wstate === 'waking' ? 'başlatılıyor' : core === 'idle' ? 'hazır' : core === 'listening' ? 'dinliyor' : core === 'thinking' ? 'düşünüyor' : 'konuşuyor'}</div>
+              <Telemetry lines={core === 'thinking' || core === 'speaking' ? telemetry : []} />
+              {checks && <WakeChecks health={checks.health} failed={checks.failed} />}
+            </div>
+            <div className="visual-wrap">
+              <AnimatePresence mode="wait">
+                {speakingReply && visualScene && (
+                  <motion.div key={reply!.id + visualIdx} className="visual-slot">
+                    <Visual g={visualScene.gorsel} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            {photo && <div className="photo-credit">{photo.kind === 'temsili' ? 'temsili görsel · yapay zeka' : `foto · ${photo.credit}`}</div>}
           </div>
-          <div className="visual-wrap">
+
+          <div className="caption">
             <AnimatePresence mode="wait">
-              {speakingReply && visualScene && (
-                <motion.div key={reply!.id + visualIdx} className="visual-slot">
-                  <Visual g={visualScene.gorsel} />
+              {caption && (
+                <motion.p key={caption} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }}>
+                  {caption}
+                </motion.p>
+              )}
+            </AnimatePresence>
+            {reply && sceneIdx >= 0 && !done && (
+              <div className="scene-dots">{reply.sahneler.map((_, i) => <span key={i} className={i === sceneIdx ? 'on' : i < sceneIdx ? 'past' : ''} />)}</div>
+            )}
+            {/* Bekleme düğmeleri sahne görselleriyle aynı mode="wait" grubunda değil: görselin çıkışını beklemezler. */}
+            <AnimatePresence>
+              {showCta && (
+                <motion.div key="cta" className="cta" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.15 } }} transition={{ duration: 0.35 }}>
+                  {!reply && <div className="cta-hint">{speechRecognitionSupported() ? 'Mikrofona dokun ya da yaz.' : 'Bir şey yaz.'}</div>}
+                  <div className="chips">
+                    {done && reply?.detay && <button className="detail-cta" onClick={() => setDrawer('detay')}>detaylı özeti aç ↗</button>}
+                    {SUGGESTIONS.map(s => <button key={s} onClick={() => submit(s)}>{s}</button>)}
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
-          {photo && <div className="photo-credit">{photo.kind === 'temsili' ? 'temsili görsel · yapay zeka' : `foto · ${photo.credit}`}</div>}
-        </div>
 
-        <div className="caption">
-          <AnimatePresence mode="wait">
-            {caption && (
-              <motion.p key={caption} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }}>
-                {caption}
-              </motion.p>
-            )}
-          </AnimatePresence>
-          {reply && sceneIdx >= 0 && !done && (
-            <div className="scene-dots">{reply.sahneler.map((_, i) => <span key={i} className={i === sceneIdx ? 'on' : i < sceneIdx ? 'past' : ''} />)}</div>
-          )}
-          {/* Bekleme düğmeleri sahne görselleriyle aynı mode="wait" grubunda değil: görselin çıkışını beklemezler. */}
-          <AnimatePresence>
-            {showCta && (
-              <motion.div key="cta" className="cta" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.15 } }} transition={{ duration: 0.35 }}>
-                {!reply && <div className="cta-hint">{speechRecognitionSupported() ? 'Mikrofona dokun ya da yaz.' : 'Bir şey yaz.'}</div>}
-                <div className="chips">
-                  {done && reply?.detay && <button className="detail-cta" onClick={() => setDrawer('detay')}>detaylı özeti aç ↗</button>}
-                  {SUGGESTIONS.map(s => <button key={s} onClick={() => submit(s)}>{s}</button>)}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+          {/* Sağ sütun: piyasalar + gündem; konuşurken gündem "Bugünün akışı"na dönüşür */}
+          <aside className="dash-col right" key={'r' + panelKey}>
+            <MarketsPanel index={2} data={dash?.markets ?? null} loading={dashLoading} demo={demo} highlight={hl} />
+            <AnimatePresence mode="wait" initial={false}>
+              {showAgenda ? (
+                <AgendaPanel key={'agenda-' + reply!.id} reply={reply!} items={agenda} sceneIdx={sceneIdx} />
+              ) : (
+                <NewsStatsPanel key="news" index={3} data={dash?.news ?? null} loading={dashLoading} demo={demo} />
+              )}
+            </AnimatePresence>
+          </aside>
+        </main>
 
-        {/* Sağ sütun: piyasalar + gündem; konuşurken gündem "Bugünün akışı"na dönüşür */}
-        <aside className="dash-col right" key={'r' + panelKey}>
-          <MarketsPanel index={2} data={dash?.markets ?? null} loading={dashLoading} demo={demo} highlight={hl} />
-          <AnimatePresence mode="wait" initial={false}>
-            {showAgenda ? (
-              <AgendaPanel key={'agenda-' + reply!.id} reply={reply!} items={agenda} sceneIdx={sceneIdx} />
-            ) : (
-              <NewsStatsPanel key="news" index={3} data={dash?.news ?? null} loading={dashLoading} demo={demo} />
-            )}
-          </AnimatePresence>
-        </aside>
-      </main>
+        <HeadlineTicker headlines={dash?.news.headlines ?? null} loading={dashLoading} demo={demo} />
 
-      <HeadlineTicker headlines={dash?.news.headlines ?? null} loading={dashLoading} demo={demo} />
-
-      <footer className="dock">
-        <button className="icon-btn" onClick={() => setDrawer(drawer ? null : 'gecmis')} aria-label="Menü">☰</button>
-        <form className="ask" onSubmit={e => { e.preventDefault(); submit(input); }}>
-          <input value={input} onChange={e => setInput(e.target.value)} placeholder="Jarvis'e sor…" enterKeyHint="send" />
-        </form>
-        <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => { onPhoto(e.target.files?.[0]); e.target.value = ''; }} />
-        <button className="icon-btn cam" onClick={() => { voice.unlock(); fileRef.current?.click(); }} aria-label="Fotoğraf">
-          <svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>
-        </button>
-        <button className={'mic ' + (core === 'listening' ? 'live' : '')} onClick={toggleMic} aria-label="Konuş">
-          <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
-        </button>
-        {core === 'speaking' && <button className="icon-btn" onClick={stopPlayback} aria-label="Durdur">■</button>}
-      </footer>
+        <footer className="dock">
+          <button className="icon-btn" onClick={() => setDrawer(drawer ? null : 'gecmis')} aria-label="Menü">☰</button>
+          <form className="ask" onSubmit={e => { e.preventDefault(); submit(input); }}>
+            <input value={input} onChange={e => setInput(e.target.value)} placeholder="Jarvis'e sor…" enterKeyHint="send" />
+          </form>
+          <button className="icon-btn cam" onClick={() => setHomeOpen(o => !o)} aria-label="Akıllı ev" title="Akıllı ev">
+            <svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7M5 10v10h14V10" /><path d="M10 20v-5h4v5" /></svg>
+          </button>
+          <button className="icon-btn cam live" onClick={openLiveCamera} aria-label="Canlı kamera" title="Canlı kamera">
+            <svg viewBox="0 0 24 24"><rect x="3" y="7" width="13" height="10" rx="2" /><path d="M16 11l5-3v8l-5-3z" /></svg>
+          </button>
+          <button className="icon-btn cam" onClick={() => { voice.unlock(); fileRef.current?.click(); }} aria-label="Fotoğraf" title="Fotoğraf gönder">
+            <svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>
+          </button>
+          <button className={'mic ' + (core === 'listening' ? 'live' : '')} onClick={toggleMic} aria-label="Konuş">
+            <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+          </button>
+          {core === 'speaking' && <button className="icon-btn" onClick={stopPlayback} aria-label="Durdur">■</button>}
+        </footer>
+        </>
+      )}
 
       <AnimatePresence>
         {drawer && (
@@ -903,6 +1009,23 @@ export default function App() {
               )}
               {drawer === 'ayarlar' && (
                 <div className="settings">
+                  <label>Ekran (tüm cihazlarda)</label>
+                  <div className="seg">
+                    <button className={ui === 'mark1' ? 'on' : ''} onClick={() => saveSettings({ ui: 'mark1' }).catch(e => flash(e.message))}>Mark 1 · sade</button>
+                    <button className={ui === 'mark2' ? 'on' : ''} onClick={() => saveSettings({ ui: 'mark2' }).catch(e => flash(e.message))}>Mark 2 · yoğun HUD</button>
+                  </div>
+                  <p className="muted small">Mark 2 geniş ekran için tasarlandı; telefonda sade bir düzene geçer.</p>
+                  <ProfileSettings flash={flash} />
+                  <label>Bu cihazın rolü</label>
+                  <div className="seg">
+                    <button className={getRole() === 'ekran' ? 'on' : ''} onClick={() => setRole('ekran')}>Ekran</button>
+                    <button className={getRole() === 'kamera' ? 'on' : ''} disabled={!cameraEnabled} onClick={() => setRole('kamera')}>Kamera (Jarvis'in gözü)</button>
+                  </div>
+                  <p className="muted small">
+                    {cameraEnabled
+                      ? 'Kamera rolünde bu cihaz Jarvis arayüzü yerine kamera ekranını açar; görüntüsü diğer ekranlarda canlı izlenir ve Jarvis istenince ona bakar.'
+                      : 'Kamera özelliği kapalı: sunucuda ACCESS_TOKEN tanımlı değil. Görüntü taşıyan bir özellik olduğu için erişim anahtarı olmadan açılmaz (README → Kamera cihazı).'}
+                  </p>
                   <label>Bu cihaz</label>
                   <div className="seg">
                     {(['masaustu', 'tablet', 'telefon'] as Device[]).map(d => (
@@ -937,6 +1060,13 @@ export default function App() {
                         })}
                       </div>
                     ))
+                  )}
+                  {elevenUse && (
+                    <p className="muted small">
+                      ElevenLabs kullanımı: {elevenUse.used.toLocaleString('tr-TR')} / {elevenUse.limit.toLocaleString('tr-TR')} karakter
+                      {elevenUse.resetAt ? ` · ${new Date(elevenUse.resetAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })} yenilenir` : ''}
+                      {elevenUse.tier ? ` · ${elevenUse.tier}` : ''}
+                    </p>
                   )}
                   <label>Konuşma hızı · {(speedDraft ?? voiceSel?.speed ?? 1.08).toLocaleString('tr-TR')}×</label>
                   <input className="range" type="range" min={0.9} max={1.3} step={0.02} value={speedDraft ?? voiceSel?.speed ?? 1.08} onChange={e => setSpeedDraft(Number(e.target.value))} />
@@ -984,6 +1114,14 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {cameraEnabled && <CameraPanel />}
+
+      <AnimatePresence>{homeOpen && home && <HomePanel home={home} onClose={() => setHomeOpen(false)} />}</AnimatePresence>
+      <AnimatePresence>{homeToast && !homeOpen && <HomeToast key={homeToast} text={homeToast} />}</AnimatePresence>
+
+      <AnimatePresence>{video && <VideoPanel key={video.id} video={video} onClose={closeVideo} />}</AnimatePresence>
+
+      <input ref={fileRef} type="file" accept="image/*" hidden onChange={e => { onPhoto(e.target.files?.[0]); e.target.value = ''; }} />
       <Handoff info={handoff} />
 
       {showSleep && (

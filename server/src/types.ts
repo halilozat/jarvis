@@ -24,7 +24,8 @@ export type Gorsel =
   | { tip: 'kart'; baslik: string; maddeler: { ikon: string; metin: string }[] }
   | { tip: 'adimlar'; baslik: string; adimlar: string[] }
   | { tip: 'alinti'; metin: string; kaynak: string }
-  | { tip: 'kisi_yer'; baslik: string; ozet: string };
+  | { tip: 'kisi_yer'; baslik: string; ozet: string }
+  | { tip: 'video'; youtube_id: string; baslik: string; kanal: string; harici?: boolean; dikey?: boolean };
 
 /** wiki: sahnenin dayandığı wiki_lookup sonucunun başlığı (fotoğraf oradan gelir; model URL yazmaz). */
 export type GorselWithPhoto = Gorsel & { haber_id?: string; foto_arama?: string; wiki?: string; foto?: Photo | null };

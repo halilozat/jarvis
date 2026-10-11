@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { API_KEY, BASE_URL, MOCK, routellm, type ChatResponse } from './routellm.js';
 import { BRIEF_OPENING } from './brief.js';
 import { isMp3, isWav, normalizeSpeech, pcmToWav, wavSeconds } from './audio.js';
+import { elevenReady, elevenSpeak, isEleven, type ElevenCtx } from './eleven.js';
+import { SCRIPTED_LINES } from './scripted.js';
 
 /**
  * Jarvis'in sesi (TTS).
@@ -92,7 +94,7 @@ export function envVoice(): { sel: VoiceSel; warning?: string } {
   return { sel: { model, voice, speed: DEFAULT_RATE } };
 }
 
-export const ttsEnabled = (sel: VoiceSel) => !MOCK && !!API_KEY && sel.model !== BROWSER;
+export const ttsEnabled = (sel: VoiceSel) => sel.model !== BROWSER && (isEleven(sel.model) ? elevenReady() : !MOCK && !!API_KEY);
 
 // ---------------------------------------------------------------- Üretim
 
@@ -139,7 +141,11 @@ function plausible(s: Speech, text: string) {
   return sec >= expected * 0.4 && sec <= expected * 2.2 + 1.5;
 }
 
-async function generateOnce(text: string, sel: VoiceSel): Promise<{ speech: Speech; method: 'speech' | 'chat' } | { error: string }> {
+async function generateOnce(text: string, sel: VoiceSel, ctx: ElevenCtx): Promise<{ speech: Speech; method: 'speech' | 'chat' | 'elevenlabs' } | { error: string }> {
+  if (isEleven(sel.model)) {
+    const buf = await elevenSpeak(text, sel.voice, sel.model, sel.speed, ctx);
+    return { speech: { buf, mime: 'audio/mpeg' }, method: 'elevenlabs' };
+  }
   if (methodFor.get(sel.model) !== 'chat') {
     const r = await viaSpeech(text, sel).catch(e => ({ error: String(e.message) }));
     if (r !== 'yok' && !('error' in r)) { methodFor.set(sel.model, 'speech'); return { speech: r, method: 'speech' }; }
@@ -161,8 +167,9 @@ async function withSlot<T>(fn: () => Promise<T>): Promise<T> {
   try { return await fn(); } finally { active--; waiting.shift()?.(); }
 }
 
+// ElevenLabs'te hız sunucuda uygulanır: farklı hız = farklı ses dosyası
 const cacheKey = (text: string, sel: VoiceSel) =>
-  createHash('sha1').update([sel.model, sel.voice, SERVER_SPEED, STYLE, text].join('\u0000')).digest('hex');
+  createHash('sha1').update([sel.model, sel.voice, isEleven(sel.model) ? sel.speed : SERVER_SPEED, STYLE, text].join('\u0000')).digest('hex');
 const memory = new Map<string, Speech>();
 const inflight = new Map<string, Promise<Speech | null>>();
 
@@ -183,7 +190,7 @@ function writeDisk(key: string, s: Speech) {
  * istemci o cevabın kalanını tarayıcı sesine geçirir (sahne sahne karışık ses yok).
  * @param label log için, ör. "sahne 3/6"
  */
-export function synthesize(text: string, sel: VoiceSel, label = '', persist = false): Promise<Speech | null> {
+export function synthesize(text: string, sel: VoiceSel, label = '', persist = false, ctx: ElevenCtx = {}): Promise<Speech | null> {
   if (!ttsEnabled(sel) || !text.trim()) return Promise.resolve(null);
   const key = cacheKey(text, sel);
   const hit = memory.get(key) ?? readDisk(key);
@@ -196,10 +203,10 @@ export function synthesize(text: string, sel: VoiceSel, label = '', persist = fa
     job = withSlot(async () => {
       for (let attempt = 1; attempt <= 2; attempt++) {
         const t0 = Date.now();
-        const r = await generateOnce(text, sel).catch(e => ({ error: String(e?.message || e) }));
+        const r = await generateOnce(text, sel, ctx).catch(e => ({ error: String(e?.message || e) }));
         const ms = Date.now() - t0;
         if ('speech' in r) {
-          console.log(`[tts] ${label || 'istek'} · ${sel.model} · ${sel.voice} · ${r.method} · ${ms} ms · ${r.speech.buf.length} byte${attempt > 1 ? ' · 2. deneme' : ''}`);
+          console.log(`[tts] ${label || 'istek'} · ${sel.model} · ${sel.voice} · ${r.method} · ${ms} ms · ${r.speech.buf.length} byte · ${text.length} karakter${attempt > 1 ? ' · 2. deneme' : ''}`);
           if (memory.size > 300) memory.delete(memory.keys().next().value!);
           memory.set(key, r.speech);
           if (persist) writeDisk(key, r.speech);
@@ -219,6 +226,8 @@ export async function warmOpening(sel: VoiceSel) {
   if (!ttsEnabled(sel)) return;
   const s = await synthesize(BRIEF_OPENING, sel, 'açılış (hazırlık)', true);
   console.log(s ? `Açılış sesi hazır: ${voiceId(sel)}` : `Açılış sesi hazırlanamadı: ${voiceId(sel)}`);
+  // Hazır komutların cümleleri de: anında çalsın
+  for (const line of SCRIPTED_LINES) synthesize(line, sel, 'hazır komut (hazırlık)', true).catch(() => {});
 }
 
 /** Ayarlar'daki ▶ dinle: sabit örnek cümle, diskte saklanır (ikinci dinleme kredisiz ve anında). */
