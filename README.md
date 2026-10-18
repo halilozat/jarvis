@@ -102,6 +102,100 @@ Sesle de çalışır: "Jarvis, salonun ışığını aç", "çalışma odasını
 - **Simülasyon (varsayılan):** Cihazlar sunucuda canlandırılır; kahve makineleri gerçekçi sürede ilerler (Türk kahvesi ~75 sn, filtre fincan başına ~40 sn). Panelde "simülasyon" etiketi görünür. Jarvis bunu her cevapta söylemez, sorulursa dürüstçe söyler.
 - **Gerçek cihazlar (Home Assistant):** `.env`'ye `HOME_ASSISTANT_URL`, `HOME_ASSISTANT_TOKEN` ve `HA_ENTITIES` eşlemesini yazın. Işıklar `light.turn_on/off` (parlaklık, renk sıcaklığı) ile, kahve makineleri akıllı priz (`switch`) ile açılıp kapanır. Bu köprü henüz gerçek bir Home Assistant ile denenmedi.
 
+### El Kontrolü ✋
+
+Jarvis'i ellerinizle yönetin. Mac'in kamerası açılır, eller tarayıcıda takip edilir (MediaPipe Hand Landmarker), görüntünün üstünde efektler canlanır. Kamera görüntüsü hiçbir yere gönderilmez.
+
+**Açmak için:** alt şeritteki **✋** düğmesi (Mark 2'de **El**), klavyede **H** ya da sesle *"Jarvis, el kontrolünü aç"*. Kapatmak için **Esc** ya da *"el kontrolünü kapat"*. Adresin sonuna `?el=1` eklerseniz Jarvis el kontrolüyle açılır.
+
+**Efektler (anında):**
+
+| Jest | Ne olur |
+|---|---|
+| ✋ Açık el | Avuç ve parmak uçları alev alır, parmaklar arasında kıvılcım atar |
+| ✋✋ İki açık el | İki avucun önünde dönen turuncu mühür halkaları açılır. Eli yana çevirince halka da perspektifle daralır |
+| 🤏 Çimdik (başparmak + işaret) | Parmak uçlarınızda bir parçacık gezegeni oluşur: Satürn, Dünya, Mars, Jüpiter, Ay ya da Güneş (varsayılan: her çimdikte sıradaki; **⚙ efektler**'den sabitlenebilir). Elinizle taşırsınız, elinizi çevirince Satürn'ün halkası eğilir. Sesle: *"Jarvis, Mars yap"*, *"Jüpiter'e çevir"*: eldeki gezegen dağılıp yeni haliyle toplanır; gezegen yoksa bir sonraki çimdikte o gelir |
+| 🤏🤏 İki elle çimdik | Gezegeni iki elinizin arasında tutup açarak büyütürsünüz |
+| Çimdiği bırakmak | Gezegen havada süzülür. Hızlı savurarak bırakırsanız fırlar |
+| ✊ → ✋ Yumruk yapıp hızla açmak | Gezegen varsa kendi renklerinde patlar, yoksa avuçtan bir enerji dalgası çıkar. Ekran sarsılır |
+| ☝️☝️ İki işaret parmağı | İki parmak ucu arasında şimşek çakar |
+| ☝️ Tek işaret parmağı | Parmak ucu havada ışık izi bırakır |
+
+**Jarvis kontrolleri (basılı tutun, halka dolunca çalışır):**
+
+| Jest | Süre | Eylem |
+|---|---|---|
+| 👍 Başparmak | 1 sn | "Jarvis, bana bol köpüklü bir Türk kahvesi yap" komutu gider. Jarvis cevabını seslendirir, altyazı ekranda görünür |
+| ✌️ Zafer | 0,9 sn | Salon ışığı açılır/kapanır |
+| ✊ Yumruk | 1,8 sn | Jarvis konuşuyorsa susar |
+
+Jest → eylem listesi `web/src/hands/controller.ts` içindeki `KONTROLLER` dizisindedir. Bir satır ekleyerek yeni komut tanımlayabilirsiniz. `{ tip: 'komut', metin: '…' }` Jarvis'e sesli komut gibi gider.
+
+**Yüz HUD kilidi:** Kamera yüzünüzü bulunca etrafında hedef çerçevesi kapanır. Önce amber renkte "KİLİTLENİYOR", ardından kısa bir kilit sesiyle "AD · TANINDI · YETKİ: TAM" yazar; ad `server/.env`'deki `USER_NAME`'den gelir. Altında algılayıcının gerçek güven skoru görünür. **F** tuşu açıp kapatır. Kilit kapanınca Jarvis seçili sesle "Yüz tanındı. Hoş geldiniz efendim, tam yetki verildi." der (ses sunucu açılırken önceden hazırlanır, beklemeden çalar). En fazla dakikada bir söyler ve Jarvis o sırada konuşuyor ya da düşünüyorsa araya girmez.
+- Bu yüz **tanıma** değil, yüz **algılama**dır (MediaPipe BlazeFace). Kim olduğunuzu bilmez, biyometrik veri tutmaz, görüntü hiçbir yere gitmez.
+- Etiket yalnızca kameraya en yakın (en büyük) yüze verilir. Kadrajdaki diğer yüzler "KİŞİ · TANIMLANMADI" olarak işaretlenir; bir misafir sizin adınızla etiketlenmez.
+
+**Efektleri aç/kapat:** üst şeritteki **⚙ efektler** düğmesi ya da **E** tuşu. Ateş, mühür, gezegen, patlatma, şimşek, ışık izi, Jarvis kontrolleri (👍 ✌️ ✊), yüz kilidi, kitaplık ve efekt sesleri ayrı ayrı kapatılır; kapalı efekt hiç tetiklenmez. Seçim bu cihazda saklanır. "Raf bölgesinde ateş/iz yok" açıkken kitaplığa uzanan elde ateş, ışık izi ve şimşek çıkmaz.
+
+**Çekim tuşları:** **L** arayüzü gizler (temiz kayıt) · **E** efektler · **F** yüz kilidi · **K** kitaplık ayarı · **D** el iskeletini gösterir · **M** efekt seslerini kapatır · **C** kamerayı değiştirir (iPhone'u Süreklilik Kamerası olarak kullanabilirsiniz).
+
+**Kamerasız deneme:** `http://localhost:5173/?el=demo` sentetik ellerle bütün efektleri sırayla oynatır. Demoda komut gönderilmez.
+
+**Notlar:**
+- İlk açılışta el takip modeli (~7,5 MB) ve yüz algılama modeli (~0,2 MB) Google'ın sunucusundan iner. Çevrimdışı kullanmak için bir kez `npm run el-modeli` çalıştırın.
+- Chrome önerilir. Model GPU'da çalışır, açılmazsa kendiliğinden CPU'ya geçer. Üst şeritte FPS ve el sayısı yazar.
+- Işık iyi olsun ve eller kadrajda tam görünsün. Arkadan gelen güçlü ışık takibi bozar.
+- Efektler tamamen özgün ve prosedüreldir: görsel ya da video dosyası kullanılmaz, sesler de anında sentezlenir.
+
+#### Kitaplık 📚
+
+Arkanızdaki kitaplığa elinizi uzatın: görüntüde elinizin değdiği kitap seçilir. Çimdikle tutup kendinize çekince kitap raftan kopar, size doğru uçar, kapağını gösterir ve holografik olarak açılır. İçinde Jarvis'in özeti ve sizin notlarınız var. Rafa fiziksel olarak dokunmanız gerekmez; elin görüntüde sırtla çakışması yeterli.
+
+**Kurulum (bir kez):** Kamera sabit olduğu için kitapların yeri çekimden önce bir kez bulunur ve `server/data/kitaplik.json`'a kaydedilir. Sayfa yenilense de harita kalır.
+1. El Kontrolü'nü açın, **K** ile kitaplık ayarına girin, **Kitaplığı tara**'ya basın. Sesle de olur: *"Jarvis, kitaplığımı tara"* (El Kontrolü kapalıysa açılır).
+2. Kameradan tam çözünürlükte tek kare alınır, örtüşen 6 parçaya bölünüp büyütülür ve görüntü modeline (`VISION_MODEL`, varsayılan `gemini-3.8-flash`) gönderilir. Model yalnızca sırtta gerçekten okuduğu adı yazar; okuyamadığı sırtlar "belirsiz" olur. Tarama 20-30 saniye sürer. Ekranda raf boyunca tarama çizgisi geçer, bulunan sırtlar sırayla parlar, sonunda "51 kitap tanındı · 143 belirsiz" gibi bir özet çıkar.
+3. **Bir kez daha tarayın.** İkinci taramadan itibaren parçalar yalnızca rafın bulunduğu bölgeyi kapsar; sırtlar daha büyük göründüğü için çok daha fazlası okunur. (Uzaktan çekilmiş gerçek bir raf fotoğrafında tam kare 20 kutu bulurken raf bölgesine odaklanan tarama 51 doğru ad okudu.)
+4. Düzeltme: ayar modunda amber kesikli kutular belirsizdir; tıklayıp adını yazın. Boş yere sürükleyerek kaçırılan kitaba kutu çizin, kutuyu sürükleyip taşıyın, köşesinden boyutlandırın, **Del** ile silin. **Kaydet**'e basın. Elle düzelttiğiniz adlar yeniden taramada ezilmez; notlar ve özetler korunur.
+
+**Jestler:**
+
+| Jest | Ne olur |
+|---|---|
+| ☝️ İşaret ucunu sırta doğru getirin | Raf bölgesinde parmak ucunda küçük bir nişangâh görünür. Ucun hizasındaki en yakın sırt 0,15 sn sonra seçilir (tam üstünde olmak gerekmez): kenarı amber parlar, üstünde "OTOSTOPÇUNUN GALAKSİ REHBERİ · ADAMS" etiketi çıkar. Komşu kitaba geçmek için parmağın belirgin biçimde ona yaklaşması gerekir, titremez |
+| 🤏 Seçiliyken çimdik | Kitap tutulur: titreşen çerçeve, ince bir ses, sırt yerinden hafifçe çıkar |
+| 🤏 Tutarken kendinize çekin | Eli raftan uzaklaştırınca ya da kameraya yaklaştırınca kitap kopar. Uçan kitap o anki kareden kırpılan **gerçek sırt görüntüsünü** taşır; rafta yeri karanlık bir boşluk olarak kalır |
+| (1 sn bekleyin) ya da ✋✋ iki eli açın | Kapak holografik iki sayfa olarak açılır: künye ve okuma ilerlemesi, Jarvis'in özeti, Jarvis'in kitap defteri (ana fikirler, yazar ve temalar, neden okumalı, rafınızdan benzer kitaplar), sonra sizin notlarınız ve alıntılarınız |
+| ✋ Açık avucu sola / sağa savurun | Sonraki / önceki sayfa |
+| 👍 Basılı tutun (1 sn) | Jarvis özeti seçili sesle okur. *"Jarvis, bunu özetle"* demek de olur |
+| ✊ Basılı tutun (0,9 sn) ya da açık avucu ileri itin | Kitap kapanıp rafına geri uçar, boşluk kapanır, sırt kısa bir an parlar |
+
+Kitaplık bölgesinde çimdik gezegen oluşturmaz, kitap seçer. Kitap dışarıdayken ateş, mühür, gezegen, şimşek ve diğer basılı tutma kontrolleri kapalıdır; kitap rafa dönünce her şey eski hâline gelir.
+
+**Kapaklar:** Sunucu Open Library'de ad ve yazarla arar, bulursa `server/data/kapaklar/` altına kaydeder (çoğu zaman İngilizce baskının kapağı gelir). Türkçe baskının kapağını isterseniz **Ayarlar → Kitaplık**'tan telefonla fotoğrafını yükleyin. Kapak hiç yoksa kırpılan sırt görüntüsü ve adla sade bir kapak üretilir.
+
+**Jarvis'in kitap defteri:** Adı bilinen bir kitap ilk açıldığında (ya da sesle eklendiğinde) Jarvis RouteLLM ile sayfalarını doldurur: 3 cümlelik özet, 4-6 ana fikir, yazar hakkında, temalar, neden okumalı, kime uygun ve **sizin kitaplığınızdan** en fazla 4 benzer kitap. Bir kez yazılır, saklanır. Kurallar: model kitabı tanımıyorsa sayfa uydurmaz ("Jarvis bu kitabı tanımıyor"); kitaptan birebir alıntı üretmez (alıntılar yalnızca sizin eklediklerinizdir). **Ayarlar → Kitaplık**'ta "Jarvis doldursun / yeniden yaz" düğmesi de var. Sesle: *"Davranış'ın sayfalarını doldur"*.
+
+**"Bu kitabın adı …":** Adı okunamamış bir kitabı El Kontrolü'nde açıp *"Jarvis, bu kitabın adı Davranış"* deyin: Jarvis "Tamamdır efendim, ekliyorum" der, kitap adlandırılır, kapağı aranır ve sayfaları birkaç saniyede dolar. Kitap açık değilken *"kitaplığıma Davranış'ı ekle"* derseniz eklenir ve sayfaları arka planda dolar.
+
+**Kitapları kalıcı olarak tanıtmak:** Kamera uzaktaki sırtların çoğunu okuyamaz; Jarvis'in kitaplarınızı bilmesi için kamerayı beklemeyin:
+- **Ayarlar → Kitaplık → 📷 Raf fotoğrafından ekle:** telefonla raflara yakından çekin (bir fotoğrafta bir iki raf) ve yükleyin. Okunan kitaplar kalıcı olarak kaydedilir, zaten olanlar tekrar eklenmez. Birden çok fotoğraf aynı anda seçilebilir.
+- **Elle:** aynı yerde ad ve yazar yazıp **Ekle**. Sesle: *"Jarvis, kitaplığıma Davranış'ı ekle"*.
+- Bu kitapların rafta yeri yoktur; El Kontrolü'nde **K** ile adsız (amber) bir kutuya tıklayıp adını yazmaya başlayın, kayıtlı kitaplar öneri olarak çıkar; seçince kitap o kutuya yerleşir (notları ve özeti korunur). **Kaydet**'e basın.
+
+**Notlar ve hafıza:** **Ayarlar → Kitaplık**'ta her kitabın durumu (okunacak / okunuyor / bitti), sayfası, notları, alıntıları, özeti ve kapağı düzenlenir. Sesle de olur (**boşluk** tuşuyla konuşun, El Kontrolü açıkken de çalışır): *"Jarvis, Mülksüzler'e not ekle: …"* (kitap kayıtlı değilse eklenir), *"Tahıla Karşı'yı bitirdim"*, *"Oblomov'da 120. sayfadayım"*. Kitap El Kontrolü'nde açıkken adını söylemeden *"not al: …"* ya da *"alıntı ekle: …"* deyin; not o kitaba eklenir ve sayfada hemen görünür. Kaydedilen kitaplar Jarvis'in talimatına kendiliğinden girer: *"kitaplığımda ne var"*, *"raftan bir kitap öner"* sorularını yalnızca kendi kitaplarınızdan cevaplar.
+
+**Kamera kıpırdarsa:** Kurulumda rafın küçük gri bir resmi saklanır. El Kontrolü açıkken 3 saniyede bir karşılaştırılır; kamera kaymış, dönmüş ya da yakınlaşmışsa üstte "KAMERA KIPIRDAMIŞ · KİTAPLIĞI YENİDEN TARA" uyarısı çıkar (efekt çalışmaya devam eder). Önden geçen biri, ışık değişimi ya da görüntü gürültüsü uyarı tetiklemez.
+
+**İpuçları:**
+- Taramayı çekimdeki ışıkta yapın; sırtlar ne kadar net görünürse o kadar çok kitap okunur.
+- Çekimde gösterecekleriniz birkaç kitapsa, belirsiz kalanlarla uğraşmayın: yalnızca o kitapların adını ayar modunda yazmanız yeterli.
+- Nişangâhı izleyin: seçim parmak ucunun gördüğü yere göre yapılır, elinizin geri kalanına göre değil. **D** el iskeletini gösterir.
+- Kitaba uzanırken ateş araya giriyorsa **⚙ efektler**'den "Raf bölgesinde ateş/iz yok"u açık tutun ya da ateşi tamamen kapatın.
+
+**Kamerasız deneme:** `?el=demo&kitaplik=1` arka plana raflarınızdaki kitaplardan oluşan prosedürel bir kitaplık çizer (sahte kamera akışı olarak, yani kırpma ve tarama gerçek yoldan geçer). Demo döngüsü: tarama → seç → tut → çek → kapak → aç → sayfa çevir → 👍 özet → ✊ rafa koy. Demoda **J** kamerayı "kıpırdatır" (uyarıyı denemek için). Demo değişiklikleri sunucuya kaydedilmez.
+
+**Test:** `npm --prefix server run test:kitaplik` tarama uç noktasını sahte model cevaplarıyla dener (geçersiz JSON, taşan kutu, boş sonuç, parçaların birleştirilmesi, notlar). Gerçek kitaplığa dokunmaz.
+
 ### Kamera cihazı (Jarvis'in gözü)
 
 Eski bir iPhone Jarvis'in gözü olur. Görüntüsü bilgisayarda ve tablette canlı izlenir; "Jarvis, mutfakta ne var?" deyince Jarvis anlık bir kareye bakıp yorumlar.

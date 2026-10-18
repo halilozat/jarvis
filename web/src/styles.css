@@ -726,3 +726,27 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @media (max-width: 900px) { .hp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-aspect-ratio: 1/1) { .home-panel { padding: 50px 8px 120px; } .hp-bulb, .hp-ring { width: 76px; height: 76px; } }
 .tg-note { letter-spacing: 0.02em; }
+
+/* Ayarlar → Kitaplık */
+.lib-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow: auto; }
+.lib-list li { border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; }
+.lib-list li.open { border-color: var(--line); }
+.lib-row { width: 100%; display: flex; align-items: baseline; gap: 10px; padding: 8px 10px; border: 0; background: none; color: var(--text); text-align: left; font-size: 14px; }
+.lib-row span { flex: 1; }
+.lib-row em { font-style: normal; font-size: 12px; color: var(--muted); }
+.lib-st { font-style: normal; font-family: var(--mono); font-size: 10px; padding: 1px 7px; border-radius: 99px; border: 1px solid currentColor; }
+.lib-st.okunuyor { color: #ffc46b; } .lib-st.bitti { color: #7dffb0; } .lib-st.okunacak { color: var(--muted); }
+.lib-edit { padding: 4px 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.lib-top { display: flex; gap: 12px; }
+.lib-top img, .lib-nocover { width: 76px; height: 114px; object-fit: cover; border-radius: 4px; flex: none; }
+.lib-nocover { display: grid; place-items: center; border: 1px dashed var(--line); font-size: 11px; color: var(--muted); }
+.lib-meta { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.lib-pages { display: flex; align-items: center; gap: 6px; }
+.lib-pages input { width: 80px; height: 32px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--line); background: rgba(8, 18, 28, 0.75); color: var(--text); }
+.lib-btn { align-self: flex-start; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: none; color: var(--accent); font-size: 13px; }
+.lib-btn.danger { color: var(--danger); }
+.lib-btn:disabled { opacity: 0.5; }
+.lib-ozet { margin: 0; font-size: 14px; line-height: 1.5; }
+.lib-add { display: flex; flex-direction: column; gap: 6px; }
+.lib-noplace { font-style: normal; font-size: 11px; color: var(--muted); }
+.lib-jarvis ol { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.45; display: flex; flex-direction: column; gap: 4px; }

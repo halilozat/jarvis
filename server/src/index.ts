@@ -20,6 +20,7 @@ import { addMemory, getMemory, getProfile, removeMemory, saveProfile } from './p
 import { markBlocked } from './youtube.js';
 import { CAMERA_ENABLED, VISION_MODEL, cameraRouter, initCameras, onClientClosed } from './camera.js';
 import { control, homeState, initHome, type DeviceId, type HomeAction } from './home.js';
+import { initLibrary, libraryRouter } from './library.js';
 import { ELEVEN_MODEL, ELEVEN_MODEL_LABEL, elevenReady, elevenUsage, elevenVoices, isEleven } from './eleven.js';
 import type { Device, StoredMessage } from './types.js';
 
@@ -107,6 +108,7 @@ function presence() {
 }
 initCameras({ broadcast, sendTo });
 initHome(broadcast);
+initLibrary(broadcast);
 
 const app = express();
 app.use(express.json({ limit: '12mb' })); // kamera fotoğrafı (istemci ~1280 px JPEG'e küçültür)
@@ -154,6 +156,8 @@ app.get('/api/state', (_req, res) => {
     wake: wakeCfg(),
     ui: uiMode(),
     camera: { enabled: CAMERA_ENABLED, vision: VISION_MODEL },
+    // El Kontrolü yüz HUD etiketi ("AD · TANINDI"); ad repoda değil .env'de
+    userName: process.env.USER_NAME || '',
     mock: MOCK,
     model: CHAT_MODEL,
     online: presence(),
@@ -240,6 +244,9 @@ app.post('/api/settings', (req, res) => {
 
 // ---------- Kamera cihazları (WebRTC sinyali, aralıklı kare, kameraya_bak) ----------
 app.use(cameraRouter());
+
+// ---------- Kitaplık (El Kontrolü: raf haritası, kapak, özet, notlar) ----------
+app.use(libraryRouter());
 
 // ---------- Akıllı ev ----------
 app.get('/api/home', (_req, res) => res.json(homeState()));

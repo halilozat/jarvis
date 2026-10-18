@@ -7,6 +7,7 @@ import { resolveFastPhoto, resolveSlowPhoto, type PhotoMode } from './photos.js'
 import { findWiki } from './wiki.js';
 import { mockReply } from './mock.js';
 import { getProfile, memoryForPrompt } from './profile.js';
+import { libraryForPrompt } from './library.js';
 import { isEmbeddable, isShort } from './youtube.js';
 import { FAL_SON, findScripted, isFalTurn } from './scripted.js';
 import { cameraList } from './camera.js';
@@ -32,6 +33,7 @@ function contextVars(device: Device, prevDevice: Device | null) {
     kullanici: process.env.USER_NAME || 'Halil',
     profil: getProfile().text,
     hafiza: memoryForPrompt(),
+    kitaplik: libraryForPrompt(),
   };
 }
 

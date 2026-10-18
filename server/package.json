@@ -8,7 +8,8 @@
     "models": "tsx src/listModels.ts",
     "test": "tsx src/selftest.ts",
     "voices": "tsx src/voices.ts",
-    "eleven": "tsx src/eleven-cli.ts"
+    "eleven": "tsx src/eleven-cli.ts",
+    "test:kitaplik": "tsx src/kitaplik-test.ts"
   },
   "keywords": [],
   "author": "",

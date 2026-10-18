@@ -71,7 +71,8 @@ export type ServerEvent =
   | { type: 'wake'; at: number; greeting: { period: GreetingPeriod; text: string }; greeter: Device; brief: boolean; voice: VoiceSel; via: string }
   | { type: 'sleep' }
   | { type: 'dashboard'; data: Dashboard }
-  | { type: 'cleared' };
+  | { type: 'cleared' }
+  | { type: 'kitaplik' };
 
 /** Ekran: mark1 sade, mark2 yoğun HUD (tüm cihazlarda ortak) */
 export type UiMode = 'mark1' | 'mark2';

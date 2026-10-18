@@ -43,6 +43,7 @@ export interface AppState {
   wake: WakeConfig;
   ui: UiMode;
   camera?: { enabled: boolean; vision: string };
+  userName?: string;
   mock: boolean;
   model: string;
   online: Device[];

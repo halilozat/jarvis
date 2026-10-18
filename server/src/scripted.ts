@@ -73,4 +73,16 @@ export const findScripted = (text: string, ctx: ScriptedCtx) => {
 };
 
 /** Önceden seslendirilecek cümleler */
-export const SCRIPTED_LINES = [...SCRIPTED.flatMap(s => s.sahneler.map(x => x.ses)), FAL_SON];
+/** El Kontrolü yüz kilidi: kullanıcının yüzüne kilitlenince söylenir (istemcideki metinle birebir aynı olmalı) */
+export const YUZ_KILIDI = 'Yüz tanındı. Hoş geldiniz efendim, tam yetki verildi.';
+
+/** El Kontrolü kitaplık taraması başlarken (istemcideki metinle birebir aynı olmalı) */
+export const KITAPLIK_TARA = 'Kitaplığınızı tarıyorum efendim.';
+
+/** El Kontrolü'nde açık kitaba sesle not/alıntı eklenince (istemcideki metinlerle birebir aynı olmalı) */
+export const NOT_ALDIM = 'Not aldım efendim.';
+export const ALINTI_ALDIM = 'Alıntıyı ekledim efendim.';
+/** Açık kitap adlandırılınca ("Jarvis, bu kitabın adı …") */
+export const KITAP_EKLIYORUM = 'Tamamdır efendim, ekliyorum.';
+
+export const SCRIPTED_LINES = [...SCRIPTED.flatMap(s => s.sahneler.map(x => x.ses)), FAL_SON, YUZ_KILIDI, KITAPLIK_TARA, NOT_ALDIM, ALINTI_ALDIM, KITAP_EKLIYORUM];

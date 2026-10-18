@@ -13,9 +13,13 @@ import { SystemPanel } from './components/dashboard/SystemPanel';
 import { WeatherPanel } from './components/dashboard/WeatherPanel';
 import { SleepLayer, WakeChecks, WakeSettings, calibBus } from './components/Wake';
 import { ProfileSettings } from './components/Profile';
+import { LibrarySettings } from './components/LibrarySettings';
+import { addNote, patchBook, type Kitap } from './lib/library';
 import { VideoPanel, type VideoInfo } from './components/VideoPanel';
 import { CameraPanel } from './camera/CameraPanel';
-import { HomePanel, HomeToast, getHome, type HomeState } from './components/HomePanel';
+import { HomePanel, HomeToast, getHome, homeAct, type HomeState } from './components/HomePanel';
+import type { Kontrol } from './hands/controller';
+import type { GezegenTur } from './hands/fx';
 import { emitCamera, getCameras, getRole, isCameraEvent, onCamera, setRole, toggleCameraPanel } from './lib/camera';
 import { type ElevenUsage, clearConversation, detectDevice, getDashboard, getHealth, getState, getVoices, metric, postAttention, postSleep, postWake, previewUrl, saveDevice, saveSettings, sendChat, setPhotoMode, stt, subscribe, token, clientId } from './lib/api';
 import { startClapListener, type ClapListener } from './lib/clap';
@@ -53,6 +57,26 @@ const voiceTone = (f0: number | null) => (f0 === null ? '' : f0 < 110 ? 'derin' 
 
 // Mark 2 (yoğun HUD) ayrı parça olarak yüklenir: Mark 1 kullanan cihaz onu indirmez.
 const Mark2 = lazy(() => import('./mark2/Mark2'));
+// El Kontrolü (kamera + el takibi) ayrı parça: yalnızca açılınca indirilir.
+const HandControl = lazy(() => import('./hands/HandControl'));
+/** ?el=1 açılışta el kontrolünü açar, ?el=demo kamerasız sentetik ellerle gösterir */
+const EL_PARAM = ((q: string | null) => (q === 'demo' ? 'demo' : q === '1' || q === 'kamera' ? 'kamera' : null))(new URLSearchParams(location.search).get('el'));
+/** "Jarvis, el kontrolünü aç / kapat" — sunucuya gitmeden arayüzde karşılanır */
+const EL_OPEN = /\b(el kontrol[a-zçğıöşü]*|büyü modu[a-zçğıöşü]*)\b.*\b(aç|başlat|etkinleştir)|^(el kontrolü|büyü modu)$/i;
+const EL_CLOSE = /\b(el kontrol[a-zçğıöşü]*|büyü modu[a-zçğıöşü]*)\b.*\b(kapat|durdur)/i;
+/** ?el=demo&kitaplik=1: kitaplık demosu (prosedürel raf) */
+const KITAPLIK_DEMO = new URLSearchParams(location.search).get('kitaplik') === '1';
+/** "Jarvis, kitaplığımı tara" / "kitaplığı tarar mısın" / "rafları tara" (El Kontrolü kamerasıyla) */
+const KITAPLIK_TARA = /(kitapl[ıi]k|kitapl[ıi][gğ][ıi](m[ıi])?|raflar[ıi](m[ıi])?)\s.*?\btar(a|ar|at)/i;
+/** Kitap açıkken: "Jarvis, bunu özetle", "kitabı özetle", "özetini oku" */
+/** Kitap açıkken: "Jarvis, not al: …", "buna not ekle …", "alıntı ekle: …" → o kitaba eklenir (modele gitmez) */
+const KITABA_NOT = /^\s*(jarvis[,\s]+)?(bunu\s+|buna\s+|bu kitaba\s+|kitaba\s+)?(not al|not ekle|notlara ekle|alıntı ekle|alıntı al|alıntılara ekle)\s*[:,.\-–]?\s*(.+)$/i;
+/** Kitap açıkken: "Jarvis, bu kitabın adı Davranış" → açık kitap adlandırılır, Jarvis sayfaları dolar */
+const KITABIN_ADI = /(^|\s)(bu\s+)?kitab[ıi]n\s+ad[ıi](?:\s*[:,]\s*|\s+)["“']?(?!(?:ne|nedir|neydi)\s*\??\s*$)([^?]+?)["”']?[.!]?\s*$/i;
+/** El Kontrolü açıkken: "Jarvis, Mars yap", "Jüpiter'e çevir", "gezegeni Dünya yap", "Güneş olsun" */
+const GEZEGEN_KOMUT = /(?:^|\s)(dünya|mars|jüpiter|jupiter|satürn|saturn|ay|güneş)(?:['’]?(?:y?[aeıiuü]|[dt][ae]|n[ıiuü]n))?\s+(yap|çevir|olsun|getir|dönüştür|oluştur)/i;
+const GEZEGEN_ADI: Record<string, GezegenTur> = { dünya: 'dunya', mars: 'mars', jüpiter: 'jupiter', jupiter: 'jupiter', satürn: 'saturn', saturn: 'saturn', ay: 'ay', güneş: 'gunes' };
+const BUNU_OZETLE = /(^|\s)(bunu|kitab[ıi]|bu kitab[ıi])\s+(özetle|özetler misin|anlat|oku)(?=$|[\s,.!?])|(^|\s)özetini\s+(oku|söyle)/i;
 /** ?ui=mark2 ya da ?ui=mark1: ortak ayarı değiştirmeden yalnızca bu sekmede dene */
 const UI_OVERRIDE = ((q: string | null) => (q === 'mark1' || q === 'mark2' ? q : null))(new URLSearchParams(location.search).get('ui'));
 
@@ -120,10 +144,22 @@ export default function App() {
   // İki alkışla uyanma
   const [uiShared, setUi] = useState<UiMode>('mark1');
   const [cameraEnabled, setCameraEnabled] = useState(false);
+  const [userName, setUserName] = useState('');
   // Akıllı ev
   const [home, setHome] = useState<HomeState | null>(null);
   const [homeOpen, setHomeOpen] = useState(false);
   const [homeToast, setHomeToast] = useState<string | null>(null);
+  // El kontrolü
+  const [hands, setHands] = useState<null | 'kamera' | 'demo'>(EL_PARAM);
+  const handsRef = useRef(hands);
+  handsRef.current = hands;
+  // Kitaplık: SSE ile değişince artar (El Kontrolü ve Ayarlar yeniden yükler); sesli tarama sinyali; açık kitap
+  const [libKey, setLibKey] = useState(0);
+  const [scanSig, setScanSig] = useState(0);
+  const openBook = useRef<Kitap | null>(null);
+  const [planetCmd, setPlanetCmd] = useState<{ tur: GezegenTur; n: number } | null>(null);
+  const homeRef = useRef(home);
+  homeRef.current = home;
   useEffect(() => { getHome().then(h => h && setHome(h)); }, []);
   const [camCount, setCamCount] = useState(0);
   useEffect(() => {
@@ -404,6 +440,7 @@ export default function App() {
         setWake(s.wake);
         setUi(s.ui ?? 'mark1');
         setCameraEnabled(!!s.camera?.enabled);
+        setUserName(s.userName || '');
         const last = [...s.messages].reverse().find(m => m.reply);
         if (last?.reply) { setReply(last.reply); setModel(brainLabel(last.reply)); setSceneIdx(last.reply.sahneler.length); }
       })
@@ -413,6 +450,7 @@ export default function App() {
   useEffect(() => {
     return subscribe(device, (e: ServerEvent) => {
       if (isCameraEvent(e)) { emitCamera(e); return; } // kamera paneli dinler
+      if (e.type === 'kitaplik') { setLibKey(k => k + 1); return; }
       if (e.type === 'home') {
         setHome(e);
         if (e.last) {
@@ -562,6 +600,50 @@ export default function App() {
   const submit = async (text: string, image?: string) => {
     const t = text.trim();
     if (!t && !image) return;
+    if (!image && EL_CLOSE.test(t)) { setInput(''); setInterim(''); setCore('idle'); setHands(null); return; }
+    if (!image && EL_OPEN.test(t)) { voice.unlock(); setInput(''); setInterim(''); setCore('idle'); setHands(h => h ?? 'kamera'); return; }
+    // Kitaplık taraması El Kontrolü'nün kamerasıyla yapılır (kapalıysa açılır)
+    if (!image && KITAPLIK_TARA.test(t)) {
+      voice.unlock(); setInput(''); setInterim('');
+      setHands(h => h ?? (KITAPLIK_DEMO ? 'demo' : 'kamera'));
+      setScanSig(n => n + 1);
+      speakLine('Kitaplığınızı tarıyorum efendim.');
+      return;
+    }
+    // Gezegen dönüştür (yalnızca El Kontrolü açıkken; modele gitmez, anında)
+    const gm = !image && handsRef.current ? GEZEGEN_KOMUT.exec(t) : null;
+    if (gm) {
+      setInput(''); setInterim(''); setCore('idle');
+      setPlanetCmd(c => ({ tur: GEZEGEN_ADI[gm[1].toLocaleLowerCase('tr')], n: (c?.n ?? 0) + 1 }));
+      return;
+    }
+    // Açık kitabı adlandır (adı okunamamış sırtlar için): ad yazılır, sunucu kapağı ve Jarvis sayfalarını doldurur
+    const an = !image && openBook.current ? KITABIN_ADI.exec(t) : null;
+    if (an && openBook.current) {
+      voice.unlock(); setInput(''); setInterim('');
+      const ad = an[3].trim();
+      patchBook(openBook.current.id, { ad })
+        .then(() => speakLine('Tamamdır efendim, ekliyorum.'))
+        .catch(e => flash(`Kitap adlandırılamadı: ${e.message}`));
+      return;
+    }
+    // Açık kitaba not/alıntı
+    const nm = !image && openBook.current ? KITABA_NOT.exec(t) : null;
+    if (nm && openBook.current) {
+      voice.unlock(); setInput(''); setInterim('');
+      const alinti = /alıntı/i.test(nm[3]);
+      const metin = nm[4].trim().replace(/[.。]+$/, '');
+      addNote(openBook.current.id, metin, alinti ? 'alinti' : 'not')
+        .then(() => speakLine(alinti ? 'Alıntıyı ekledim efendim.' : 'Not aldım efendim.'))
+        .catch(e => flash(`Not eklenemedi: ${e.message}`));
+      return;
+    }
+    // Açık kitabın özeti: modele gitmeden, hazır özeti seçili sesle oku
+    if (!image && openBook.current && BUNU_OZETLE.test(t)) {
+      voice.unlock(); setInput(''); setInterim('');
+      readBook(openBook.current);
+      return;
+    }
     voice.unlock(); // kullanıcı hareketi içinde sesi aç
     stopPlayback();
     setVideo(null); // yeni soru: açık video kapanır
@@ -628,6 +710,58 @@ export default function App() {
     }
   };
 
+  /** Modele gitmeden tek bir cümleyi seçili sesle söyle (altyazıyla). delay: önce çalan efekt sesi bitsin. */
+  const speakLine = (text: string, delay = 0) => {
+    if (!voiceSel) return;
+    const my = ++playToken.current;
+    setSceneIdx(-1);
+    setPreCaption(text);
+    setCore('speaking');
+    voice.rate = voiceSel.speed;
+    voice.beginReply();
+    setTimeout(() => {
+      if (playToken.current !== my) return;
+      voice.speak(text, voiceSel).then(() => {
+        if (playToken.current !== my) return;
+        setPreCaption('');
+        setCore('idle');
+      });
+    }, delay);
+  };
+
+  /** Yüz kilidi: seçili sesle tek cümle. Sesi sunucuda önceden hazır (server/src/scripted.ts YUZ_KILIDI ile aynı metin).
+   *  En fazla dakikada bir; Jarvis başka bir şey anlatıyorsa araya girmez. */
+  const faceGreetAt = useRef(0);
+  const onFaceLock = () => {
+    const now = Date.now();
+    if (now - faceGreetAt.current < 60_000 || coreRef.current !== 'idle' || !voiceSel) return;
+    faceGreetAt.current = now;
+    // Kilit sesinin (iki bip) bitmesini bekle, sonra konuş
+    speakLine('Yüz tanındı. Hoş geldiniz efendim, tam yetki verildi.', 350);
+  };
+
+  /** Kitap açıkken 👍 ya da "bunu özetle": özeti seçili sesle oku */
+  const readBook = (k: Kitap) => {
+    if (k.ozet) speakLine(k.ozet);
+    else speakLine(k.ad ? `${k.ad} için henüz bir özetim yok efendim.` : 'Bu kitabın adını bilmiyorum efendim.');
+  };
+  const onScanDone = (r: { bulunan: number; belirsiz: number; hata?: string }) => {
+    if (r.hata) speakLine('Kitaplığı tarayamadım efendim. Ayrıntı ekranda.');
+    else speakLine(`${r.bulunan} kitap tanıdım efendim${r.belirsiz ? `, ${r.belirsiz} tanesinin sırtını okuyamadım` : ''}.`);
+  };
+
+  /** El kontrolünde basılı tutma tamamlandı */
+  const onHandAction = (k: Kontrol) => {
+    const e = k.eylem;
+    if (e.tip === 'komut') submit(e.metin);
+    else if (e.tip === 'sustur') stopPlayback();
+    else if (e.tip === 'isik') {
+      const d = homeRef.current?.devices.find(x => x.id === e.id);
+      homeAct(e.id, { islem: d?.tur === 'isik' && d.acik ? 'kapat' : 'ac' });
+    }
+  };
+  const toggleHands = () => { voice.unlock(); setHands(h => (h ? null : 'kamera')); };
+
   // Kamera / galeri: Jarvis'in "gözü"
   const onPhoto = async (f: File | undefined) => {
     if (!f) return;
@@ -681,6 +815,7 @@ export default function App() {
       if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.code === 'KeyW' && !e.repeat) { postWake('test (W)'); return; }
       if (e.code === 'KeyS' && !e.repeat) { voice.unlock(); postSleep(); return; }
+      if (e.code === 'KeyH' && !e.repeat) { toggleHands(); return; }
       if (wstate !== 'awake') return;
       if (e.code === 'Space') { e.preventDefault(); toggleMic(); }
     };
@@ -713,7 +848,7 @@ export default function App() {
     const id = setInterval(() => {
       const mins = wakeRef.current?.idleMinutes ?? 0;
       if (!mins || wstateRef.current !== 'awake') return;
-      if (coreRef.current !== 'idle' || calibRef.current || drawerRef.current || videoRef.current) { lastActive.current = Date.now(); return; }
+      if (coreRef.current !== 'idle' || calibRef.current || drawerRef.current || videoRef.current || handsRef.current) { lastActive.current = Date.now(); return; }
       if (Date.now() - lastActive.current > mins * 60_000) {
         console.info(`[uyanış] ${mins} dk boşta: uyku modu`);
         enterSleep();
@@ -836,7 +971,9 @@ export default function App() {
 
   return (
     <div className={`app dev-${device} state-${core} w-${wstate}${uiHidden ? ' hide-ui' : ''}${entering ? ' ui-enter' : ''}${glow ? ' wake-glow' : ''}`}>
-      {ui === 'mark2' ? (
+      {/* El Kontrolü tam ekranken arkadaki arayüz hiç çizilmez: Mark 2'nin küresi ve halkaları görünmese de her karede
+          çiziliyordu; bir MacBook'ta El Kontrolü 48 FPS'te kalıyordu (gizleyince 64). Kapanınca geri gelir. */}
+      {hands ? null : ui === 'mark2' ? (
         <Suspense fallback={null}>
           <Mark2
             device={device}
@@ -869,6 +1006,7 @@ export default function App() {
             onLiveCamera={openLiveCamera}
             home={home}
             onHome={() => setHomeOpen(o => !o)}
+            onHands={toggleHands}
             onStop={stopPlayback}
             onDrawer={d => setDrawer(drawer === d ? null : d)}
             onSleep={() => { voice.unlock(); postSleep(); }}
@@ -970,6 +1108,9 @@ export default function App() {
           <button className="icon-btn cam" onClick={() => setHomeOpen(o => !o)} aria-label="Akıllı ev" title="Akıllı ev">
             <svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7M5 10v10h14V10" /><path d="M10 20v-5h4v5" /></svg>
           </button>
+          <button className="icon-btn cam" onClick={toggleHands} aria-label="El kontrolü" title="El kontrolü (H)">
+            <svg viewBox="0 0 24 24"><path d="M8 12V5.5a1.5 1.5 0 0 1 3 0V11M11 10.5V4a1.5 1.5 0 0 1 3 0v6.5M14 10.5V5.5a1.5 1.5 0 0 1 3 0V13M8 11.5a1.5 1.5 0 0 0-3 0V14a7 7 0 0 0 7 7h1a6 6 0 0 0 6-6V9.5a1.5 1.5 0 0 0-3 0" /></svg>
+          </button>
           <button className="icon-btn cam live" onClick={openLiveCamera} aria-label="Canlı kamera" title="Canlı kamera">
             <svg viewBox="0 0 24 24"><rect x="3" y="7" width="13" height="10" rx="2" /><path d="M16 11l5-3v8l-5-3z" /></svg>
           </button>
@@ -1016,6 +1157,7 @@ export default function App() {
                   </div>
                   <p className="muted small">Mark 2 geniş ekran için tasarlandı; telefonda sade bir düzene geçer.</p>
                   <ProfileSettings flash={flash} />
+                  <LibrarySettings flash={flash} version={libKey} />
                   <label>Bu cihazın rolü</label>
                   <div className="seg">
                     <button className={getRole() === 'ekran' ? 'on' : ''} onClick={() => setRole('ekran')}>Ekran</button>
@@ -1118,6 +1260,14 @@ export default function App() {
 
       <AnimatePresence>{homeOpen && home && <HomePanel home={home} onClose={() => setHomeOpen(false)} />}</AnimatePresence>
       <AnimatePresence>{homeToast && !homeOpen && <HomeToast key={homeToast} text={homeToast} />}</AnimatePresence>
+
+      {hands && (
+        <Suspense fallback={null}>
+          <HandControl demo={hands === 'demo'} caption={caption} core={core} onAction={onHandAction} onClose={() => setHands(null)} userName={userName} onFaceLock={onFaceLock}
+            kitaplik={KITAPLIK_DEMO} libraryKey={libKey} scanSignal={scanSig} onScanDone={onScanDone}
+            onBookRead={readBook} onBookOpen={k => { openBook.current = k; }} planetCmd={planetCmd} />
+        </Suspense>
+      )}
 
       <AnimatePresence>{video && <VideoPanel key={video.id} video={video} onClose={closeVideo} />}</AnimatePresence>
 

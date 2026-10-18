@@ -12,7 +12,7 @@ export interface HomeState { mode: 'simulasyon' | 'homeassistant'; devices: Home
 
 const headers = (): HeadersInit => ({ 'Content-Type': 'application/json', ...(token ? { 'x-jarvis-token': token } : {}) });
 export const getHome = (): Promise<HomeState | null> => fetch('/api/home', { headers: headers() }).then(r => (r.ok ? r.json() : null)).catch(() => null);
-const act = (id: string, body: object) => fetch(`/api/home/${id}`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+export const homeAct = (id: string, body: object) => fetch(`/api/home/${id}`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
 
 /** Kahve makinesinin ilerlemesi 0..1 (sunucunun verdiği başlangıç ve süreden) */
 export function progressOf(d: TurkishCoffee | FilterCoffee, now = Date.now()): number {
@@ -47,12 +47,12 @@ function LightCard({ d }: { d: Light }) {
   return (
     <div className={'hp-card light' + (d.acik ? ' on' : '')} style={{ ['--glow' as string]: d.ton === 'sicak' ? '#ffcf7a' : d.ton === 'soguk' ? '#bfe6ff' : '#fff3dc', ['--lvl' as string]: d.acik ? d.parlaklik / 100 : 0 }}>
       <header><span className="hp-room">{d.oda}</span><span className="hp-st">{d.acik ? `AÇIK · %${d.parlaklik}` : 'KAPALI'}</span></header>
-      <button className="hp-bulb" onClick={() => act(d.id, { islem: d.acik ? 'kapat' : 'ac' })} aria-label={d.acik ? 'Kapat' : 'Aç'}>
+      <button className="hp-bulb" onClick={() => homeAct(d.id, { islem: d.acik ? 'kapat' : 'ac' })} aria-label={d.acik ? 'Kapat' : 'Aç'}>
         <svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z" /></svg>
       </button>
-      <input type="range" min={1} max={100} value={p} disabled={!d.acik} onChange={e => setP(Number(e.target.value))} onPointerUp={() => act(d.id, { islem: 'ayarla', parlaklik: p })} onKeyUp={() => act(d.id, { islem: 'ayarla', parlaklik: p })} />
+      <input type="range" min={1} max={100} value={p} disabled={!d.acik} onChange={e => setP(Number(e.target.value))} onPointerUp={() => homeAct(d.id, { islem: 'ayarla', parlaklik: p })} onKeyUp={() => homeAct(d.id, { islem: 'ayarla', parlaklik: p })} />
       <div className="seg">
-        {(['sicak', 'notr', 'soguk'] as IsikTon[]).map(t => <button key={t} className={d.ton === t ? 'on' : ''} disabled={!d.acik} onClick={() => act(d.id, { islem: 'ayarla', ton: t })}>{t === 'sicak' ? 'Sıcak' : t === 'notr' ? 'Nötr' : 'Soğuk'}</button>)}
+        {(['sicak', 'notr', 'soguk'] as IsikTon[]).map(t => <button key={t} className={d.ton === t ? 'on' : ''} disabled={!d.acik} onClick={() => homeAct(d.id, { islem: 'ayarla', ton: t })}>{t === 'sicak' ? 'Sıcak' : t === 'notr' ? 'Nötr' : 'Soğuk'}</button>)}
       </div>
     </div>
   );
@@ -65,10 +65,10 @@ function TurkishCard({ d, now }: { d: TurkishCoffee; now: number }) {
       <header><span className="hp-room">{d.ad}</span><span className="hp-st">{statusText(d, now).toLocaleUpperCase('tr')}</span></header>
       <Ring p={progressOf(d, now)}>{busy ? `${Math.round(progressOf(d, now) * 100)}%` : d.durum === 'hazir' ? '☕' : '—'}</Ring>
       <label>Köpük</label>
-      <div className="seg">{(['az', 'orta', 'bol'] as const).map(k => <button key={k} className={d.kopuk === k ? 'on' : ''} disabled={busy} onClick={() => act(d.id, { islem: 'ayarla', kopuk: k })}>{k === 'az' ? 'Az' : k === 'orta' ? 'Orta' : 'Bol'}</button>)}</div>
+      <div className="seg">{(['az', 'orta', 'bol'] as const).map(k => <button key={k} className={d.kopuk === k ? 'on' : ''} disabled={busy} onClick={() => homeAct(d.id, { islem: 'ayarla', kopuk: k })}>{k === 'az' ? 'Az' : k === 'orta' ? 'Orta' : 'Bol'}</button>)}</div>
       <label>Şeker</label>
-      <div className="seg">{(['sade', 'az', 'orta', 'sekerli'] as const).map(k => <button key={k} className={d.seker === k ? 'on' : ''} disabled={busy} onClick={() => act(d.id, { islem: 'ayarla', seker: k })}>{k === 'sade' ? 'Sade' : k === 'az' ? 'Az' : k === 'orta' ? 'Orta' : 'Şekerli'}</button>)}</div>
-      <button className="hp-go" onClick={() => act(d.id, { islem: busy ? 'kapat' : 'pisir' })}>{busy ? 'Durdur' : d.durum === 'hazir' ? 'Yeniden pişir' : 'Pişir'}</button>
+      <div className="seg">{(['sade', 'az', 'orta', 'sekerli'] as const).map(k => <button key={k} className={d.seker === k ? 'on' : ''} disabled={busy} onClick={() => homeAct(d.id, { islem: 'ayarla', seker: k })}>{k === 'sade' ? 'Sade' : k === 'az' ? 'Az' : k === 'orta' ? 'Orta' : 'Şekerli'}</button>)}</div>
+      <button className="hp-go" onClick={() => homeAct(d.id, { islem: busy ? 'kapat' : 'pisir' })}>{busy ? 'Durdur' : d.durum === 'hazir' ? 'Yeniden pişir' : 'Pişir'}</button>
     </div>
   );
 }
@@ -80,8 +80,8 @@ function FilterCard({ d, now }: { d: FilterCoffee; now: number }) {
       <header><span className="hp-room">{d.ad}</span><span className="hp-st">{statusText(d, now).toLocaleUpperCase('tr')}</span></header>
       <Ring p={progressOf(d, now)}>{busy ? `${Math.round(progressOf(d, now) * 100)}%` : d.durum === 'sicak_tutuyor' ? '♨' : '—'}</Ring>
       <label>Fincan</label>
-      <div className="seg">{[1, 2, 3, 4].map(n => <button key={n} className={d.fincan === n ? 'on' : ''} disabled={busy} onClick={() => act(d.id, { islem: 'ayarla', fincan: n })}>{n}</button>)}</div>
-      <button className="hp-go" onClick={() => act(d.id, { islem: busy || d.durum === 'sicak_tutuyor' ? 'kapat' : 'demle' })}>{busy ? 'Durdur' : d.durum === 'sicak_tutuyor' ? 'Kapat' : 'Demle'}</button>
+      <div className="seg">{[1, 2, 3, 4].map(n => <button key={n} className={d.fincan === n ? 'on' : ''} disabled={busy} onClick={() => homeAct(d.id, { islem: 'ayarla', fincan: n })}>{n}</button>)}</div>
+      <button className="hp-go" onClick={() => homeAct(d.id, { islem: busy || d.durum === 'sicak_tutuyor' ? 'kapat' : 'demle' })}>{busy ? 'Durdur' : d.durum === 'sicak_tutuyor' ? 'Kapat' : 'Demle'}</button>
     </div>
   );
 }

@@ -10,3 +10,6 @@ ses-ornekleri/*.html
 # Yerel notlar ve geliştirme ayarı (repoda yok; Halil GitHub'dan kaldırdı)
 docs/DEVIR-NOTU.md
 .claude/
+
+# El Kontrolü modeli (npm run el-modeli ile indirilir)
+web/public/models/

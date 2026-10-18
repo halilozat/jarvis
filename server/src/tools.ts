@@ -5,6 +5,7 @@ import { addMemory, removeMemory } from './profile.js';
 import { checkVideo, findHighlights, latestFromChannel, searchVideos, videoIdFrom } from './youtube.js';
 import { lookAtCamera } from './camera.js';
 import { control, homeMode, homeState, type DeviceId } from './home.js';
+import { addBook, addBookNote, fillInBackground, findBook, setBookStatus } from './library.js';
 
 // Not: `strict` alanı bilerek yok (RouteLLM 400 döndürebiliyor).
 export const TOOLS = [
@@ -115,6 +116,63 @@ export const TOOLS = [
         type: 'object',
         properties: { id: { type: 'string', description: 'Hafıza bölümündeki köşeli parantez içindeki kimlik' } },
         required: ['id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'kitaplik_ekle',
+      description: "Kitaplığa bir kitap ekler (rafta yeri olmadan; El Kontrolü'nde K ile rafa yerleştirilir) ve Jarvis sayfalarını (özet, ana fikirler, yazar, temalar, benzer kitaplar) arka planda doldurur. 'Kitaplığıma Davranış'ı ekle', 'kitabın adı Davranış', 'Sapolsky'nin Davranış kitabı bende var' gibi isteklerde kullanılır.",
+      parameters: {
+        type: 'object',
+        properties: {
+          kitap: { type: 'string', description: 'Kitabın adı' },
+          yazar: { type: 'string', description: 'Yazar (söylendiyse)' },
+        },
+        required: ['kitap'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'kitaplik_doldur',
+      description: "Kitaplıktaki bir kitabın Jarvis sayfalarını (özet, ana fikirler, yazar hakkında, temalar, neden okumalı, benzer kitaplar) arka planda doldurur ya da yeniden yazar. 'Davranış'ın sayfalarını doldur', 'şu kitabın içini doldur' gibi.",
+      parameters: { type: 'object', properties: { kitap: { type: 'string', description: 'Kitabın adı' } }, required: ['kitap'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'kitaplik_not_ekle',
+      description: "Kitaplıktaki bir kitaba not ya da alıntı ekler. 'Davranış'a not ekle: …', 'Mülksüzler'e şu alıntıyı ekle: …' gibi isteklerde kullanılır. Notlar kitap El Kontrolü'nde açılınca sayfalarda görünür.",
+      parameters: {
+        type: 'object',
+        properties: {
+          kitap: { type: 'string', description: 'Kitabın adı (kitaplık bölümündeki gibi), ör. "Otostopçunun Galaksi Rehberi"' },
+          metin: { type: 'string', description: 'Notun ya da alıntının kendisi; kullanıcının söylediği gibi, kısa' },
+          tur: { type: 'string', enum: ['not', 'alinti'], description: 'Varsayılan not. Kitaptan bir cümle aktarılıyorsa alinti.' },
+          yazar: { type: 'string', description: 'Kitap kitaplıkta yoksa eklenirken kullanılacak yazar (söylendiyse)' },
+        },
+        required: ['kitap', 'metin'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'kitaplik_durum',
+      description: "Kitaplıktaki bir kitabın okuma durumunu ya da kaldığı sayfayı günceller. 'Tahıla Karşı'yı bitirdim', 'Oblomov'da 120. sayfadayım', 'Anna Karenina'yı okumaya başladım' gibi.",
+      parameters: {
+        type: 'object',
+        properties: {
+          kitap: { type: 'string', description: 'Kitabın adı' },
+          durum: { type: 'string', enum: ['okunacak', 'okunuyor', 'bitti'] },
+          sayfa: { type: 'integer', description: 'Kaldığı sayfa' },
+          toplam_sayfa: { type: 'integer', description: 'Kitabın toplam sayfası (söylendiyse)' },
+        },
+        required: ['kitap'],
       },
     },
   },
@@ -266,6 +324,32 @@ export async function runTool(name: string, rawArgs: string, progress: ToolProgr
     });
     progress(out.map(o => ('hata' in o ? `${o.cihaz}: ${o.hata}` : `${o.cihaz}: ${o.sonuc}`)).join(' · '));
     return JSON.stringify({ mod: homeMode(), sonuclar: out });
+  }
+  if (name === 'kitaplik_ekle') {
+    const r: any = addBook(String(args.kitap ?? ''), args.yazar ? String(args.yazar) : null);
+    progress('hata' in r ? `kitaplık: ${r.hata}` : r.yeni ? `kitaplığa eklendi: ${r.kitap.ad}` : `zaten kitaplıkta: ${r.kitap.ad}`);
+    if ('hata' in r) return JSON.stringify(r);
+    const dolduruluyor = !r.kitap.jarvis;
+    if (dolduruluyor) fillInBackground(r.kitap.id);
+    return JSON.stringify({ ok: true, kitap: r.kitap.ad, yazar: r.kitap.yazar, yeni: r.yeni, raftaYeri: !!r.kitap.kutu, sayfalarDolduruluyor: dolduruluyor });
+  }
+  if (name === 'kitaplik_doldur') {
+    const f: any = findBook(String(args.kitap ?? ''));
+    if ('hata' in f) return JSON.stringify(f);
+    fillInBackground(f.kitap.id);
+    progress(`${f.kitap.ad}: sayfalar dolduruluyor`);
+    return JSON.stringify({ ok: true, kitap: f.kitap.ad, sayfalarDolduruluyor: true });
+  }
+  if (name === 'kitaplik_not_ekle') {
+    const r: any = addBookNote(String(args.kitap ?? ''), String(args.metin ?? ''), args.tur === 'alinti' ? 'alinti' : 'not', args.yazar ? String(args.yazar) : undefined);
+    progress(r.hata ? `kitaplık: ${r.hata}` : `${r.kitap}: ${r.tur === 'alinti' ? 'alıntı' : 'not'} eklendi`);
+    console.log(`[kitaplık] ${r.hata ? `not eklenemedi: ${r.hata}` : `${r.kitap} · ${r.tur} eklendi`}`);
+    return JSON.stringify(r);
+  }
+  if (name === 'kitaplik_durum') {
+    const r: any = setBookStatus(String(args.kitap ?? ''), args);
+    progress(r.hata ? `kitaplık: ${r.hata}` : `${r.kitap}: ${r.durum}${r.sayfa ? `, s. ${r.sayfa}` : ''}`);
+    return JSON.stringify(r);
   }
   if (name === 'hafiza_ekle') {
     const item = addMemory(String(args.not ?? ''));
