@@ -616,7 +616,9 @@ export class SpaceBrain {
     let s = Math.min(1, (this.H * 0.4) / (ref.tr * maxRatio));
     const right = ref.x < this.W / 2;
     const room = right ? this.W - ref.x - ref.tr * s - 30 : ref.x - ref.tr * s - 30;
-    const need = list.reduce((acc, g) => acc + ref.tr * s * (GOVDE[g].km / kmRef) * 2 + 14, 0);
+    // Satürn'ün halkası gövdesinin ~2,3 katı genişliğinde: ona göre yer ayır
+    const half = (g: Govde) => (g === 'saturn' ? 2.3 : 1);
+    const need = list.reduce((acc, g) => acc + ref.tr * s * (GOVDE[g].km / kmRef) * 2 * half(g) + 14, 0);
     if (need > room) s *= Math.max(0.15, room / need);
     const refR = ref.tr;
     ref.tr = refR * s;
@@ -624,11 +626,12 @@ export class SpaceBrain {
     const items: Body[] = [];
     for (const g of list) {
       const r = Math.max(1.5, refR * s * (GOVDE[g].km / kmRef));
-      x += right ? r : -r;
+      const w = r * half(g);
+      x += right ? w : -w;
       const b = new Body(g, x, ref.y, r, now);
       b.form = 0.2;
       items.push(b);
-      x += right ? r + 14 : -(r + 14);
+      x += right ? w + 14 : -(w + 14);
     }
     this.lineup = { at: now, ref, refR, items };
     this.sfx.solar();
