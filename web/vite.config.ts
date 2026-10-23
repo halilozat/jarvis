@@ -52,7 +52,7 @@ export default defineConfig({
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: { globIgnores: ['mediapipe/**', 'models/**'], navigateFallbackDenylist: [/^\/api/, /^\/mediapipe/, /^\/models/], skipWaiting: true, clientsClaim: true },
+      workbox: { globIgnores: ['mediapipe/**', 'models/**', 'space/**'], navigateFallbackDenylist: [/^\/api/, /^\/mediapipe/, /^\/models/, /^\/space/], skipWaiting: true, clientsClaim: true },
     }),
   ],
   server: {

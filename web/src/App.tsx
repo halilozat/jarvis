@@ -20,6 +20,8 @@ import { CameraPanel } from './camera/CameraPanel';
 import { HomePanel, HomeToast, getHome, homeAct, type HomeState } from './components/HomePanel';
 import type { Kontrol } from './hands/controller';
 import type { GezegenTur } from './hands/fx';
+import { matchSpaceCommand, type SpaceCmd } from './hands/space/commands';
+import { tumCumleler } from './hands/space/facts';
 import { emitCamera, getCameras, getRole, isCameraEvent, onCamera, setRole, toggleCameraPanel } from './lib/camera';
 import { type ElevenUsage, clearConversation, detectDevice, getDashboard, getHealth, getState, getVoices, metric, postAttention, postSleep, postWake, previewUrl, saveDevice, saveSettings, sendChat, setPhotoMode, stt, subscribe, token, clientId } from './lib/api';
 import { startClapListener, type ClapListener } from './lib/clap';
@@ -66,6 +68,8 @@ const EL_OPEN = /\b(el kontrol[a-zçğıöşü]*|büyü modu[a-zçğıöşü]*)\
 const EL_CLOSE = /\b(el kontrol[a-zçğıöşü]*|büyü modu[a-zçğıöşü]*)\b.*\b(kapat|durdur)/i;
 /** ?el=demo&kitaplik=1: kitaplık demosu (prosedürel raf) */
 const KITAPLIK_DEMO = new URLSearchParams(location.search).get('kitaplik') === '1';
+/** ?el=1&mod=uzay: El Kontrolü uzay modunda açılır */
+const EL_UZAY = new URLSearchParams(location.search).get('mod') === 'uzay';
 /** "Jarvis, kitaplığımı tara" / "kitaplığı tarar mısın" / "rafları tara" (El Kontrolü kamerasıyla) */
 const KITAPLIK_TARA = /(kitapl[ıi]k|kitapl[ıi][gğ][ıi](m[ıi])?|raflar[ıi](m[ıi])?)\s.*?\btar(a|ar|at)/i;
 /** Kitap açıkken: "Jarvis, bunu özetle", "kitabı özetle", "özetini oku" */
@@ -158,6 +162,10 @@ export default function App() {
   const [scanSig, setScanSig] = useState(0);
   const openBook = useRef<Kitap | null>(null);
   const [planetCmd, setPlanetCmd] = useState<{ tur: GezegenTur; n: number } | null>(null);
+  // Uzay modu: sesli komut (sunucuya gitmez), El Kontrolü'nün o anki modu
+  const [spaceCmd, setSpaceCmd] = useState<{ cmd: SpaceCmd; n: number } | null>(null);
+  const [startUzay, setStartUzay] = useState(EL_UZAY);
+  const elMod = useRef<'buyu' | 'uzay'>(EL_UZAY ? 'uzay' : 'buyu');
   const homeRef = useRef(home);
   homeRef.current = home;
   useEffect(() => { getHome().then(h => h && setHome(h)); }, []);
@@ -600,7 +608,7 @@ export default function App() {
   const submit = async (text: string, image?: string) => {
     const t = text.trim();
     if (!t && !image) return;
-    if (!image && EL_CLOSE.test(t)) { setInput(''); setInterim(''); setCore('idle'); setHands(null); return; }
+    if (!image && EL_CLOSE.test(t)) { setInput(''); setInterim(''); setCore('idle'); closeHands(); return; }
     if (!image && EL_OPEN.test(t)) { voice.unlock(); setInput(''); setInterim(''); setCore('idle'); setHands(h => h ?? 'kamera'); return; }
     // Kitaplık taraması El Kontrolü'nün kamerasıyla yapılır (kapalıysa açılır)
     if (!image && KITAPLIK_TARA.test(t)) {
@@ -608,6 +616,13 @@ export default function App() {
       setHands(h => h ?? (KITAPLIK_DEMO ? 'demo' : 'kamera'));
       setScanSig(n => n + 1);
       speakLine('Kitaplığınızı tarıyorum efendim.');
+      return;
+    }
+    // Uzay modu komutları: "uzay modunu aç" her yerden; diğerleri El Kontrolü uzay modundayken (modele gitmez, anında)
+    const sc = !image ? matchSpaceCommand(t) : null;
+    if (sc && (sc.tip === 'mod' || (handsRef.current && elMod.current === 'uzay'))) {
+      setInput(''); setInterim(''); setCore('idle');
+      runSpaceCmd(sc);
       return;
     }
     // Gezegen dönüştür (yalnızca El Kontrolü açıkken; modele gitmez, anında)
@@ -677,9 +692,48 @@ export default function App() {
   };
 
   // Asıl yol: mikrofon kaydı → RouteLLM ile yazıya çevirme. Konuşma bitince (sessizlik) kendiliğinden durur.
+  /** Uzay komutunu çalıştır: El Kontrolü kapalıysa ve komut "uzay modunu aç" ise uzay modunda açılır */
+  const runSpaceCmd = (cmd: SpaceCmd) => {
+    voice.unlock();
+    if (!handsRef.current) {
+      if (cmd.tip === 'mod' && !cmd.ac) return;
+      setStartUzay(true);
+      setHands(EL_PARAM === 'demo' ? 'demo' : 'kamera');
+    }
+    setSpaceCmd(c => ({ cmd, n: (c?.n ?? 0) + 1 }));
+  };
+
+  /**
+   * Uzay modunda mikrofon: Chrome'un konuşma tanıması ara sonuçlarıyla. Komut cümle biterken yakalanır (STT'yi
+   * beklemez); komut değilse cümle bitince normal Jarvis'e gider. Desteklenmiyorsa her zamanki yol.
+   */
+  const startSpaceListen = () => {
+    let handled = false;
+    const rec = createRecognizer({
+      onInterim: t => {
+        setInterim(t);
+        const c = handled ? null : matchSpaceCommand(t);
+        if (c) { handled = true; rec?.stop(); setInterim(''); setCore('idle'); runSpaceCmd(c); }
+      },
+      onFinal: t => { if (!handled) submit(t); },
+      onEnd: () => setCore(c => (c === 'listening' ? 'idle' : c)),
+      onError: m => { setTelemetry([`mikrofon: ${m}`]); setCore('idle'); },
+    });
+    if (!rec) return false;
+    recRef.current = rec;
+    setInterim('');
+    setCore('listening');
+    rec.start();
+    return true;
+  };
+
   const toggleMic = async () => {
     voice.unlock();
     if (core === 'listening') { recRef.current?.stop(); return; }
+    if (handsRef.current && elMod.current === 'uzay' && speechRecognitionSupported()) {
+      stopPlayback();
+      if (startSpaceListen()) return;
+    }
     stopPlayback();
     setVideo(null); // mikrofon videonun sesini duymasın
     if (!recorderSupported()) return startWebSpeech();
@@ -745,6 +799,15 @@ export default function App() {
     if (k.ozet) speakLine(k.ozet);
     else speakLine(k.ad ? `${k.ad} için henüz bir özetim yok efendim.` : 'Bu kitabın adını bilmiyorum efendim.');
   };
+  /** El Kontrolü kapandı: bir sonraki açılış büyü modunda, bekleyen uzay komutu yok */
+  const closeHands = () => { setHands(null); setSpaceCmd(null); setStartUzay(false); elMod.current = 'buyu'; };
+
+  /** El Kontrolü modu değişti. Uzaya geçince Jarvis'in bütün uzay cümleleri önceden yüklenir (komutta ses beklemez). */
+  const onElMod = (m: 'buyu' | 'uzay') => {
+    elMod.current = m;
+    if (m === 'uzay' && voiceSel) for (const line of tumCumleler()) voice.preload(line, voiceSel, undefined, undefined, true);
+  };
+
   const onScanDone = (r: { bulunan: number; belirsiz: number; hata?: string }) => {
     if (r.hata) speakLine('Kitaplığı tarayamadım efendim. Ayrıntı ekranda.');
     else speakLine(`${r.bulunan} kitap tanıdım efendim${r.belirsiz ? `, ${r.belirsiz} tanesinin sırtını okuyamadım` : ''}.`);
@@ -760,7 +823,7 @@ export default function App() {
       homeAct(e.id, { islem: d?.tur === 'isik' && d.acik ? 'kapat' : 'ac' });
     }
   };
-  const toggleHands = () => { voice.unlock(); setHands(h => (h ? null : 'kamera')); };
+  const toggleHands = () => { voice.unlock(); if (handsRef.current) closeHands(); else setHands('kamera'); };
 
   // Kamera / galeri: Jarvis'in "gözü"
   const onPhoto = async (f: File | undefined) => {
@@ -1263,9 +1326,11 @@ export default function App() {
 
       {hands && (
         <Suspense fallback={null}>
-          <HandControl demo={hands === 'demo'} caption={caption} core={core} onAction={onHandAction} onClose={() => setHands(null)} userName={userName} onFaceLock={onFaceLock}
+          <HandControl demo={hands === 'demo'} caption={caption} core={core} onAction={onHandAction} onClose={closeHands} userName={userName} onFaceLock={onFaceLock}
             kitaplik={KITAPLIK_DEMO} libraryKey={libKey} scanSignal={scanSig} onScanDone={onScanDone}
-            onBookRead={readBook} onBookOpen={k => { openBook.current = k; }} planetCmd={planetCmd} />
+            onBookRead={readBook} onBookOpen={k => { openBook.current = k; }} planetCmd={planetCmd}
+            uzay={startUzay} spaceCmd={spaceCmd} listening={core === 'listening'}
+            onSay={t => speakLine(t)} onMic={toggleMic} onModeChange={onElMod} />
         </Suspense>
       )}
 

@@ -426,6 +426,19 @@ export class Fx {
     this.shake = 1;
   }
 
+  /**
+   * Uzay modu: renkli enkaz patlaması (gezegen kendi renklerinde dağılır). points: [x, y, r, g, b] (gezegenin yüzey
+   * noktaları) ya da renk listesi + merkez. speed: px/sn ölçeği.
+   */
+  colorBurst(points: number[][], cx: number, cy: number, speed: number, size = 4) {
+    for (const p of points) {
+      const dx = p[0] - cx, dy = p[1] - cy, dl = Math.hypot(dx, dy) || 1;
+      const sp = rnd(0.4, 1.2) * speed;
+      const c: RGB = [p[2] | 0, p[3] | 0, p[4] | 0];
+      this.add({ x: p[0], y: p[1], vx: (dx / dl) * sp + rnd(-40, 40), vy: (dy / dl) * sp + rnd(-40, 40), life: 0, max: rnd(0.9, 2.2), size: rnd(0.7, 1.4) * size, pal: 'gold', drag: 1.4, rise: 0, wobble: 0, spr: this.sprite(c, -1) });
+    }
+  }
+
   /** Basılı tutma tamamlandı */
   confirmBurst(x: number, y: number, r: number) {
     this.rings.push({ x, y, r0: r, r1: r * 2.6, life: 0, max: 0.55, color: '95,242,255', width: 5 });

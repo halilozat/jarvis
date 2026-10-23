@@ -1,5 +1,6 @@
 // El Kontrolü: kamera görüntüsü üstünde el takibi, büyü efektleri ve jestle Jarvis kontrolü.
 // Tuşlar: Esc kapat · L arayüzü gizle/göster (temiz çekim) · D iskelet · M ses · C kamera değiştir · F yüz kilidi · K kitaplık ayarı
+// U uzay modu · B arka plan (tam uzay / oda)
 import type { HandLandmarker } from '@mediapipe/tasks-vision';
 import { useEffect, useRef, useState } from 'react';
 import { Controller, KONTROLLER, type Kontrol, type Status } from './controller';
@@ -16,6 +17,13 @@ import { DEMO_TARGET, buildDemoShelf, demoStream } from './shelfDemo';
 import { AYAR_LISTESI, loadAyar, saveAyar, type ElAyar } from './settings';
 import { GEZEGENLER, type GezegenTur } from './fx';
 import { fillBook, getLibrary, saveLibrary, scanLibrary, shelfRegion, tileFrame, type Kitap } from '../lib/library';
+import { SpaceBrain } from './space/brain';
+import type { SpaceCmd } from './space/commands';
+import { demoSpaceHands } from './space/demo';
+import { ONAY } from './space/facts';
+import { loadTextures } from './space/planets';
+import { PersonCutout, loadSegmenter } from './space/segment';
+import { Starfield } from './space/starfield';
 import './hands.css';
 
 export interface HandControlProps {
@@ -43,7 +51,24 @@ export interface HandControlProps {
   onBookOpen?(k: Kitap | null): void;
   /** "Jarvis, Mars yap": n her istekte artar */
   planetCmd?: { tur: GezegenTur; n: number } | null;
+  /** Uzay modunda başla (?mod=uzay ya da "Jarvis, uzay modunu aç") */
+  uzay?: boolean;
+  /** Uzay sesli komutu (sunucuya gitmez): n her istekte artar */
+  spaceCmd?: { cmd: SpaceCmd; n: number } | null;
+  /** Mikrofon dinliyor (✌️ elinin çevresinde dalga) */
+  listening?: boolean;
+  /** Jarvis bu hazır cümleyi seçili sesle söylesin */
+  onSay?(text: string): void;
+  /** ✌️ basılı (uzay modu): mikrofonu aç */
+  onMic?(): void;
+  onModeChange?(m: 'buyu' | 'uzay'): void;
 }
+
+/** Uzay modu jestleri */
+const LEGEND_UZAY: [string, string][] = [
+  ['🤏', 'gezegen tut'], ['🤏+1…5', 'diğer el: Dünya · Mars · Jüpiter · Satürn · Güneş'], ['↻', 'bileği çevir'], ['🤏🤏', 'büyüt'],
+  ['💥', 'iki gezegeni çarpıştır'], ['✋✋', 'güneş sistemi'], ['✊ 1,5 sn', 'kara delik'], ['✊→✋', 'patlat'], ['✌️', 'mikrofon'],
+];
 
 const LEGEND: [string, string][] = [
   ['✋', 'ateş'], ['✋✋', 'mühür'], ['🤏', 'gezegen'], ['🤏🤏', 'büyüt'], ['✊→✋', 'patlat'], ['☝️☝️', 'şimşek'], ['☝️', 'iz'],
@@ -59,6 +84,15 @@ export default function HandControl(p: HandControlProps) {
   const faceRef = useRef<HTMLCanvasElement>(null);
   const shelfRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const starsRef = useRef<HTMLCanvasElement>(null);
+  const spaceRef = useRef<HTMLCanvasElement>(null);
+  const brainRef = useRef<SpaceBrain | null>(null);
+  /** Mod: büyü ya da uzay (U). Arka plan: tam uzay (sizi odadan ayırır) ya da katman (oda görünür) (B). */
+  const [mod, setMod] = useState<'buyu' | 'uzay'>(p.uzay ? 'uzay' : 'buyu');
+  const [arka, setArka] = useState<'tam' | 'katman'>('tam');
+  const modRef = useRef(mod);
+  const arkaRef = useRef(arka);
+  useEffect(() => { modRef.current = mod; arkaRef.current = arka; }, [mod, arka]);
   const libRef = useRef<Library | null>(null);
   const shelfDemo = !!(p.demo && p.kitaplik);
   /** Kitaplık ayar modu (K) */
@@ -127,9 +161,23 @@ export default function HandControl(p: HandControlProps) {
     });
     libRef.current = lib;
     ctl.library = lib;
+    // Uzay modu: yıldız alanı, uzay beyni, (tam uzayda) kişi kesiti. Dokular arka planda yüklenir.
+    const stars = new Starfield(starsRef.current!);
+    const brain = new SpaceBrain(spaceRef.current!, fx, sfx, stars, {
+      say: t => {
+        if (p.demo) { setToast(`demo · Jarvis: ${t}`); setTimeout(() => setToast(null), 2600); return; }
+        propsRef.current.onSay?.(t);
+      },
+      mic: () => propsRef.current.onMic?.(),
+    });
+    brainRef.current = brain;
+    ctl.space = brain;
+    loadTextures();
+    let cutout: PersonCutout | null = null, segLoading = false, uzOn = false;
     const size = () => {
       const W = window.innerWidth, H = window.innerHeight;
       fx.resize(W, H); hudFace.resize(W, H); lib.resize(W, H);
+      stars.resize(W, H); brain.resize(W, H);
       setDims({ W, H, vw: video.videoWidth || 1920, vh: video.videoHeight || 1080 });
     };
     size();
@@ -154,6 +202,7 @@ export default function HandControl(p: HandControlProps) {
       demoJiggle.current = demoCam.jiggle;
     }
     let lastMoved = false, libOn = true;
+    const demoFired = new Set<string>();
 
     const loop = () => {
       if (!alive) return;
@@ -161,7 +210,20 @@ export default function HandControl(p: HandControlProps) {
       const now = performance.now();
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      if (demoShelf) {
+      // Mod değişimi: önceki modun izleri temizlenir; uzaya geçişte oda kararır, yıldızlar ışık hızıyla belirir
+      const uz = modRef.current === 'uzay';
+      if (uz !== uzOn) {
+        uzOn = uz;
+        ctl.setMode(uz ? 'uzay' : 'buyu');
+        if (uz) { stars.warp(now); sfx.warp(); lib.reset(); libOn = false; hudFace.clear(); }
+        else stars.clear();
+      }
+      if (uz && p.demo) {
+        const d = demoSpaceHands((now - demoStart) / 1000, fx.W, fx.H);
+        hands = d.hands; step = d.step;
+        const key = `${d.loop}:${d.cmd?.key}`;
+        if (d.cmd && !demoFired.has(key)) { demoFired.add(key); brain.command(d.cmd.cmd, now); }
+      } else if (demoShelf) {
         const t = (now - demoStart) / 1000;
         const d = demoBookHands(t, fx.W, fx.H, lib.rectOf(demoTarget));
         if (d.loop !== demoLoop) {
@@ -177,8 +239,23 @@ export default function HandControl(p: HandControlProps) {
         lastVideoT = video.currentTime;
         try { hands = detect(lm, video, now, fx.W, fx.H); } catch (e) { console.warn('[el] algılama', e); }
       }
+      // Uzay: yıldızlar (kara delik varsa bükülerek) ve tam uzayda sizi odadan ayıran kesit
+      if (uz) {
+        const tam = !p.demo && arkaRef.current === 'tam';
+        if (tam) {
+          if (!cutout && !segLoading) {
+            segLoading = true;
+            loadSegmenter()
+              .then(sg => { if (!alive) { sg.close(); return; } cutout = new PersonCutout(sg); })
+              .catch(e => { console.warn('[uzay] segmentasyon yüklenemedi', e); setToast('arka plan ayrılamadı: oda modu'); setArka('katman'); });
+          }
+          cutout?.update(video, now);
+        }
+        stars.render(now, dt, brain.lens(now), tam && cutout ? (g, W, H) => cutout!.punch(g, W, H) : undefined);
+        brain.listening = !!propsRef.current.listening;
+      }
       // Yüz: demoda sahte yüz; kamerada her 3. yeni karede algıla (el takibine yer kalsın), arada yumuşatılmış kutu
-      if (faceOn.current) {
+      if (faceOn.current && !uz) {
         if (p.demo) hudFace.update(demoFace((now - demoStart) / 1000, fx.W, fx.H), now);
         else if (fd && video.readyState >= 2 && ++faceTick % 3 === 0) {
           try { hudFace.update(detectFaces(fd, video, now, fx.W, fx.H), now); } catch (e) { console.warn('[el] yüz', e); }
@@ -187,8 +264,8 @@ export default function HandControl(p: HandControlProps) {
       } else hudFace.clear();
       ctl.ayar = ayarRef.current;
       const st = ctl.update(hands, now, dt);
-      // Kitaplık ayardan kapatılınca dışarıdaki kitap ve raf katmanı temizlenir
-      if (ctl.ayar.kitaplik) { libOn = true; lib.render(now); }
+      // Kitaplık ayardan kapatılınca (ya da uzay modunda) dışarıdaki kitap ve raf katmanı temizlenir
+      if (ctl.ayar.kitaplik && !uz) { libOn = true; lib.render(now); }
       else if (libOn) { libOn = false; lib.reset(); }
       if (lib.moved !== lastMoved) { lastMoved = lib.moved; setMoved(lib.moved); }
       frames++;
@@ -240,6 +317,9 @@ export default function HandControl(p: HandControlProps) {
       demoCam?.stop();
       lib.dispose();
       libRef.current = null;
+      cutout?.close();
+      brain.reset();
+      brainRef.current = null;
     };
   }, [p.demo, camId, sfx, demoShelf]);
 
@@ -303,6 +383,36 @@ export default function HandControl(p: HandControlProps) {
     if (!morphed) { setToast(`◉ ${ad} · çimdikle oluştur`); setTimeout(() => setToast(null), 2200); }
   }, [p.planetCmd]);
 
+  // Uzay sesli komutları: mod ve arka plan burada, gerisi uzay beyninde
+  const say = (t: string) => { if (p.demo) { setToast(`demo · Jarvis: ${t}`); setTimeout(() => setToast(null), 2600); } else propsRef.current.onSay?.(t); };
+  const lastSpaceCmd = useRef(0);
+  const applySpaceCmd = (cmd: SpaceCmd) => {
+    if (cmd.tip === 'mod') {
+      setMod(cmd.ac ? 'uzay' : 'buyu');
+      say(cmd.ac ? ONAY.modAc : ONAY.modKapat);
+      return;
+    }
+    if (cmd.tip === 'arkaplan') {
+      setArka(cmd.tam ? 'tam' : 'katman');
+      say(cmd.tam ? ONAY.arkaUzay : ONAY.arkaOda);
+      return;
+    }
+    // Uzay modu kapalıyken uzay komutu: önce moda geç, ışık hızı geçişinden sonra çalıştır
+    if (modRef.current !== 'uzay') {
+      setMod('uzay');
+      setTimeout(() => brainRef.current?.command(cmd, performance.now()), 900);
+      return;
+    }
+    brainRef.current?.command(cmd, performance.now());
+  };
+  useEffect(() => {
+    const c = p.spaceCmd;
+    if (!c || c.n === lastSpaceCmd.current) return;
+    lastSpaceCmd.current = c.n;
+    applySpaceCmd(c.cmd);
+  }, [p.spaceCmd]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { propsRef.current.onModeChange?.(mod); }, [mod]);
+
   // Sunucuda kitaplık değişti (not eklendi, Ayarlar'dan düzenlendi): haritayı yenile
   useEffect(() => {
     if (!p.libraryKey || shelfDemo) return;
@@ -335,7 +445,9 @@ export default function HandControl(p: HandControlProps) {
       else if (e.code === 'KeyM') setAyar({ ses: !ayarRef.current.ses });
       else if (e.code === 'KeyF') setAyar({ yuz: !ayarRef.current.yuz });
       else if (e.code === 'KeyE') setAyarOpen(v => !v);
-      else if (e.code === 'KeyK') setEditing(v => !v);
+      else if (e.code === 'KeyK' && modRef.current === 'buyu') setEditing(v => !v);
+      else if (e.code === 'KeyU') { setEditing(false); setMod(m => (m === 'uzay' ? 'buyu' : 'uzay')); }
+      else if (e.code === 'KeyB' && modRef.current === 'uzay') setArka(a => (a === 'tam' ? 'katman' : 'tam'));
       else if (e.code === 'KeyJ' && demoJiggle.current) { jiggled.current = !jiggled.current; demoJiggle.current(jiggled.current); }
       else if (e.code === 'KeyC' && cams.length > 1) nextCam();
       else return;
@@ -349,9 +461,11 @@ export default function HandControl(p: HandControlProps) {
 
   const st = stats.st;
   return (
-    <div className={'el-root' + (p.demo ? ' demo' : '') + (shelfDemo ? ' shelf' : '')}>
+    <div className={'el-root' + (p.demo ? ' demo' : '') + (shelfDemo ? ' shelf' : '') + (mod === 'uzay' ? ` uzay ${arka}` : '')}>
       <video ref={videoRef} className="el-video" playsInline muted />
+      <canvas ref={starsRef} className="sp-stars" />
       <canvas ref={shelfRef} className="el-shelf" />
+      <canvas ref={spaceRef} className="sp-canvas" />
       <canvas ref={canvasRef} className="el-canvas" />
       <div ref={stageRef} className="lb-stage" />
       <canvas ref={faceRef} className="el-face" />
@@ -360,19 +474,21 @@ export default function HandControl(p: HandControlProps) {
         <>
           <i className="el-corner tl" /><i className="el-corner tr" /><i className="el-corner bl" /><i className="el-corner br" />
           <div className="el-top">
-            <span className="el-title">JARVIS · EL KONTROLÜ</span>
+            <span className="el-title">JARVIS · {mod === 'uzay' ? 'UZAY' : 'EL KONTROLÜ'}</span>
             <span className="el-chip">MOD: {st.mode.toLocaleUpperCase('tr')}</span>
             <span className="el-meta">{stats.fps} FPS · {st.hands.length} el{stats.delegate ? ` · ${stats.delegate}` : ''}{p.demo ? ' · DEMO' : ''}</span>
             {st.hands.map(h => <span key={h.id} className="el-meta">{GESTURE_LABEL[h.gesture]}</span>)}
             <span className="el-sp" />
+            <button className={'el-btn' + (mod === 'uzay' ? ' on' : '')} onClick={() => { setEditing(false); setMod(m => (m === 'uzay' ? 'buyu' : 'uzay')); }} title="Uzay modu (U)">{mod === 'uzay' ? '✨ büyü' : '🪐 uzay'}</button>
+            {mod === 'uzay' && !p.demo && <button className="el-btn" onClick={() => setArka(a => (a === 'tam' ? 'katman' : 'tam'))} title="Arka plan (B)">{arka === 'tam' ? '🏠 oda' : '🌌 tam uzay'}</button>}
             {cams.length > 1 && <button className="el-btn" onClick={nextCam} title="Kamera değiştir (C)">⟳ kamera</button>}
             <button className="el-btn" onClick={() => setAyar({ ses: !ayar.ses })} title="Efekt sesi (M)">{muted ? '🔇' : '🔊'}</button>
             <button className={'el-btn' + (ayarOpen ? ' on' : '')} onClick={() => setAyarOpen(v => !v)} title="Efektleri aç/kapat (E)">⚙ efektler</button>
             <button className="el-btn" onClick={p.onClose} title="Kapat (Esc)">✕</button>
           </div>
           <div className="el-legend">
-            {(st.mode.startsWith('kitap') ? LEGEND_KITAP : LEGEND).map(([g, t]) => <span key={g + t}><b>{g}</b> {t}</span>)}
-            <span className="el-keys">L arayüz · E efektler · F yüz kilidi · K kitaplık · D iskelet · M ses · Esc çık</span>
+            {(mod === 'uzay' ? LEGEND_UZAY : st.mode.startsWith('kitap') ? LEGEND_KITAP : LEGEND).map(([g, t]) => <span key={g + t}><b>{g}</b> {t}</span>)}
+            <span className="el-keys">{mod === 'uzay' ? 'U büyü modu · B arka plan · L arayüz · D iskelet · M ses · Esc çık' : 'U uzay · L arayüz · E efektler · F yüz kilidi · K kitaplık · D iskelet · M ses · Esc çık'}</span>
           </div>
           {p.demo && stats.step && <div className="el-step">{stats.step}</div>}
         </>

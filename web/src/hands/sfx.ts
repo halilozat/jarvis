@@ -53,6 +53,48 @@ export class Sfx {
   close() { this.burst(0.18, 900, 300, 0.25, 'lowpass', 0.8); this.tone(330, 0.4, 0.05, 'sine', 160); }
   /** Rafına oturdu: tok bir vuruş */
   thud() { this.tone(120, 0.25, 0.3, 'sine', 60); this.burst(0.12, 700, 200, 0.3, 'lowpass', 0.8); }
+  // ---- Uzay modu
+  /** Mod geçişi: ışık hızına çıkış (yükselen hava + ton) */
+  warp() { this.burst(0.9, 200, 5000, 0.4, 'bandpass', 0.7); this.tone(80, 0.9, 0.12, 'sawtooth', 640); this.tone(160, 0.8, 0.05, 'sine', 1280, 0.1); }
+  /** Gezegen oluştu: yükselen akor */
+  planet() { [261.6, 329.6, 392, 523.3].forEach((f, i) => this.tone(f, 0.9 - i * 0.1, 0.06, 'sine', undefined, i * 0.07)); this.burst(0.6, 2500, 7000, 0.08, 'highpass', 0.7, 0.1); }
+  /** Gezegen dönüştü: ışıltı */
+  morph() { this.burst(0.5, 3000, 9000, 0.12, 'bandpass', 2); [784, 1047, 1319].forEach((f, i) => this.tone(f, 0.35, 0.035, 'triangle', f * 1.5, i * 0.05)); }
+  /** Çarpışma: derin patlama + çatırtı */
+  collision() {
+    this.tone(70, 1.8, 0.9, 'sine', 24); this.tone(140, 1.0, 0.4, 'sawtooth', 40);
+    this.burst(2.0, 1600, 80, 1.0, 'lowpass', 0.5); this.burst(0.9, 6000, 900, 0.5, 'highpass', 0.7, 0.05);
+    for (let i = 0; i < 6; i++) this.burst(0.08, 4000 + Math.random() * 3000, 1500, 0.25, 'bandpass', 3, 0.15 + i * 0.09 + Math.random() * 0.05);
+  }
+  /** Enkaz toplanıyor: yükselen ışıltı (Ay doğar) */
+  gather() { this.tone(330, 3.2, 0.05, 'sine', 990); this.burst(3.2, 1500, 9000, 0.08, 'bandpass', 4); [523.3, 659.3, 784, 1046.5].forEach((f, i) => this.tone(f, 0.8, 0.04, 'sine', undefined, 3.0 + i * 0.08)); }
+  /** Güneş sistemi açıldı */
+  solar() { [392, 523.3, 659.3, 784, 1046.5].forEach((f, i) => this.tone(f, 1.2, 0.045, 'sine', undefined, i * 0.09)); }
+  /** Mikrofon açıldı */
+  micOn() { this.tone(880, 0.12, 0.08, 'sine', 1320); }
+  /** Kara delik: alçak uğultu (sürekli) + emme */
+  private hum: { o: OscillatorNode; o2: OscillatorNode; g: GainNode } | null = null;
+  blackHole(on: boolean) {
+    if (!this.ctx || !this.master) return;
+    const c = this.ctx;
+    if (on && !this.hum && this.ok()) {
+      const o = c.createOscillator(), o2 = c.createOscillator(), g = c.createGain();
+      o.type = 'sine'; o.frequency.value = 42; o2.type = 'triangle'; o2.frequency.value = 63;
+      g.gain.value = 0.0001;
+      o.connect(g); o2.connect(g); g.connect(this.master);
+      o.start(); o2.start();
+      g.gain.setTargetAtTime(0.28, c.currentTime, 0.4);
+      this.hum = { o, o2, g };
+      this.burst(1.6, 4000, 120, 0.4, 'lowpass', 1.5); // emme
+    } else if (!on && this.hum) {
+      const h = this.hum;
+      h.g.gain.setTargetAtTime(0.0001, c.currentTime, 0.15);
+      setTimeout(() => { try { h.o.stop(); h.o2.stop(); } catch { /* yok say */ } }, 700);
+      this.hum = null;
+      this.tone(90, 0.6, 0.3, 'sine', 400); this.burst(0.5, 300, 6000, 0.3, 'bandpass', 1);
+    }
+  }
+
   /** Tarama başladı */
   scanStart() { this.tone(400, 1.2, 0.05, 'sawtooth', 1600); }
 
@@ -124,6 +166,8 @@ export class Sfx {
 
   stop() {
     try { this.roar?.src.stop(); } catch { /* yok say */ }
+    try { this.hum?.o.stop(); this.hum?.o2.stop(); } catch { /* yok say */ }
+    this.hum = null;
     this.roar = null;
     this.ctx?.close().catch(() => {});
     this.ctx = null;

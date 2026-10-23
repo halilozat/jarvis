@@ -2,6 +2,7 @@
 import { Fx, GEZEGENLER, Planet, type GezegenTur, type HoldState, type SigilState } from './fx';
 import { TrackedHand, type Gesture, type P } from './gestures';
 import type { Library } from './library';
+import type { SpaceBrain } from './space/brain';
 import { VARSAYILAN, type ElAyar } from './settings';
 import type { Sfx } from './sfx';
 import type { RawHand } from './tracker';
@@ -46,6 +47,20 @@ export class Controller {
   private captured = false;
   /** Efekt ayarları (⚙): kapalı efekt tetiklenmez */
   ayar: ElAyar = { ...VARSAYILAN };
+  /** Mod: büyü (ateş, mühür, gezegen, şimşek, iz, kitaplık) ya da uzay (space/brain.ts). Biri diğerini tetiklemez. */
+  mode: 'buyu' | 'uzay' = 'buyu';
+  space: SpaceBrain | null = null;
+
+  /** Mod değişti: önceki modun efektleri temizlenir */
+  setMode(m: 'buyu' | 'uzay') {
+    if (m === this.mode) return;
+    this.mode = m;
+    this.fx.planet = null;
+    this.heldBy = null;
+    for (const f of this.hfx.values()) { f.fire = 0; f.sigil = 0; f.sigilPos = null; }
+    this.sfx.setRoar(0);
+    this.space?.reset();
+  }
   /** "Sırayla" modunda sıradaki gezegen; sesle istenen tür bir sonraki çimdikte gelir */
   private planetCycle = 0;
   private wantedTur: GezegenTur | null = null;
@@ -90,6 +105,12 @@ export class Controller {
       if (!seen.has(id) && now - h.lastSeen > 220) { h.reset(); this.hands.delete(id); }
     }
     const live = [...this.hands.values()].filter(h => seen.has(h.id) || now - h.lastSeen < 220);
+    // Uzay modu: eller doğrudan uzay beynine gider (büyü efektleri ve kitaplık çalışmaz)
+    if (this.mode === 'uzay' && this.space) {
+      const r = this.space.update(live, now, dt);
+      if (this.debug) for (const h of live) fx.skeleton(h.pts, `${h.id} · ${h.gesture}`);
+      return { hands: live.map(h => ({ id: h.id, gesture: h.gesture })), mode: r.mode };
+    }
     // Kitaplık önceliklidir: kitap dışarıdayken ateş/mühür/gezegen/şimşek ve basılı tutma kontrolleri kapalı;
     // kitaplık bölgesindeki el çimdikle gezegen OLUŞTURMAZ, kitap seçer.
     const A = this.ayar;
@@ -211,6 +232,7 @@ export class Controller {
   /** Jest değişti: yumruk → açık = patlat, ateş → yumruk = söndür */
   private onGestureChange(h: TrackedHand, now: number) {
     const f = this.fxOf(h.id);
+    if (this.mode === 'uzay') { this.space?.onGesture(h, now); return; }
     if (this.captured) return; // kitap açıkken yumruk → açık patlatmaz
     if (h.gesture === 'acik' && h.prevGesture === 'yumruk' && now - h.lastFist < 500) {
       // yumruğun ne kadar sürdüğü: uzun tutulduysa (sustur) patlatma

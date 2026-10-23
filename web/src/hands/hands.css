@@ -223,3 +223,12 @@
 .el-ayar-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
 .el-ayar-row span { flex: 1; }
 .el-ayar-row select { background: rgba(4, 16, 22, 0.9); color: var(--el-text); border: 1px solid rgba(95, 242, 255, 0.4); border-radius: 8px; padding: 4px 6px; font: inherit; font-size: 13px; }
+
+/* ------------------------------------------------------------------ Uzay modu */
+.sp-stars, .sp-canvas { position: absolute; inset: 0; pointer-events: none; display: none; }
+.el-root.uzay .sp-stars, .el-root.uzay .sp-canvas { display: block; }
+/* Tam uzay: yıldızlar videonun üstünde, kişinin olduğu yerde delik (segment.ts) */
+/* Katman: oda görünür, yıldızlar yalnızca karanlık bölgelerde hafifçe parlar */
+.el-root.uzay.katman .sp-stars { mix-blend-mode: screen; opacity: 0.85; }
+.el-root.uzay .el-shelf, .el-root.uzay .lb-stage, .el-root.uzay .el-face { display: none; }
+.el-root.uzay .el-legend b { color: #ffd38a; }

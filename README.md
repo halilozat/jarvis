@@ -137,7 +137,7 @@ Jest → eylem listesi `web/src/hands/controller.ts` içindeki `KONTROLLER` dizi
 
 **Efektleri aç/kapat:** üst şeritteki **⚙ efektler** düğmesi ya da **E** tuşu. Ateş, mühür, gezegen, patlatma, şimşek, ışık izi, Jarvis kontrolleri (👍 ✌️ ✊), yüz kilidi, kitaplık ve efekt sesleri ayrı ayrı kapatılır; kapalı efekt hiç tetiklenmez. Seçim bu cihazda saklanır. "Raf bölgesinde ateş/iz yok" açıkken kitaplığa uzanan elde ateş, ışık izi ve şimşek çıkmaz.
 
-**Çekim tuşları:** **L** arayüzü gizler (temiz kayıt) · **E** efektler · **F** yüz kilidi · **K** kitaplık ayarı · **D** el iskeletini gösterir · **M** efekt seslerini kapatır · **C** kamerayı değiştirir (iPhone'u Süreklilik Kamerası olarak kullanabilirsiniz).
+**Çekim tuşları:** **U** uzay modu · **B** arka plan (uzay modunda) · **L** arayüzü gizler (temiz kayıt) · **E** efektler · **F** yüz kilidi · **K** kitaplık ayarı · **D** el iskeletini gösterir · **M** efekt seslerini kapatır · **C** kamerayı değiştirir (iPhone'u Süreklilik Kamerası olarak kullanabilirsiniz).
 
 **Kamerasız deneme:** `http://localhost:5173/?el=demo` sentetik ellerle bütün efektleri sırayla oynatır. Demoda komut gönderilmez.
 
@@ -195,6 +195,60 @@ Kitaplık bölgesinde çimdik gezegen oluşturmaz, kitap seçer. Kitap dışarı
 **Kamerasız deneme:** `?el=demo&kitaplik=1` arka plana raflarınızdaki kitaplardan oluşan prosedürel bir kitaplık çizer (sahte kamera akışı olarak, yani kırpma ve tarama gerçek yoldan geçer). Demo döngüsü: tarama → seç → tut → çek → kapak → aç → sayfa çevir → 👍 özet → ✊ rafa koy. Demoda **J** kamerayı "kıpırdatır" (uyarıyı denemek için). Demo değişiklikleri sunucuya kaydedilmez.
 
 **Test:** `npm --prefix server run test:kitaplik` tarama uç noktasını sahte model cevaplarıyla dener (geçersiz JSON, taşan kutu, boş sonuç, parçaların birleştirilmesi, notlar). Gerçek kitaplığa dokunmaz.
+
+#### Uzay Modu 🪐
+
+Büyü efektlerinden ayrı bir mod: arkanızda uzay varmış gibi görünür, gerçek gezegenleri elinizle ve sesinizle yönetirsiniz. Bu modda ateş, mühür, şimşek, iz ve kitaplık çalışmaz; büyü modu da uzay efektlerini tetiklemez.
+
+**Açmak:** El Kontrolü'nde **U** tuşu ya da üst şeritteki **🪐 uzay** düğmesi, sesle *"Jarvis, uzay modunu aç / kapat"* (El Kontrolü kapalıysa uzay modunda açılır), adresle `?el=1&mod=uzay`. Geçişte oda kararır, yıldızlar ışık hızıyla belirir.
+
+**Arka plan (B tuşu ya da *"Jarvis, arka planı uzaya çevir / odayı geri getir"*):**
+- **Tam uzay** (varsayılan): sizi odadan ayırır (MediaPipe Selfie Segmenter), arka plan tamamen uzay olur, siz önde kalırsınız. Kamera görüntüsü kopyalanmaz; yıldız katmanında sizin olduğunuz yere yumuşak kenarlı bir delik açılır.
+- **Katman**: oda görünür, yıldızlar yalnızca görüntünün karanlık bölgelerinde hafifçe parlar.
+
+Yıldız alanı tamamen prosedüreldir: 3 derinlik katmanı (yavaş sürüklenme, parallax), göz kırpan sıcak/soğuk yıldızlar, Samanyolu bandı, soluk nebulalar, 15-30 sn'de bir kayan yıldız.
+
+**Gezegenler:** Merkür, Venüs, Dünya, Mars, Jüpiter, Satürn, Uranüs, Neptün, Ay ve Güneş. Her biri 3.600 noktadan oluşur; noktaların rengi gerçek yüzey haritasından (aşağıdaki dokular) ya da dokusu olmayanlarda gerçek görünüşe benzeyen desenden gelir. Gece/gündüz gölgesi vardır, halka yalnızca Satürn'de (belirgin) ve Uranüs'te (ince, neredeyse dik). Gezegen değişince yanında küçük bir bilgi kartı çıkar.
+
+**Jestler:**
+
+| Jest | Ne olur |
+|---|---|
+| 🤏 Çimdik | Seçili gezegeni oluşturur ya da yakındakini tutar (varsayılan Dünya). Aynı anda en fazla 3 gezegen, her el kendi gezegenini tutar |
+| 🤏 + diğer elle 1-5 parmak | Tuttuğunuz gezegen dönüşür: 1 Dünya · 2 Mars · 3 Jüpiter · 4 Satürn · 5 Güneş (noktalar dağılıp yeniden toplanır) |
+| Bileği çevirmek | Tutulan gezegen döner; bırakınca ivmeyle dönmeye devam edip yavaşlar |
+| 🤏🤏 Tek gezegene iki çimdik | Büyüt / küçült |
+| İki gezegeni hızla çarpıştırmak | Çarpışma: parlama ve sarsıntı, büyük gezegen lav rengine döner, küçüğün enkazı etrafında bir diske dağılır, disk 3,5 sn'de toplanıp Ay olur ve yörüngeye oturur. Dünya'ysa Jarvis Theia cümlesini söyler |
+| ✋✋ Elde gezegen yokken iki açık el | Aralarında Güneş sistemi; eller açıldıkça büyür. Bir gezegene çimdik: sistemden çekip alırsınız |
+| ✊ Gezegenin yanında 1,5 sn | Kara delik: gezegen spiral çizerek parçalanır (spagettileşme), yığılma diski, foton halkası, arkadaki yıldızlar bükülür. ✋ açınca söner |
+| ✊ → ✋ hızlı | Yakındaki gezegen kendi renklerinde patlar |
+| ✌️ 0,6 sn basılı | Mikrofon (eller meşgulken sesli komut); dinlerken elin çevresinde dalga halkası. Boşluk tuşu da olur |
+
+**Sesli komutlar** (sunucuya gitmez, anında; Türkçe eklere ve yazım farklarına dayanıklı: *dünyayı, Mars'ı, jüpiteri, satürnü…*):
+- *"Jarvis, Satürn getir / çağır / göster"*: elinizdeki gezegen dönüşür, elde yoksa ortada oluşur
+- *"güneş sistemini göster"*, *"gerçek boyutlarda göster"* (yanına diğerleri gerçek oranlarla gelir, 4 sn), *"kara delik oluştur"*
+- *"Theia'yı fırlat"* ya da *"gezegenleri çarpıştır"*: elinizdeki Dünya'ya ekranın kenarından Mars büyüklüğünde bir gök cismi fırlar; çarpışma → Ay akışı tek komutla, elle denk getirmeye gerek yok
+- *"kayan yıldız"*, *"bana Jüpiter hakkında bir şey söyle"*, *"temizle"*
+
+Her komutta Jarvis seçili sesle kısa bir onay söyler ("Satürn, efendim."). Uzay modu açılınca bütün hazır cümleler önceden yüklenir; ses beklemeden çalar. Uzay modunda mikrofon, komutu cümle biterken yakalamak için Chrome'un konuşma tanımasını kullanır (bu ses Google'ın sunucusuna gider); komut değilse cümle her zamanki Jarvis'e gider. Cümleler ve gezegen bilgileri `web/src/hands/space/facts.ts` dosyasındadır.
+
+**Kamerasız deneme:** `?el=demo&mod=uzay` sentetik ellerle oynatır: Dünya oluşur → bilek çevirme → 2 parmak: Mars → diğer elde Dünya → çarpışma → enkaz → Ay → Güneş sistemi → Satürn → kara delik. Demoda segmentasyon yoktur.
+
+**Test:** `npm run test:uzay` sesli komut eşleştiricisini 72 yazımla dener (ekli, eksiz, STT hatalı ve komut olmayanlar).
+
+**Performans:** Kişi ayırma 256 piksele küçültülmüş kareyle 2 karede bir çalışır (M1 Pro'da ~6 ms); gezegenler küçük bir tampona derinlik sınamasıyla basılır. Modeller `npm run el-modeli` ile yerele indirilebilir.
+
+**Dokular** (`web/public/space/`, 1024×512'ye küçültüldü):
+
+| Doku | Kaynak | Lisans |
+|---|---|---|
+| Dünya | NASA Earth Observatory, *Blue Marble: Next Generation* (topoğrafya + batimetri, Aralık), Reto Stöckli | NASA görseli, telif yok (kaynak belirtilmesi istenir) |
+| Ay | NASA Scientific Visualization Studio, [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720), `lroc_color_poles_1k.jpg` (LRO WAC) | NASA görseli; kaynak: "NASA's Scientific Visualization Studio" |
+| Mars | USGS Astrogeology, [Mars Viking Global Color Mosaic 925m](https://astrogeology.usgs.gov/search/map/mars_viking_global_color_mosaic_925m) | USGS: "public domain" |
+| Jüpiter | NASA/JPL/Space Science Institute, Cassini, [PIA07782](https://photojournal.jpl.nasa.gov/catalog/PIA07782) | NASA/JPL görseli, telif yok |
+| Merkür | NASA/Johns Hopkins University APL/Carnegie Institution of Washington, MESSENGER, PIA16298 | NASA görseli, telif yok |
+
+Satürn, Venüs, Uranüs, Neptün ve Güneş için gerçek renkli, lisansı açık küresel harita olmadığından desenleri prosedüreldir (Satürn'ün bantları, Venüs'ün bulut örtüsü, Uranüs ve Neptün'ün renkleri, Güneş'in kaynayan yüzeyi). Kişi ayırma modeli: MediaPipe Selfie Segmenter (yatay), Google; el modeli gibi çalışırken Google'ın sunucusundan iner, repoda yoktur.
 
 ### Kamera cihazı (Jarvis'in gözü)
 
