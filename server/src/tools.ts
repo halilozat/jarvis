@@ -6,6 +6,7 @@ import { checkVideo, findHighlights, latestFromChannel, searchVideos, videoIdFro
 import { lookAtCamera } from './camera.js';
 import { control, homeMode, homeState, type DeviceId } from './home.js';
 import { addBook, addBookNote, fillInBackground, findBook, setBookStatus } from './library.js';
+import { yasamIziTara } from './lab.js';
 
 // Not: `strict` alanı bilerek yok (RouteLLM 400 döndürebiliyor).
 export const TOOLS = [
@@ -131,6 +132,21 @@ export const TOOLS = [
           yazar: { type: 'string', description: 'Yazar (söylendiyse)' },
         },
         required: ['kitap'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'yasam_izi_tara',
+      description: "Uzay Laboratuvarı açıkken bir gök cisminde (ya da yakınlaşılan bölgedeki bütün cisimlerde) yaşam izi taraması yapar: ekranda animasyonu başlatır ve simülasyondaki koşullardan hesaplanmış sonucu döndürür (kontrol listesi, Dünya Benzerlik Endeksi, bugüne kadar bulunanlar, en umut verici bölge, sıradaki görev). 'Europa'da hayat olabilir mi, tara', 'bu bölgede yaşam izi ara' gibi isteklerde kullanılır. Yaşam olasılığı vermez.",
+      parameters: {
+        type: 'object',
+        properties: {
+          hedef: { type: 'string', description: "Cisim adı (Dünya, Mars, Venüs, Europa, Ganymede, Enceladus, Titan, Ay…) ya da yakınlaşılan bölge için 'odak'" },
+          hizli: { type: 'boolean', description: 'Kısa tarama (≈7 sn)' },
+        },
+        required: ['hedef'],
       },
     },
   },
@@ -332,6 +348,11 @@ export async function runTool(name: string, rawArgs: string, progress: ToolProgr
     const dolduruluyor = !r.kitap.jarvis;
     if (dolduruluyor) fillInBackground(r.kitap.id);
     return JSON.stringify({ ok: true, kitap: r.kitap.ad, yazar: r.kitap.yazar, yeni: r.yeni, raftaYeri: !!r.kitap.kutu, sayfalarDolduruluyor: dolduruluyor });
+  }
+  if (name === 'yasam_izi_tara') {
+    const out = yasamIziTara(args);
+    progress(out.includes('"hata"') ? 'yaşam izi taraması: laboratuvar kapalı ya da cisim yok' : `yaşam izi taraması: ${args.hedef}`);
+    return out;
   }
   if (name === 'kitaplik_doldur') {
     const f: any = findBook(String(args.kitap ?? ''));

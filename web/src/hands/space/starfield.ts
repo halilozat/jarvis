@@ -126,14 +126,20 @@ export class Starfield {
   }
 
   /** punch: tam uzayda kişinin olduğu yere delik (segment.ts) — yıldızlar videonun üstünde, siz delikten görünürsünüz */
-  render(now: number, dt: number, lens: Lens | null, punch?: (g: CanvasRenderingContext2D, W: number, H: number) => void) {
+  /**
+   * oda: odanın üstüne yalnızca süzülen ince yıldız ve toz (opak gökyüzü, bulutsu ve Samanyolu yok); tuval
+   * CSS'te "screen" ile karışır, böylece aydınlık yerlerde kaybolur, karanlık köşelerde belirir.
+   */
+  render(now: number, dt: number, lens: Lens | null, punch?: (g: CanvasRenderingContext2D, W: number, H: number) => void, oda = false) {
     const g = this.g, { W, H } = this;
     if (!this.bg) return;
     g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.drift += dt;
     g.globalCompositeOperation = 'source-over';
     g.globalAlpha = 1;
-    g.drawImage(this.bg, 0, 0, W, H);
+    if (oda) g.clearRect(0, 0, W, H);
+    else g.drawImage(this.bg, 0, 0, W, H);
+
 
     const t = now / 1000;
     const w = (now - this.warpAt) / 800;
@@ -159,7 +165,8 @@ export class Starfield {
       }
       g.globalAlpha = 1;
     } else {
-      for (let li = 0; li < 3; li++) {
+      // Odada en uzak katman (binlerce minik nokta) kamera gürültüsü gibi durur: yalnızca orta ve yakın yıldızlar
+      for (let li = oda ? 1 : 0; li < 3; li++) {
         const off = (this.drift * this.speed[li]) % W;
         this.drawLayer(g, this.layers[li], off, li, t, lens);
       }

@@ -1,4 +1,4 @@
-// Uzay Modu · beyin: jestleri ve sesli komutları gezegenlere, çarpışmaya, Güneş sistemine ve kara deliğe çevirir.
+// Uzay Modu · gösteri sahnesi (laboratuvarın yanında, "Jarvis, gösteri modu" ya da G): jestleri ve sesli komutları gezegenlere, çarpışmaya, Güneş sistemine ve kara deliğe çevirir.
 // Büyü modunun efektleri (ateş, mühür, şimşek, iz) burada hiç çalışmaz; controller.ts moda göre yönlendirir.
 //
 // Jestler: 🤏 gezegen oluştur/tut · tutarken diğer elin parmak sayısı 1-5: Dünya, Mars, Jüpiter, Satürn, Güneş ·
@@ -14,11 +14,14 @@ import type { SpaceCmd } from './commands';
 import { BILGI, GEZEGEN_SIRASI, GOVDE, ONAY, type Govde } from './facts';
 import { Body, BodyRenderer, projectPoints } from './planets';
 import { SolarSystem } from './solar';
+import type { SpaceScene } from './scene';
 import type { Lens, Starfield } from './starfield';
 
 export interface SpaceHooks {
-  /** Jarvis bu cümleyi seçili sesle söylesin (hazır cümleler önceden yüklenir) */
-  say(text: string): void;
+  /** Jarvis bu cümleyi seçili sesle söylesin (hazır cümleler önceden yüklenir). Söz, cümle bitince çözülür. */
+  say(text: string): Promise<void> | void;
+  /** Bu cümlelerin sesini önceden hazırla (tarama adımları ses beklemesin) */
+  preload?(lines: string[]): void;
   /** ✌️ basılı: mikrofonu aç */
   mic(): void;
 }
@@ -46,7 +49,7 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const dist = (a: P, b: P) => Math.hypot(a.x - b.x, a.y - b.y);
 const ease = (t: number) => 1 - Math.pow(1 - clamp(t, 0, 1), 3);
 
-export class SpaceBrain {
+export class SpaceBrain implements SpaceScene {
   bodies: Body[] = [];
   bh: BlackHole | null = null;
   solar: SolarSystem | null = null;

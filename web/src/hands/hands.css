@@ -228,7 +228,19 @@
 .sp-stars, .sp-canvas { position: absolute; inset: 0; pointer-events: none; display: none; }
 .el-root.uzay .sp-stars, .el-root.uzay .sp-canvas { display: block; }
 /* Tam uzay: yıldızlar videonun üstünde, kişinin olduğu yerde delik (segment.ts) */
-/* Katman: oda görünür, yıldızlar yalnızca karanlık bölgelerde hafifçe parlar */
-.el-root.uzay.katman .sp-stars { mix-blend-mode: screen; opacity: 0.85; }
+/* Oda (varsayılan): oda olduğu gibi görünür; yalnızca süzülen yıldızlar ("screen": aydınlık yerde kaybolur),
+   kenarlarda hafif sinematik karartma ve soğuk bir ton. Kişi ayırma çalışmaz. */
+.el-root.uzay.katman .sp-stars { mix-blend-mode: screen; opacity: 0.7; }
+.el-root.uzay.katman .el-video { filter: saturate(0.92) contrast(1.06) brightness(0.94); }
+/* Ekstra sahne: oda ve kişi geri çekilir (koyu, soluk, hafif bulanık), numaralar öne çıkar. Kafanın etrafında Ay
+   numarasında kişi sahnenin parçası olduğu için kararma yok */
+.el-root.uzay .el-video { transition: filter 0.7s ease; }
+.el-root.uzay.ekstra .el-video { filter: brightness(0.4) saturate(0.5) contrast(0.92) blur(1.5px); }
+.sp-grade { position: absolute; inset: 0; pointer-events: none; display: none; }
+.el-root.uzay.katman .sp-grade {
+  display: block;
+  background: radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 55%, rgba(2,8,20,0.42) 100%),
+              linear-gradient(180deg, rgba(20,60,110,0.08), rgba(0,0,0,0) 40%, rgba(20,40,90,0.1));
+}
 .el-root.uzay .el-shelf, .el-root.uzay .lb-stage, .el-root.uzay .el-face { display: none; }
 .el-root.uzay .el-legend b { color: #ffd38a; }

@@ -6,10 +6,10 @@ import { FIST, OPEN, POINT, VICTORY, synthHand, type DemoHand, type Pose } from 
 import type { SpaceCmd } from './commands';
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * Math.max(0, Math.min(1, t));
-const PINCH: Pose['curl'] = [0, 0.35, 0, 0, 0];
+export const PINCH: Pose['curl'] = [0, 0.35, 0, 0, 0];
 
 /** Pozun çimdik noktasının bileğe göre yeri: eli, çimdik noktası hedefe gelecek şekilde koymak için */
-function pinchOffset(size: number, roll: number, left: boolean): P {
+export function pinchOffset(size: number, roll: number, left: boolean): P {
   const p = synthHand({ x: 0, y: 0, size, curl: PINCH, pinch: 1, roll, left });
   return { x: (p[4].x + p[8].x) / 2, y: (p[4].y + p[8].y) / 2 };
 }

@@ -83,7 +83,8 @@ export class PersonCutout {
   /** Maske → alfa (yumuşak eşik) → küçük kutu bulanıklığı (kenar tüyü) */
   private paint() {
     const m = this.mask!, t = this.tmp!, W = this.mw, H = this.mh;
-    for (let i = 0; i < m.length; i++) { const v = m[i]; t[i] = v <= 0.3 ? 0 : v >= 0.7 ? 1 : (v - 0.3) / 0.4; }
+    // Dar eşik: kenarda odadan kalan hale (saç çevresi) azalsın
+    for (let i = 0; i < m.length; i++) { const v = m[i]; t[i] = v <= 0.45 ? 0 : v >= 0.75 ? 1 : (v - 0.45) / 0.3; }
     const d = this.maskImg!.data;
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {

@@ -72,7 +72,9 @@ export type ServerEvent =
   | { type: 'sleep' }
   | { type: 'dashboard'; data: Dashboard }
   | { type: 'cleared' }
-  | { type: 'kitaplik' };
+  | { type: 'kitaplik' }
+  /** Uzay Laboratuvarı komutu (Jarvis'in aracından; şekli web/src/hands/space/commands.ts SpaceCmd) */
+  | { type: 'lab_cmd'; cmd: unknown; origin: string };
 
 /** Ekran: mark1 sade, mark2 yoğun HUD (tüm cihazlarda ortak) */
 export type UiMode = 'mark1' | 'mark2';

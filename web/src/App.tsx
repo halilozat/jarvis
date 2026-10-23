@@ -20,8 +20,9 @@ import { CameraPanel } from './camera/CameraPanel';
 import { HomePanel, HomeToast, getHome, homeAct, type HomeState } from './components/HomePanel';
 import type { Kontrol } from './hands/controller';
 import type { GezegenTur } from './hands/fx';
-import { matchSpaceCommand, type SpaceCmd } from './hands/space/commands';
+import { matchSpaceChain, matchSpaceCommand, type SpaceCmd } from './hands/space/commands';
 import { tumCumleler } from './hands/space/facts';
+import { labContext } from './hands/space/labContext';
 import { emitCamera, getCameras, getRole, isCameraEvent, onCamera, setRole, toggleCameraPanel } from './lib/camera';
 import { type ElevenUsage, clearConversation, detectDevice, getDashboard, getHealth, getState, getVoices, metric, postAttention, postSleep, postWake, previewUrl, saveDevice, saveSettings, sendChat, setPhotoMode, stt, subscribe, token, clientId } from './lib/api';
 import { startClapListener, type ClapListener } from './lib/clap';
@@ -68,8 +69,9 @@ const EL_OPEN = /\b(el kontrol[a-zçğıöşü]*|büyü modu[a-zçğıöşü]*)\
 const EL_CLOSE = /\b(el kontrol[a-zçğıöşü]*|büyü modu[a-zçğıöşü]*)\b.*\b(kapat|durdur)/i;
 /** ?el=demo&kitaplik=1: kitaplık demosu (prosedürel raf) */
 const KITAPLIK_DEMO = new URLSearchParams(location.search).get('kitaplik') === '1';
-/** ?el=1&mod=uzay: El Kontrolü uzay modunda açılır */
-const EL_UZAY = new URLSearchParams(location.search).get('mod') === 'uzay';
+/** ?el=1&mod=lab (ya da mod=uzay): El Kontrolü Uzay Laboratuvarı'nda açılır · mod=gosteri: uzay gösterisi */
+const MOD_PARAM = new URLSearchParams(location.search).get('mod');
+const EL_UZAY = MOD_PARAM === 'uzay' || MOD_PARAM === 'lab' || MOD_PARAM === 'gosteri' || MOD_PARAM === 'ekstra';
 /** "Jarvis, kitaplığımı tara" / "kitaplığı tarar mısın" / "rafları tara" (El Kontrolü kamerasıyla) */
 const KITAPLIK_TARA = /(kitapl[ıi]k|kitapl[ıi][gğ][ıi](m[ıi])?|raflar[ıi](m[ıi])?)\s.*?\btar(a|ar|at)/i;
 /** Kitap açıkken: "Jarvis, bunu özetle", "kitabı özetle", "özetini oku" */
@@ -163,7 +165,7 @@ export default function App() {
   const openBook = useRef<Kitap | null>(null);
   const [planetCmd, setPlanetCmd] = useState<{ tur: GezegenTur; n: number } | null>(null);
   // Uzay modu: sesli komut (sunucuya gitmez), El Kontrolü'nün o anki modu
-  const [spaceCmd, setSpaceCmd] = useState<{ cmd: SpaceCmd; n: number } | null>(null);
+  const [spaceCmd, setSpaceCmd] = useState<{ cmd: SpaceCmd; n: number; zincir?: SpaceCmd[] } | null>(null);
   const [startUzay, setStartUzay] = useState(EL_UZAY);
   const elMod = useRef<'buyu' | 'uzay'>(EL_UZAY ? 'uzay' : 'buyu');
   const homeRef = useRef(home);
@@ -563,6 +565,8 @@ export default function App() {
           break;
         case 'dashboard': setDash(e.data); setDashTried(true); break;
         case 'cleared': setMessages([]); setReply(null); setSceneIdx(-1); break;
+        // Jarvis'in yasam_izi_tara aracı: taramayı ekranda başlat (adımları cevabın sahneleri ilerletir)
+        case 'lab_cmd': if (mine && handsRef.current) setSpaceCmd(c => ({ cmd: e.cmd as SpaceCmd, n: (c?.n ?? 0) + 1 })); break;
       }
     }, setConnected);
   }, [device, play, playOpening, runPlayer, mock]);
@@ -618,9 +622,16 @@ export default function App() {
       speakLine('Kitaplığınızı tarıyorum efendim.');
       return;
     }
+    // Zincir: "Dünya'yı Mars'ın yerine koy, sonra yaşam izi tara" (uzay modundayken; komutlar sırayla)
+    const zincir = !image && handsRef.current && elMod.current === 'uzay' ? matchSpaceChain(t) : null;
+    if (zincir) {
+      setInput(''); setInterim(''); setCore('idle');
+      runSpaceCmd(zincir[0], zincir);
+      return;
+    }
     // Uzay modu komutları: "uzay modunu aç" her yerden; diğerleri El Kontrolü uzay modundayken (modele gitmez, anında)
     const sc = !image ? matchSpaceCommand(t) : null;
-    if (sc && (sc.tip === 'mod' || (handsRef.current && elMod.current === 'uzay'))) {
+    if (sc && (sc.tip === 'mod' || sc.tip === 'lab' || sc.tip === 'gosteri' || sc.tip === 'ekstra' || (handsRef.current && elMod.current === 'uzay'))) {
       setInput(''); setInterim(''); setCore('idle');
       runSpaceCmd(sc);
       return;
@@ -669,7 +680,8 @@ export default function App() {
     setSceneIdx(-1);
     t0Ref.current = performance.now();
     try {
-      await sendChat(t, device, image);
+      // Uzay Laboratuvarı açıksa ekrandaki durum da gider ("neden dondu?" gibi sorular için)
+      await sendChat(t, device, image, handsRef.current && elMod.current === 'uzay' ? labContext() : null);
     } catch (e: any) {
       setCore('idle');
       setTelemetry(['hata: ' + e.message]);
@@ -693,14 +705,14 @@ export default function App() {
 
   // Asıl yol: mikrofon kaydı → RouteLLM ile yazıya çevirme. Konuşma bitince (sessizlik) kendiliğinden durur.
   /** Uzay komutunu çalıştır: El Kontrolü kapalıysa ve komut "uzay modunu aç" ise uzay modunda açılır */
-  const runSpaceCmd = (cmd: SpaceCmd) => {
+  const runSpaceCmd = (cmd: SpaceCmd, zincir?: SpaceCmd[]) => {
     voice.unlock();
     if (!handsRef.current) {
-      if (cmd.tip === 'mod' && !cmd.ac) return;
+      if ((cmd.tip === 'mod' || cmd.tip === 'lab') && !cmd.ac) return;
       setStartUzay(true);
       setHands(EL_PARAM === 'demo' ? 'demo' : 'kamera');
     }
-    setSpaceCmd(c => ({ cmd, n: (c?.n ?? 0) + 1 }));
+    setSpaceCmd(c => ({ cmd, n: (c?.n ?? 0) + 1, zincir }));
   };
 
   /**
@@ -709,13 +721,26 @@ export default function App() {
    */
   const startSpaceListen = () => {
     let handled = false;
+    let wait: ReturnType<typeof setTimeout> | null = null;
+    const fire = (c: SpaceCmd, zincir?: SpaceCmd[]) => { handled = true; if (wait) clearTimeout(wait); rec?.stop(); setInterim(''); setCore('idle'); runSpaceCmd(c, zincir); };
     const rec = createRecognizer({
+      // Ara sonuçta komut yakalanınca 450 ms beklenir: cümle "…, sonra …" diye sürerse zincir olarak çalışır
       onInterim: t => {
         setInterim(t);
-        const c = handled ? null : matchSpaceCommand(t);
-        if (c) { handled = true; rec?.stop(); setInterim(''); setCore('idle'); runSpaceCmd(c); }
+        if (handled) return;
+        if (wait) { clearTimeout(wait); wait = null; }
+        const z = matchSpaceChain(t);
+        if (z) { wait = setTimeout(() => fire(z[0], z), 450); return; }
+        // Cümlede "sonra" geçiyorsa ama henüz tam bir zincir değilse: devamını (ya da son sonucu) bekle
+        if (/(^|\s)(sonra|ardından|ardindan)(\s|$)/i.test(t)) return;
+        const c = matchSpaceCommand(t);
+        if (c) wait = setTimeout(() => fire(c), 450);
       },
-      onFinal: t => { if (!handled) submit(t); },
+      onFinal: t => {
+        if (handled) return;
+        if (wait) { clearTimeout(wait); wait = null; }
+        submit(t);
+      },
       onEnd: () => setCore(c => (c === 'listening' ? 'idle' : c)),
       onError: m => { setTelemetry([`mikrofon: ${m}`]); setCore('idle'); },
     });
@@ -765,22 +790,29 @@ export default function App() {
   };
 
   /** Modele gitmeden tek bir cümleyi seçili sesle söyle (altyazıyla). delay: önce çalan efekt sesi bitsin. */
-  const speakLine = (text: string, delay = 0) => {
-    if (!voiceSel) return;
+  /** Hazır cümleyi seçili sesle söyle. Söz cümle bitince (ya da başka bir ses onu kesince) çözülür. */
+  const speakLine = (text: string, delay = 0): Promise<void> => {
+    if (!voiceSel) return Promise.resolve();
     const my = ++playToken.current;
     setSceneIdx(-1);
     setPreCaption(text);
     setCore('speaking');
     voice.rate = voiceSel.speed;
     voice.beginReply();
-    setTimeout(() => {
-      if (playToken.current !== my) return;
-      voice.speak(text, voiceSel).then(() => {
-        if (playToken.current !== my) return;
-        setPreCaption('');
-        setCore('idle');
-      });
-    }, delay);
+    return new Promise<void>(resolve => {
+      // Ses hiç başlamazsa da takılı kalmasın
+      const guard = setTimeout(resolve, delay + 4000 + text.length * 120);
+      setTimeout(() => {
+        if (playToken.current !== my) { clearTimeout(guard); resolve(); return; }
+        voice.speak(text, voiceSel).then(() => {
+          clearTimeout(guard);
+          resolve();
+          if (playToken.current !== my) return;
+          setPreCaption('');
+          setCore('idle');
+        }, () => { clearTimeout(guard); resolve(); });
+      }, delay);
+    });
   };
 
   /** Yüz kilidi: seçili sesle tek cümle. Sesi sunucuda önceden hazır (server/src/scripted.ts YUZ_KILIDI ile aynı metin).
@@ -1329,7 +1361,9 @@ export default function App() {
           <HandControl demo={hands === 'demo'} caption={caption} core={core} onAction={onHandAction} onClose={closeHands} userName={userName} onFaceLock={onFaceLock}
             kitaplik={KITAPLIK_DEMO} libraryKey={libKey} scanSignal={scanSig} onScanDone={onScanDone}
             onBookRead={readBook} onBookOpen={k => { openBook.current = k; }} planetCmd={planetCmd}
-            uzay={startUzay} spaceCmd={spaceCmd} listening={core === 'listening'}
+            uzay={startUzay} uzaySahne={MOD_PARAM === 'gosteri' ? 'gosteri' : MOD_PARAM === 'ekstra' ? 'ekstra' : 'lab'} spaceCmd={spaceCmd}
+            sahneIlerleme={{ i: sceneIdx, bitti: done }}
+            onPreload={lines => { if (voiceSel) for (const l of lines) voice.preload(l, voiceSel, undefined, undefined, true); }} listening={core === 'listening'}
             onSay={t => speakLine(t)} onMic={toggleMic} onModeChange={onElMod} />
         </Suspense>
       )}

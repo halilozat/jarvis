@@ -91,6 +91,31 @@ function procedural(g: Govde, lat: number, lon: number, i: number): number[] {
     case 'jupiter': return [215, 180, 140];
     case 'merkur': return [150, 150, 150];
     case 'ay': return [160, 160, 165];
+    case 'europa': {
+      // Krem rengi buz; kırmızımsı kahve çizgiler (lineae) ve lekeler
+      const n = noise3(x * 4, y * 4, z * 4);
+      const cizgi = Math.abs(Math.sin(lon * 7 + lat * 11 + n * 1.8)) < 0.07 || Math.abs(Math.sin(lon * 5 - lat * 9 + n)) < 0.05;
+      const c = mix([214, 204, 182], [238, 232, 216], clamp(0.5 + 0.35 * n, 0, 1));
+      return cizgi ? mix(c, [150, 92, 58], 0.75) : c;
+    }
+    case 'ganymede': {
+      // Koyu, eski bölgeler ve açık renkli oluklu araziler
+      const n = noise3(x * 2.5, y * 2.5, z * 2.5);
+      const oluk = Math.abs(Math.sin(lat * 24 + lon * 6 + n * 3)) < 0.25;
+      return n > 0.15 ? mix([105, 96, 86], [130, 120, 108], clamp(n, 0, 1)) : oluk ? [196, 192, 184] : [172, 166, 156];
+    }
+    case 'enceladus': {
+      // Neredeyse beyaz; güney kutbunda mavimsi "kaplan çizgileri"
+      const c = mix([232, 238, 244], [250, 252, 255], clamp(0.5 + 0.3 * noise3(x * 5, y * 5, z * 5), 0, 1));
+      if (lat < -1.0 && Math.abs(Math.sin(lon * 2 + lat * 14)) < 0.18) return mix(c, [120, 175, 215], 0.7);
+      return c;
+    }
+    case 'titan': {
+      // Turuncu pus; hafif enlem bantları, kuzeyde koyu başlık
+      const v = 0.5 + 0.15 * Math.sin(lat * 5) + 0.06 * noise3(x * 2, y * 2, z * 2);
+      const c = mix([200, 132, 58], [236, 176, 92], clamp(v, 0, 1));
+      return lat > 1.1 ? mix(c, [150, 98, 50], 0.5) : c;
+    }
   }
 }
 
@@ -120,6 +145,37 @@ export function colorsOf(g: Govde): Uint8ClampedArray {
     c[i * 3] = rgb[0]; c[i * 3 + 1] = rgb[1]; c[i * 3 + 2] = rgb[2];
   }
   colorCache.set(g, c);
+  return c;
+}
+
+// ------------------------------------------------------------------ Yüzey hâlleri (Uzay Laboratuvarı)
+
+export type YuzeyDurum = 'buz' | 'su' | 'kaynayan' | 'kizgin' | 'kaya' | 'gaz';
+const durumCache = new Map<string, Uint8ClampedArray>();
+
+/**
+ * Sıcaklığa göre yüzey renkleri. Dünya: buz (okyanus ve karalar beyazlaşır), su (gerçek doku), kaynayan
+ * (okyanus yerine beyaz-gri buhar, karalar kurur), kızgın kaya (koyu kaya, lav damarları ayrıca ısıyla parlar).
+ * Okyanusu olmayan kayalık gövdelerde yalnızca buzlanma ve kızgın kaya. Gaz devleri değişmez.
+ */
+export function durumRenk(g: Govde, d: YuzeyDurum): Uint8ClampedArray {
+  const base = colorsOf(g);
+  if (d === 'su' || d === 'kaya' || d === 'gaz') return base;
+  const key = `${g}:${d}:${texData.has(g) ? 1 : 0}`;
+  let c = durumCache.get(key);
+  if (c) return c;
+  c = new Uint8ClampedArray(base.length);
+  for (let i = 0; i < N_POINTS; i++) {
+    const r = base[i * 3], gg = base[i * 3 + 1], b = base[i * 3 + 2];
+    const okyanus = g === 'dunya' && b > r * 1.15 && b > gg * 0.95;
+    const n = noise3(PTS[i * 3] * 4, PTS[i * 3 + 1] * 4, PTS[i * 3 + 2] * 4) * 0.5 + 0.5;
+    let o: number[];
+    if (d === 'buz') o = okyanus ? mix([214, 232, 246], [244, 250, 255], n) : mix([r, gg, b], [235, 242, 250], 0.55 + 0.3 * n);
+    else if (d === 'kaynayan') o = okyanus ? mix([170, 178, 186], [236, 238, 240], n) : mix([r, gg, b], [150, 110, 80], 0.45);
+    else o = mix([58, 34, 26], [118, 52, 30], n);
+    c[i * 3] = o[0]; c[i * 3 + 1] = o[1]; c[i * 3 + 2] = o[2];
+  }
+  durumCache.set(key, c);
   return c;
 }
 
@@ -157,6 +213,14 @@ export class Body {
   dying = false;
   /** Theia: çarpınca hız eşiği aranmaz */
   theia = false;
+  /** Güneş rengi çarpanı [r, g, b] (kızıl dev, beyaz cüce); yoksa bugünkü Güneş */
+  tint: number[] | null = null;
+  /** Gece yarısının aydınlığı (0,13 gerçekçi karanlık; oda modunda açılır ki aydınlık odada kaybolmasın) */
+  ambient = 0.13;
+  /** Işığın geldiği yön (görüş çerçevesi, birim; laboratuvarda Güneş'e doğru). Yoksa sol üstten. */
+  light: number[] | null = null;
+  /** Renkleri dışarıdan yönetiliyor (laboratuvar: yüzey hâlleri) */
+  ownColors = false;
   /** Halkalı gövdelerde halka parçacıkları: [yarıçap, açı, renk/alfa sınıfı] */
   ring: Float32Array | null = null;
 
@@ -269,7 +333,7 @@ export class BodyRenderer {
     if (r < 1.5) return;
     const sun = b.govde === 'gunes';
     // Doku gövde oluştuktan sonra yüklendiyse renkleri yenile
-    if (!b.morphFrom) { const cur = colorsOf(b.govde); if (cur !== b.colors) b.colors = cur; }
+    if (!b.morphFrom && !b.ownColors) { const cur = colorsOf(b.govde); if (cur !== b.colors) b.colors = cur; }
     const formE = 1 - Math.pow(1 - clamp(b.form, 0, 1), 3);
     const mt = b.morphFrom ? (now - b.morphAt) / 900 : 1;
     if (mt >= 1) b.morphFrom = null;
@@ -282,7 +346,8 @@ export class BodyRenderer {
     g.globalAlpha = alpha;
     if (sun) {
       const gr = g.createRadialGradient(b.x, b.y, r * 0.8, b.x, b.y, r * 2.6);
-      gr.addColorStop(0, 'rgba(255,190,80,0.75)'); gr.addColorStop(0.35, 'rgba(255,140,40,0.25)'); gr.addColorStop(1, 'rgba(255,120,30,0)');
+      const tt = b.tint ?? [1, 1, 1], cc = (r0: number, g0: number, b0: number) => `${Math.min(255, Math.round(r0 * tt[0]))},${Math.min(255, Math.round(g0 * tt[1]))},${Math.min(255, Math.round(b0 * tt[2]))}`;
+      gr.addColorStop(0, `rgba(${cc(255, 190, 80)},0.75)`); gr.addColorStop(0.35, `rgba(${cc(255, 140, 40)},0.25)`); gr.addColorStop(1, `rgba(${cc(255, 120, 30)},0)`);
       g.fillStyle = gr; g.fillRect(b.x - r * 2.6, b.y - r * 2.6, r * 5.2, r * 5.2);
     } else if (b.heat > 0.05) {
       const gr = g.createRadialGradient(b.x, b.y, r * 0.9, b.x, b.y, r * 1.8);
@@ -306,11 +371,13 @@ export class BodyRenderer {
     zb.fill(-9);
     const half = S / 2;
     const R = r * dpr;
+    // Küçük gövdelerde daha az nokta yeter (ama aralık açılmasın: nokta büyüklüğü aralığa göre)
+    const step = R < 12 ? 4 : R < 90 ? 2 : 1;
     // Nokta büyüklüğü: komşular neredeyse değsin (noktalı görünüm kalsın)
-    const rd = Math.max(0.9, R * 0.03);
+    const aralik = R * Math.sqrt((2 * Math.PI * step) / N_POINTS);
+    const rd = Math.max(0.9, R * 0.03, aralik * 0.62);
     const rdc = Math.ceil(rd), rd2 = rd * rd;
-    // Küçük gövdelerde daha az nokta yeter
-    const step = R < 25 ? 6 : R < 50 ? 3 : R < 90 ? 2 : 1;
+    const Lv = b.light ?? L;
     const lavaK = b.heat;
     for (let i = 0; i < N_POINTS; i += step) {
       rot(PTS[i * 3], PTS[i * 3 + 1], PTS[i * 3 + 2], v);
@@ -328,10 +395,11 @@ export class BodyRenderer {
         const n = noise3(PTS[i * 3] * 2.2, PTS[i * 3 + 1] * 2.2 + t * 0.35, PTS[i * 3 + 2] * 2.2) * 0.5 + 0.5 + 0.15 * Math.sin(t * 2.3 + i);
         const c = n > 0.75 ? [255, 246, 214] : n > 0.5 ? [255, 214, 110] : n > 0.28 ? [255, 160, 50] : [235, 96, 24];
         cr = c[0]; cg = c[1]; cb = c[2];
+        if (b.tint) { cr = Math.min(255, cr * b.tint[0]); cg = Math.min(255, cg * b.tint[1]); cb = Math.min(255, cb * b.tint[2]); }
         shade = 0.55 + 0.45 * Math.max(0, z);
       } else {
-        const lam = Math.max(0, v[0] * L[0] + v[1] * L[1] + v[2] * L[2]);
-        shade = 0.13 + 0.87 * Math.pow(lam, 0.85);
+        const lam = Math.max(0, v[0] * Lv[0] + v[1] * Lv[1] + v[2] * Lv[2]);
+        shade = b.ambient + (1 - b.ambient) * Math.pow(lam, 0.85) * (b.ambient > 0.2 ? 1.12 : 1);
         if (lavaK > 0.01) {
           const n = noise3(PTS[i * 3] * 3 + t * 0.6, PTS[i * 3 + 1] * 3, PTS[i * 3 + 2] * 3 - t * 0.4) * 0.5 + 0.5;
           const lv = lavaRGB(n);

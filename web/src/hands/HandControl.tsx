@@ -1,6 +1,7 @@
 // El Kontrolü: kamera görüntüsü üstünde el takibi, büyü efektleri ve jestle Jarvis kontrolü.
 // Tuşlar: Esc kapat · L arayüzü gizle/göster (temiz çekim) · D iskelet · M ses · C kamera değiştir · F yüz kilidi · K kitaplık ayarı
-// U uzay modu · B arka plan (tam uzay / oda)
+// U uzay modu · B arka plan (tam uzay / oda) · G laboratuvar ↔ gösteri · T temiz çekim (yalnızca sonuçlar)
+// Laboratuvarda: Z yakınlaş/uzaklaş · Y yaşanabilir bölge · Boşluk zamanı durdur
 import type { HandLandmarker } from '@mediapipe/tasks-vision';
 import { useEffect, useRef, useState } from 'react';
 import { Controller, KONTROLLER, type Kontrol, type Status } from './controller';
@@ -9,7 +10,7 @@ import { GESTURE_LABEL } from './gestures';
 import { Sfx } from './sfx';
 import { demoBookHands, demoHands } from './synthetic';
 import { detect, listCameras, loadLandmarker, openCamera, type CameraInfo, type RawHand } from './tracker';
-import { FaceHud, demoFace, detectFaces, loadFaceDetector } from './face';
+import { FaceHud, demoFace, detectFaces, loadFaceDetector, type FaceBox } from './face';
 import type { FaceDetector } from '@mediapipe/tasks-vision';
 import { Library, loadCover, thumbOf } from './library';
 import LibraryEditor from './LibraryEditor';
@@ -20,6 +21,10 @@ import { fillBook, getLibrary, saveLibrary, scanLibrary, shelfRegion, tileFrame,
 import { SpaceBrain } from './space/brain';
 import type { SpaceCmd } from './space/commands';
 import { demoSpaceHands } from './space/demo';
+import { ExtraScene, NUMARALAR, type NumaraAd } from './space/extra';
+import { LabBrain } from './space/lab';
+import { LAB_ONAY } from './space/labText';
+import { demoLabHands, demoLabJest, demoLabTara } from './space/labDemo';
 import { ONAY } from './space/facts';
 import { loadTextures } from './space/planets';
 import { PersonCutout, loadSegmenter } from './space/segment';
@@ -53,16 +58,40 @@ export interface HandControlProps {
   planetCmd?: { tur: GezegenTur; n: number } | null;
   /** Uzay modunda başla (?mod=uzay ya da "Jarvis, uzay modunu aç") */
   uzay?: boolean;
-  /** Uzay sesli komutu (sunucuya gitmez): n her istekte artar */
-  spaceCmd?: { cmd: SpaceCmd; n: number } | null;
+  /** Uzay sesli komutu (sunucuya gitmez): n her istekte artar. zincir: "…, sonra …" komutları sırayla */
+  spaceCmd?: { cmd: SpaceCmd; n: number; zincir?: SpaceCmd[] } | null;
+  /** Jarvis'in sohbet aracıyla başlayan yaşam izi taramasında cevabın sahne sırası */
+  sahneIlerleme?: { i: number; bitti: boolean };
+  /** Bu cümlelerin sesini önceden hazırla */
+  onPreload?(lines: string[]): void;
   /** Mikrofon dinliyor (✌️ elinin çevresinde dalga) */
   listening?: boolean;
-  /** Jarvis bu hazır cümleyi seçili sesle söylesin */
-  onSay?(text: string): void;
+  /** Jarvis bu cümleyi seçili sesle söylesin; söz cümle bitince çözülür */
+  onSay?(text: string): Promise<void> | void;
   /** ✌️ basılı (uzay modu): mikrofonu aç */
   onMic?(): void;
   onModeChange?(m: 'buyu' | 'uzay'): void;
+  /** Uzay modunun sahnesi: laboratuvar (varsayılan) ya da gösteri (?mod=gosteri) */
+  uzaySahne?: 'lab' | 'gosteri' | 'ekstra';
 }
+
+/** Yaşam izi taraması demosu: ?el=demo&mod=lab&tara=europa | dunya-mars-yorungesi */
+const DEMO_TARA = new URLSearchParams(location.search).get('tara');
+/** Demoda oda görünümü (kitaplık demosunun raf görüntüsü arka plan olur): ?el=demo&kitaplik=1&mod=lab&oda=1 */
+const DEMO_ODA = new URLSearchParams(location.search).get('oda') === '1';
+
+/** Uzay Laboratuvarı jestleri */
+const LEGEND_LAB: [string, string][] = [
+  ['🤏 dokun', 'gezegene yakınlaş'], ['🤏 sürükle', 'taşı'], ['⇄', 'başka gezegenin üstüne bırak: yer değiştir'], ['💥', 'hızla vur: çarpıştır'],
+  ['↗', 'boşluğa hızla bırak: fırlat'], ['🤏🤏 boşlukta', 'büyüt / küçült'], ['✊ 1 sn', 'zamanı durdur'], ['✌️', 'mikrofon'],
+];
+
+/** Laboratuvar sahnesinde gösteriye geçmeyi gerektiren komutlar ve tersi */
+const GOSTERI_KOMUT = new Set<SpaceCmd['tip']>(['karadelik', 'theia', 'kayan', 'olcek']);
+/** Ekstra sahnenin numaraları: ?el=demo&mod=ekstra&numara=ay|asteroit|kizildev|karadelik|aykaradelik */
+const DEMO_NUMARA = new URLSearchParams(location.search).get('numara') as NumaraAd | null;
+const LEGEND_EKSTRA: [string, string][] = [['1', '🌙 kafanın etrafında Ay'], ['2', '☄️ asteroit'], ['3', "☀️ Güneş'in son günleri"], ['4', '🕳 gezgin kara delik'], ['5', '⚫ Ay yerine kara delik'], ['✊ 1 sn', 'durdur'], ['✌️', 'mikrofon']];
+const LAB_KOMUT = new Set<SpaceCmd['tip']>(['sifirla', 'yaklastir', 'tasi', 'mesaj', 'karsilastir', 'kesit', 'zaman', 'tarih', 'yasanabilir', 'gorunum', 'kilo']);
 
 /** Uzay modu jestleri */
 const LEGEND_UZAY: [string, string][] = [
@@ -87,9 +116,23 @@ export default function HandControl(p: HandControlProps) {
   const starsRef = useRef<HTMLCanvasElement>(null);
   const spaceRef = useRef<HTMLCanvasElement>(null);
   const brainRef = useRef<SpaceBrain | null>(null);
+  const labRef = useRef<LabBrain | null>(null);
+  /** Zincirleme komut çalıştırıcı (demo döngüsü de kullanır) */
+  const chainRef = useRef<(cmds: SpaceCmd[]) => void>(() => {});
+  /** Uzay sahnesi: laboratuvar ya da gösteri (G) */
+  const [sahne, setSahne] = useState<'lab' | 'gosteri' | 'ekstra'>(p.uzaySahne ?? 'lab');
+  const extraRef = useRef<ExtraScene | null>(null);
+  /** Ekstra sahnede seçili numara (düğmeler için) */
+  const [numara, setNumara] = useState<NumaraAd>(DEMO_NUMARA ?? 'ay');
+  const sahneRef = useRef(sahne);
+  /** Çekim: tam arayüz · temiz (T: yalnızca sonuçlar) · yok (L) */
+  const [cekim, setCekim] = useState<'tam' | 'temiz' | 'yok'>('tam');
+  const cekimRef = useRef(cekim);
+  useEffect(() => { sahneRef.current = sahne; cekimRef.current = cekim; }, [sahne, cekim]);
   /** Mod: büyü ya da uzay (U). Arka plan: tam uzay (sizi odadan ayırır) ya da katman (oda görünür) (B). */
   const [mod, setMod] = useState<'buyu' | 'uzay'>(p.uzay ? 'uzay' : 'buyu');
-  const [arka, setArka] = useState<'tam' | 'katman'>('tam');
+  /** Varsayılan oda: kullanıcının arka planı kapanmaz (tam uzay B ile) */
+  const [arka, setArka] = useState<'tam' | 'katman'>('katman');
   const modRef = useRef(mod);
   const arkaRef = useRef(arka);
   useEffect(() => { modRef.current = mod; arkaRef.current = arka; }, [mod, arka]);
@@ -113,7 +156,7 @@ export default function HandControl(p: HandControlProps) {
   useEffect(() => { faceOn.current = face; ayarRef.current = ayar; }, [face, ayar]);
   const [status, setStatus] = useState<string>('kamera açılıyor…');
   const [err, setErr] = useState<string | null>(null);
-  const [hud, setHud] = useState(true);
+  const hud = cekim === 'tam';
   const [stats, setStats] = useState<{ fps: number; st: Status; delegate: string; step?: string }>({ fps: 0, st: { hands: [], mode: '—' }, delegate: '' });
   const muted = !ayar.ses;
   const [cams, setCams] = useState<CameraInfo[]>([]);
@@ -171,13 +214,42 @@ export default function HandControl(p: HandControlProps) {
       mic: () => propsRef.current.onMic?.(),
     });
     brainRef.current = brain;
-    ctl.space = brain;
+    const lab = new LabBrain(spaceRef.current!, fx, sfx, {
+      say: t => {
+        // Demoda ses yok: cümle altyazı olarak görünür, okuma süresi kadar beklenir
+        if (p.demo) {
+          const msg = `demo · Jarvis: ${t}`, ms = Math.max(1300, t.length * 52);
+          setToast(msg);
+          setTimeout(() => setToast(c => (c === msg ? null : c)), ms + 600);
+          return new Promise<void>(r => setTimeout(r, ms));
+        }
+        return propsRef.current.onSay?.(t);
+      },
+      preload: l => { if (!p.demo) propsRef.current.onPreload?.(l); },
+      mic: () => propsRef.current.onMic?.(),
+    });
+    labRef.current = lab;
+    const extra = new ExtraScene(spaceRef.current!, fx, sfx, {
+      say: t => {
+        if (p.demo) {
+          const msg = `demo · Jarvis: ${t}`, ms = Math.max(1300, t.length * 52);
+          setToast(msg); setTimeout(() => setToast(c => (c === msg ? null : c)), ms + 600);
+          return new Promise<void>(r => setTimeout(r, ms));
+        }
+        return propsRef.current.onSay?.(t);
+      },
+      mic: () => propsRef.current.onMic?.(),
+    });
+    extra.demo = !!p.demo;
+    if (DEMO_NUMARA) extra.numara = DEMO_NUMARA;
+    extraRef.current = extra;
+    ctl.space = sahneRef.current === 'lab' ? lab : brain;
     loadTextures();
     let cutout: PersonCutout | null = null, segLoading = false, uzOn = false;
     const size = () => {
       const W = window.innerWidth, H = window.innerHeight;
       fx.resize(W, H); hudFace.resize(W, H); lib.resize(W, H);
-      stars.resize(W, H); brain.resize(W, H);
+      stars.resize(W, H); brain.resize(W, H); lab.resize(W, H); extra.resize(W, H);
       setDims({ W, H, vw: video.videoWidth || 1920, vh: video.videoHeight || 1080 });
     };
     size();
@@ -201,7 +273,7 @@ export default function HandControl(p: HandControlProps) {
       lib.setBooks(demoBooks, { genislik: demoShelf.frame.width, yukseklik: demoShelf.frame.height, kucukResim: thumbOf(demoShelf.frame) });
       demoJiggle.current = demoCam.jiggle;
     }
-    let lastMoved = false, libOn = true;
+    let lastMoved = false, libOn = true, sahneOn: 'lab' | 'gosteri' | 'ekstra' | null = null, sonYuz: FaceBox | null = null;
     const demoFired = new Set<string>();
 
     const loop = () => {
@@ -212,17 +284,50 @@ export default function HandControl(p: HandControlProps) {
       last = now;
       // Mod değişimi: önceki modun izleri temizlenir; uzaya geçişte oda kararır, yıldızlar ışık hızıyla belirir
       const uz = modRef.current === 'uzay';
+      // Uzay sahnesi değişti (laboratuvar ↔ gösteri): eski sahne temizlenir, laboratuvar bugünkü gökyüzüyle açılır
+      const sh = uz ? sahneRef.current : null;
+      const sahneOf = (x: 'lab' | 'gosteri' | 'ekstra') => (x === 'lab' ? lab : x === 'gosteri' ? brain : extra);
+      if (sh !== sahneOn) {
+        if (sahneOn) sahneOf(sahneOn).reset();
+        sahneOn = sh;
+        ctl.space = sahneOf(sh ?? 'lab');
+        if (sh === 'lab') lab.open(now);
+        if (sh === 'ekstra') extra.open(now);
+      }
       if (uz !== uzOn) {
         uzOn = uz;
         ctl.setMode(uz ? 'uzay' : 'buyu');
-        if (uz) { stars.warp(now); sfx.warp(); lib.reset(); libOn = false; hudFace.clear(); }
+        if (uz) { stars.warp(now); sfx.warp(); lib.reset(); libOn = false; hudFace.clear(); if (sh === 'lab') lab.open(now); if (sh === 'ekstra') extra.open(now); }
         else stars.clear();
       }
-      if (uz && p.demo) {
-        const d = demoSpaceHands((now - demoStart) / 1000, fx.W, fx.H);
+      const scene = sahneOf(sh ?? 'lab');
+      lab.cekim = cekimRef.current;
+      if (uz && p.demo && sh === 'lab' && DEMO_TARA === 'jest') {
+        // Jest demosu: yakınlaştırma, dokununca yakınlaşma, kesit, yer değiştirme, çarpışma
+        const d = demoLabJest((now - demoStart) / 1000, fx.W, fx.H, lab);
         hands = d.hands; step = d.step;
-        const key = `${d.loop}:${d.cmd?.key}`;
-        if (d.cmd && !demoFired.has(key)) { demoFired.add(key); brain.command(d.cmd.cmd, now); }
+        const key = `jest:${d.loop}:${d.cmd?.key}`;
+        if (d.cmd && !demoFired.has(key)) { demoFired.add(key); lab.command(d.cmd.cmd, now); }
+      } else if (uz && p.demo && sh === 'lab' && DEMO_TARA) {
+        // Yaşam izi taraması demosu: el yok, zamanında sesli komut zinciri
+        const d = demoLabTara((now - demoStart) / 1000, DEMO_TARA);
+        hands = []; step = d.step;
+        const key = `tara:${d.loop}:${d.zincir?.key}`;
+        if (d.zincir && !demoFired.has(key)) { demoFired.add(key); chainRef.current(d.zincir.cmds); }
+      } else if (uz && p.demo && sh === 'ekstra') {
+        // Ekstra demosu: el yok; asteroit numarasında 14 sn'de bir kendiliğinden fırlar. Ay yerine kara delikte
+        // 13 sn'de bir "kara deliği büyüt": Dünya, Jüpiter, Güneş, Sgr A* kütleleri, sonra baştan
+        hands = []; step = '';
+        const t = (now - demoStart) / 1000, k = Math.floor((t - 3) / 14);
+        if (extra.numara === 'asteroit' && t > 3 && (t - 3) % 14 < 0.3 && !demoFired.has(`ast:${k}`)) { demoFired.add(`ast:${k}`); extra.command({ tip: 'sifirla' }, now); setTimeout(() => extra.command({ tip: 'ekstra', numara: 'asteroit' }, performance.now()), 400); }
+        const j = Math.floor(t / 13), jk = `akd:${j}`;
+        if (extra.numara === 'aykaradelik' && j >= 1 && !demoFired.has(jk)) { demoFired.add(jk); extra.command(j % 6 === 0 ? { tip: 'sifirla' } : { tip: 'ekstra', numara: 'aykaradelik', kutle: 'buyut' }, now); }
+      } else if (uz && p.demo) {
+        const t = (now - demoStart) / 1000;
+        const d = sh === 'lab' ? demoLabHands(t, fx.W, fx.H, lab) : demoSpaceHands(t, fx.W, fx.H);
+        hands = d.hands; step = d.step;
+        const key = `${sh}:${d.loop}:${d.cmd?.key}`;
+        if (d.cmd && !demoFired.has(key)) { demoFired.add(key); scene.command(d.cmd.cmd, now); }
       } else if (demoShelf) {
         const t = (now - demoStart) / 1000;
         const d = demoBookHands(t, fx.W, fx.H, lib.rectOf(demoTarget));
@@ -242,7 +347,9 @@ export default function HandControl(p: HandControlProps) {
       // Uzay: yıldızlar (kara delik varsa bükülerek) ve tam uzayda sizi odadan ayıran kesit
       if (uz) {
         const tam = !p.demo && arkaRef.current === 'tam';
-        if (tam) {
+        // Kafanın etrafında Ay: kişi maskesi (kafa Ay'ı kapatsın) ve yüz kutusu gerekir
+        const ayAR = sh === 'ekstra' && extra.numara === 'ay';
+        if (tam || (ayAR && !p.demo)) {
           if (!cutout && !segLoading) {
             segLoading = true;
             loadSegmenter()
@@ -251,8 +358,20 @@ export default function HandControl(p: HandControlProps) {
           }
           cutout?.update(video, now);
         }
-        stars.render(now, dt, brain.lens(now), tam && cutout ? (g, W, H) => cutout!.punch(g, W, H) : undefined);
-        brain.listening = !!propsRef.current.listening;
+        // Oda modu (varsayılan): gökyüzü odayı kapatmaz. Demoda kamera yok, tam gökyüzü çizilir.
+        const oda = p.demo ? DEMO_ODA : arkaRef.current === 'katman';
+        stars.render(now, dt, scene.lens(now), tam && cutout ? (g, W, H) => cutout!.punch(g, W, H) : undefined, oda);
+        lab.scan.oda = oda;
+        extra.oda = oda;
+        if (ayAR) {
+          if (p.demo) sonYuz = demoFace((now - demoStart) / 1000, fx.W, fx.H)[0] ?? null;
+          else if (fd && video.readyState >= 2 && ++faceTick % 2 === 0) {
+            try { sonYuz = detectFaces(fd, video, now, fx.W, fx.H)[0] ?? null; } catch (e) { console.warn('[uzay] yüz', e); }
+          }
+          extra.head = sonYuz;
+          extra.cutout = cutout;
+        }
+        scene.listening = !!propsRef.current.listening;
       }
       // Yüz: demoda sahte yüz; kamerada her 3. yeni karede algıla (el takibine yer kalsın), arada yumuşatılmış kutu
       if (faceOn.current && !uz) {
@@ -320,6 +439,10 @@ export default function HandControl(p: HandControlProps) {
       cutout?.close();
       brain.reset();
       brainRef.current = null;
+      extra.reset();
+      extraRef.current = null;
+      lab.reset();
+      labRef.current = null;
     };
   }, [p.demo, camId, sfx, demoShelf]);
 
@@ -389,8 +512,33 @@ export default function HandControl(p: HandControlProps) {
   const applySpaceCmd = (cmd: SpaceCmd) => {
     if (cmd.tip === 'mod') {
       setMod(cmd.ac ? 'uzay' : 'buyu');
-      say(cmd.ac ? ONAY.modAc : ONAY.modKapat);
+      say(cmd.ac ? (sahneRef.current === 'lab' ? LAB_ONAY.ac : ONAY.modAc) : ONAY.modKapat);
       return;
+    }
+    if (cmd.tip === 'lab') {
+      if (cmd.ac) {
+        // Zaten laboratuvardaysa açılış animasyonu yeniden oynar
+        if (modRef.current === 'uzay' && sahneRef.current === 'lab') { labRef.current?.open(performance.now()); sfx.warp(); }
+        setMod('uzay'); setSahne('lab'); say(LAB_ONAY.ac);
+      }
+      else { setMod('buyu'); say(LAB_ONAY.kapat); }
+      return;
+    }
+    if (cmd.tip === 'gosteri') { setMod('uzay'); setSahne('gosteri'); say(LAB_ONAY.gosteri); return; }
+    if (cmd.tip === 'ekstra' && cmd.numara) setNumara(cmd.numara);
+    if (cmd.tip === 'ekstra' && !cmd.numara) { setMod('uzay'); setSahne('ekstra'); say('Ekstralar, efendim. Bir numara seçin.'); return; }
+    // Komut öbür sahnenin: önce o sahneye geç, sonra çalıştır. Ekstradayken sıfırla ve zaman komutları ekstraya gider.
+    const want = cmd.tip === 'ekstra' ? 'ekstra'
+      : sahneRef.current === 'ekstra' && (cmd.tip === 'sifirla' || cmd.tip === 'temizle' || cmd.tip === 'zaman') ? 'ekstra'
+      : GOSTERI_KOMUT.has(cmd.tip) ? 'gosteri' : LAB_KOMUT.has(cmd.tip) ? 'lab' : sahneRef.current;
+    const sceneOf = () => (want === 'lab' ? labRef.current : want === 'ekstra' ? extraRef.current : brainRef.current);
+    // Ekstra sahne kapalıyken numara istendi: sahne açılınca o numara başlasın
+    if (want === 'ekstra' && sahneRef.current !== 'ekstra' && cmd.tip === 'ekstra' && cmd.numara && extraRef.current) extraRef.current.numara = cmd.numara;
+    const later = () => new Promise<void>(res => setTimeout(() => Promise.resolve(sceneOf()?.command(cmd, performance.now())).then(() => res()), 900));
+    if (want !== sahneRef.current) {
+      setSahne(want);
+      if (modRef.current !== 'uzay') setMod('uzay');
+      return later();
     }
     if (cmd.tip === 'arkaplan') {
       setArka(cmd.tam ? 'tam' : 'katman');
@@ -400,17 +548,32 @@ export default function HandControl(p: HandControlProps) {
     // Uzay modu kapalıyken uzay komutu: önce moda geç, ışık hızı geçişinden sonra çalıştır
     if (modRef.current !== 'uzay') {
       setMod('uzay');
-      setTimeout(() => brainRef.current?.command(cmd, performance.now()), 900);
-      return;
+      return later();
     }
-    brainRef.current?.command(cmd, performance.now());
+    return sceneOf()?.command(cmd, performance.now());
   };
+  /** "…, sonra …": komutlar sırayla; her biri anlatımı ve animasyonu bitince */
+  const runChain = async (cmds: SpaceCmd[]) => {
+    for (const c of cmds) {
+      const r = applySpaceCmd(c);
+      await (r instanceof Promise ? r : new Promise(res => setTimeout(res, 700)));
+      await new Promise(res => setTimeout(res, 250));
+    }
+  };
+  useEffect(() => { chainRef.current = runChain; });
   useEffect(() => {
     const c = p.spaceCmd;
     if (!c || c.n === lastSpaceCmd.current) return;
     lastSpaceCmd.current = c.n;
-    applySpaceCmd(c.cmd);
+    // Komut effect'in dışında (mikro görevde) çalışır: içindeki durum değişiklikleri render'ı zincirlemesin
+    const z = c.zincir;
+    void Promise.resolve().then(() => (z?.length ? runChain(z) : applySpaceCmd(c.cmd)));
   }, [p.spaceCmd]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Jarvis'in sahneleri sohbet aracıyla başlayan taramayı ilerletir
+  useEffect(() => {
+    const s = p.sahneIlerleme;
+    if (s) labRef.current?.drive(s.i, s.bitti);
+  }, [p.sahneIlerleme?.i, p.sahneIlerleme?.bitti]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { propsRef.current.onModeChange?.(mod); }, [mod]);
 
   // Sunucuda kitaplık değişti (not eklendi, Ayarlar'dan düzenlendi): haritayı yenile
@@ -440,7 +603,13 @@ export default function HandControl(p: HandControlProps) {
       // Kitaplık ayar modunda ad yazarken tuşlar kısayol sayılmaz
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
       if (e.key === 'Escape') { e.stopPropagation(); if (editing) setEditing(false); else closeRef.current(); return; }
-      if (e.code === 'KeyL') setHud(h => !h);
+      if (e.code === 'KeyL') setCekim(c => (c === 'yok' ? 'tam' : 'yok'));
+      else if (e.code === 'KeyT') setCekim(c => (c === 'temiz' ? 'tam' : 'temiz'));
+      else if (e.code === 'KeyG' && modRef.current === 'uzay') setSahne(v => (v === 'lab' ? 'gosteri' : v === 'gosteri' ? 'ekstra' : 'lab'));
+      else if (/^Digit[1-5]$/.test(e.code) && modRef.current === 'uzay' && sahneRef.current === 'ekstra') { const n = NUMARALAR[Number(e.code.slice(5)) - 1].ad; setNumara(n); extraRef.current?.sec(n, performance.now()); }
+      else if (e.code === 'KeyZ' && modRef.current === 'uzay' && sahneRef.current === 'lab') labRef.current?.command({ tip: 'gorunum', ic: labRef.current.zoomX < 1.5 }, performance.now());
+      else if (e.code === 'KeyY' && modRef.current === 'uzay' && sahneRef.current === 'lab') labRef.current?.command({ tip: 'yasanabilir', goster: !labRef.current.hz }, performance.now());
+      else if (e.code === 'Space' && modRef.current === 'uzay' && sahneRef.current === 'lab') { e.preventDefault(); labRef.current?.command({ tip: 'zaman', islem: labRef.current.paused ? 'devam' : 'durdur' }, performance.now()); }
       else if (e.code === 'KeyD' && ctlRef.current) ctlRef.current.debug = !ctlRef.current.debug;
       else if (e.code === 'KeyM') setAyar({ ses: !ayarRef.current.ses });
       else if (e.code === 'KeyF') setAyar({ yuz: !ayarRef.current.yuz });
@@ -461,8 +630,10 @@ export default function HandControl(p: HandControlProps) {
 
   const st = stats.st;
   return (
-    <div className={'el-root' + (p.demo ? ' demo' : '') + (shelfDemo ? ' shelf' : '') + (mod === 'uzay' ? ` uzay ${arka}` : '')}>
+    <div className={'el-root' + (p.demo ? ' demo' : '') + (shelfDemo ? ' shelf' : '') + (mod === 'uzay' ? ` uzay ${p.demo && !DEMO_ODA ? 'tam' : arka}` : '') + (mod === 'uzay' && sahne === 'ekstra' && numara !== 'ay' ? ' ekstra' : '')}>
       <video ref={videoRef} className="el-video" playsInline muted />
+      {/* Oda modunda videonun hemen üstünde sinematik karartma (yıldızların ve HUD'un altında) */}
+      <div className="sp-grade" />
       <canvas ref={starsRef} className="sp-stars" />
       <canvas ref={shelfRef} className="el-shelf" />
       <canvas ref={spaceRef} className="sp-canvas" />
@@ -474,23 +645,29 @@ export default function HandControl(p: HandControlProps) {
         <>
           <i className="el-corner tl" /><i className="el-corner tr" /><i className="el-corner bl" /><i className="el-corner br" />
           <div className="el-top">
-            <span className="el-title">JARVIS · {mod === 'uzay' ? 'UZAY' : 'EL KONTROLÜ'}</span>
+            <span className="el-title">JARVIS · {mod === 'uzay' ? (sahne === 'lab' ? 'UZAY LABORATUVARI' : sahne === 'ekstra' ? 'UZAY · EKSTRA' : 'UZAY · GÖSTERİ') : 'EL KONTROLÜ'}</span>
             <span className="el-chip">MOD: {st.mode.toLocaleUpperCase('tr')}</span>
             <span className="el-meta">{stats.fps} FPS · {st.hands.length} el{stats.delegate ? ` · ${stats.delegate}` : ''}{p.demo ? ' · DEMO' : ''}</span>
             {st.hands.map(h => <span key={h.id} className="el-meta">{GESTURE_LABEL[h.gesture]}</span>)}
             <span className="el-sp" />
             <button className={'el-btn' + (mod === 'uzay' ? ' on' : '')} onClick={() => { setEditing(false); setMod(m => (m === 'uzay' ? 'buyu' : 'uzay')); }} title="Uzay modu (U)">{mod === 'uzay' ? '✨ büyü' : '🪐 uzay'}</button>
+            {mod === 'uzay' && (['lab', 'gosteri', 'ekstra'] as const).map(x => (
+              <button key={x} className={'el-btn' + (sahne === x ? ' on' : '')} onClick={() => setSahne(x)} title="Sahne (G)">{x === 'lab' ? '🔬 laboratuvar' : x === 'gosteri' ? '🎆 gösteri' : '✨ ekstra'}</button>
+            ))}
+            {mod === 'uzay' && sahne === 'ekstra' && NUMARALAR.map((n, i) => (
+              <button key={n.ad} className={'el-btn' + (numara === n.ad ? ' on' : '')} onClick={() => { setNumara(n.ad); extraRef.current?.sec(n.ad, performance.now()); }} title={`${i + 1}`}>{n.etiket}</button>
+            ))}
             {mod === 'uzay' && !p.demo && <button className="el-btn" onClick={() => setArka(a => (a === 'tam' ? 'katman' : 'tam'))} title="Arka plan (B)">{arka === 'tam' ? '🏠 oda' : '🌌 tam uzay'}</button>}
             {cams.length > 1 && <button className="el-btn" onClick={nextCam} title="Kamera değiştir (C)">⟳ kamera</button>}
             <button className="el-btn" onClick={() => setAyar({ ses: !ayar.ses })} title="Efekt sesi (M)">{muted ? '🔇' : '🔊'}</button>
             <button className={'el-btn' + (ayarOpen ? ' on' : '')} onClick={() => setAyarOpen(v => !v)} title="Efektleri aç/kapat (E)">⚙ efektler</button>
             <button className="el-btn" onClick={p.onClose} title="Kapat (Esc)">✕</button>
           </div>
-          <div className="el-legend">
-            {(mod === 'uzay' ? LEGEND_UZAY : st.mode.startsWith('kitap') ? LEGEND_KITAP : LEGEND).map(([g, t]) => <span key={g + t}><b>{g}</b> {t}</span>)}
-            <span className="el-keys">{mod === 'uzay' ? 'U büyü modu · B arka plan · L arayüz · D iskelet · M ses · Esc çık' : 'U uzay · L arayüz · E efektler · F yüz kilidi · K kitaplık · D iskelet · M ses · Esc çık'}</span>
-          </div>
-          {p.demo && stats.step && <div className="el-step">{stats.step}</div>}
+          {!st.mode.includes('taraması') && <div className="el-legend">
+            {(mod === 'uzay' ? (sahne === 'lab' ? LEGEND_LAB : sahne === 'ekstra' ? LEGEND_EKSTRA : LEGEND_UZAY) : st.mode.startsWith('kitap') ? LEGEND_KITAP : LEGEND).map(([g, t]) => <span key={g + t}><b>{g}</b> {t}</span>)}
+            <span className="el-keys">{mod === 'uzay' ? (sahne === 'ekstra' ? '1-5 numara · G sahne · T temiz çekim · L arayüz · B arka plan · U büyü · Esc çık' : sahne === 'lab' ? 'G gösteri · Z yakınlaş · Y yaşanabilir bölge · Boşluk durdur · T temiz çekim · L arayüz · B arka plan · U büyü · Esc çık' : 'G laboratuvar · U büyü modu · B arka plan · T temiz çekim · L arayüz · D iskelet · M ses · Esc çık') : 'U uzay · L arayüz · E efektler · F yüz kilidi · K kitaplık · D iskelet · M ses · Esc çık'}</span>
+          </div>}
+          {p.demo && stats.step && !st.mode.includes('taraması') && <div className="el-step">{stats.step}</div>}
         </>
       )}
 

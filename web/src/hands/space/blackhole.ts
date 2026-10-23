@@ -28,6 +28,8 @@ export class BlackHole {
   private stream: Stream[] = [];
   /** Yutulan malzeme diski parlatır */
   private feedGlow = 0;
+  /** Yığılma diskinin görünürlüğü (0: yutacak bir şey yok, yalnızca gölge ve foton halkası) */
+  diskAlpha = 1;
 
   constructor(x: number, y: number, rs: number, now: number, anchor: string | null) {
     this.x = x; this.y = y; this.rs = rs; this.born = now; this.anchor = anchor;
@@ -91,7 +93,7 @@ export class BlackHole {
     // Arka plan ışıması
     g.save();
     const halo = g.createRadialGradient(x, y, rs, x, y, rs * 6);
-    halo.addColorStop(0, `rgba(255,150,60,${0.22 * bright})`); halo.addColorStop(1, 'rgba(255,120,40,0)');
+    halo.addColorStop(0, `rgba(255,150,60,${0.22 * bright * this.diskAlpha})`); halo.addColorStop(1, 'rgba(255,120,40,0)');
     g.fillStyle = halo; g.fillRect(x - rs * 6, y - rs * 6, rs * 12, rs * 12);
     g.restore();
 
@@ -102,7 +104,7 @@ export class BlackHole {
     g.save();
     g.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 3; i++) {
-      g.strokeStyle = `rgba(255,${170 - i * 30},${80 - i * 20},${(0.32 - i * 0.08) * bright})`;
+      g.strokeStyle = `rgba(255,${170 - i * 30},${80 - i * 20},${(0.32 - i * 0.08) * bright * this.diskAlpha})`;
       g.lineWidth = rs * (0.22 - i * 0.05);
       g.beginPath();
       g.ellipse(x, y, rs * (1.55 + i * 0.25), rs * (1.35 + i * 0.22), 0, Math.PI, TAU);
@@ -146,6 +148,7 @@ export class BlackHole {
 
   /** Yığılma diski. Bize doğru gelen taraf daha parlak ve beyaz; uzaklaşan taraf sönük kızıl. */
   private drawDisk(g: CanvasRenderingContext2D, x: number, y: number, rs: number, front: boolean, bright: number) {
+    if (this.diskAlpha < 0.01) return;
     g.save();
     g.globalCompositeOperation = 'lighter';
     for (const d of this.disk) {
@@ -156,7 +159,7 @@ export class BlackHole {
       const dop = 0.35 + 0.65 * (0.5 + 0.5 * Math.cos(d.a));
       const heat = clamp(1.2 - (d.R - 1.7) / 3.2, 0, 1);
       const r = 255, gg = Math.round(120 + 120 * heat), b = Math.round(50 + 160 * heat * dop);
-      g.globalAlpha = clamp(dop * (0.45 + 0.55 * heat) * bright, 0, 1);
+      g.globalAlpha = clamp(dop * (0.45 + 0.55 * heat) * bright, 0, 1) * this.diskAlpha;
       g.fillStyle = `rgb(${r},${gg},${b})`;
       const s = d.s * (rs / 40);
       g.fillRect(px - s, py - s * 0.5, s * 2.4, s);

@@ -209,6 +209,8 @@ export interface RunOptions {
   progress: ToolProgress;
   /** Kamera/fotoğraf: data URL. Varsa görsel girdi destekli modele sorulur. */
   image?: string;
+  /** Uzay Laboratuvarı açıksa ekrandaki simülasyonun durumu (JSON) */
+  lab?: string;
   /** Her sahne hazır olur olmaz (sırayla) */
   onScene?: (index: number, sahne: Sahne) => void;
   /** Yapay zeka görseli sonradan hazır olunca */
@@ -315,6 +317,8 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
     return { ...r, router: 'demo' };
   }
 
+  // Uzay Laboratuvarı: ekrandaki durum kullanıcı mesajına not olarak eklenir (sistem prompt'u değişmez, önbellek tutar)
+  const LAB_NOTE = opts.lab ? `\n\n[Sistem notu: ${process.env.USER_NAME || 'Kullanıcı'} şu an El Kontrolü'nde Uzay Laboratuvarı'nı kullanıyor. Ekrandaki simülasyonun durumu (gerçek hesaplardan): ${opts.lab}\nSoru bu ekranla ilgiliyse cevabını bu verilere dayandır, sayıları buradan al, uydurma. Model basitleştirilmiş (sera etkisi sabit, mesafeler ölçekli, boyutlar büyütülmüş); gerekirse bunu kısaca belirt. Soru ekranla ilgili değilse bu notu yok say.]` : '';
   // Sistem prompt'u: değişmeyen kısım başta, tarih/saat/cihaz sonda (RouteLLM prompt önbelleği her turda tutsun).
   const userContent: string | ContentPart[] = opts.image
     ? [{ type: 'text', text: `${text || 'Bu ne?'}${fal ? `\n\n${FAL_NOTE}` : ''}` }, { type: 'image_url', image_url: { url: opts.image } }]
@@ -322,7 +326,7 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
       ? `${text}\n\n${FAL_NOTE}`
       : isBrief
       ? `${text}\n\n[Sistem notu: Bu, gündem brifingi komutu. Gündem özeti protokolünü uygula.]`
-      : text;
+      : text + LAB_NOTE;
   const messages: ChatMessage[] = [
     { role: 'system', content: buildSystemPrompt(contextVars(device, prevDevice)) },
     ...history.slice(-12).map(m => ({ role: m.role, content: m.text }) as ChatMessage),

@@ -2,7 +2,7 @@
 import { Fx, GEZEGENLER, Planet, type GezegenTur, type HoldState, type SigilState } from './fx';
 import { TrackedHand, type Gesture, type P } from './gestures';
 import type { Library } from './library';
-import type { SpaceBrain } from './space/brain';
+import type { SpaceScene } from './space/scene';
 import { VARSAYILAN, type ElAyar } from './settings';
 import type { Sfx } from './sfx';
 import type { RawHand } from './tracker';
@@ -47,9 +47,9 @@ export class Controller {
   private captured = false;
   /** Efekt ayarları (⚙): kapalı efekt tetiklenmez */
   ayar: ElAyar = { ...VARSAYILAN };
-  /** Mod: büyü (ateş, mühür, gezegen, şimşek, iz, kitaplık) ya da uzay (space/brain.ts). Biri diğerini tetiklemez. */
+  /** Mod: büyü (ateş, mühür, gezegen, şimşek, iz, kitaplık) ya da uzay (laboratuvar ya da gösteri sahnesi). Biri diğerini tetiklemez. */
   mode: 'buyu' | 'uzay' = 'buyu';
-  space: SpaceBrain | null = null;
+  space: SpaceScene | null = null;
 
   /** Mod değişti: önceki modun efektleri temizlenir */
   setMode(m: 'buyu' | 'uzay') {

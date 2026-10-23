@@ -98,6 +98,30 @@ export class Sfx {
   /** Tarama başladı */
   scanStart() { this.tone(400, 1.2, 0.05, 'sawtooth', 1600); }
 
+  // Uzay Laboratuvarı · yaşam izi taraması
+  /** Tarama ışını uğultusu (süre boyunca, hafif titreşimli) */
+  scanBeam(dur: number) {
+    this.tone(96, dur, 0.06, 'sawtooth', 120);
+    this.tone(192, dur, 0.025, 'sine', 240);
+    this.burst(dur, 1200, 2600, 0.04, 'bandpass', 6);
+  }
+  /** Kontrol listesi: ✓ yüksek, ✗ alçak, ? orta kısa tık */
+  check(kind: 'evet' | 'hayir' | 'belirsiz') {
+    const f = kind === 'evet' ? 1320 : kind === 'hayir' ? 440 : 880;
+    this.tone(f, 0.09, 0.07, 'triangle');
+    this.burst(0.04, 5000, 3000, 0.04, 'highpass', 1);
+  }
+  /** Mekanik panel açılışı: servo vızıltısı ve kısa klik */
+  servo() { this.burst(0.22, 600, 2400, 0.06, 'bandpass', 3); this.tone(180, 0.18, 0.03, 'square', 260); this.tone(1800, 0.03, 0.04, 'square', undefined, 0.2); }
+  /** Hedefe kilitlenme: iki hızlı bip */
+  lock() { this.tone(1400, 0.06, 0.06, 'square'); this.tone(2100, 0.08, 0.05, 'square', undefined, 0.08); }
+  /** Yazı çözülürken çok kısa tık */
+  typeTick() { this.tone(3200 + Math.random() * 800, 0.012, 0.015, 'square'); }
+  /** Damga çakılması */
+  stamp() { this.tone(90, 0.18, 0.2, 'sine', 50); this.burst(0.08, 2000, 600, 0.12, 'lowpass', 1); }
+  /** ESI göstergesi dolarken yükselen ton (k: 0..1 değer) */
+  esiRise(dur: number, k: number) { this.tone(260, dur, 0.06, 'sine', 260 + 900 * Math.max(0.05, k)); }
+
   private ok() { return this.on && this.ctx && this.master && this.ctx.state === 'running'; }
 
   private burst(dur: number, f0: number, f1: number, gain: number, type: BiquadFilterType = 'bandpass', q = 1.2, delay = 0) {

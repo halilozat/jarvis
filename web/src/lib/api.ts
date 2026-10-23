@@ -55,9 +55,9 @@ export async function getState(): Promise<AppState> {
   return r.json();
 }
 
-/** image: kamera/fotoğraf (data URL). Cevap SSE ile sahne sahne gelir. */
-export async function sendChat(text: string, device: Device, image?: string) {
-  const r = await fetch('/api/chat', { method: 'POST', headers: headers(), body: JSON.stringify({ text, device, client: clientId, image }) });
+/** image: kamera/fotoğraf (data URL). lab: Uzay Laboratuvarı açıksa ekrandaki durum. Cevap SSE ile sahne sahne gelir. */
+export async function sendChat(text: string, device: Device, image?: string, lab?: object | null) {
+  const r = await fetch('/api/chat', { method: 'POST', headers: headers(), body: JSON.stringify({ text, device, client: clientId, image, ...(lab ? { lab } : {}) }) });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'hata');
 }
 

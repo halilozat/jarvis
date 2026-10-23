@@ -202,15 +202,17 @@ Büyü efektlerinden ayrı bir mod: arkanızda uzay varmış gibi görünür, ge
 
 **Açmak:** El Kontrolü'nde **U** tuşu ya da üst şeritteki **🪐 uzay** düğmesi, sesle *"Jarvis, uzay modunu aç / kapat"* (El Kontrolü kapalıysa uzay modunda açılır), adresle `?el=1&mod=uzay`. Geçişte oda kararır, yıldızlar ışık hızıyla belirir.
 
+Uzay modunun iki sahnesi var: **Uzay Laboratuvarı** (varsayılan, gerçek veri ve gerçek fizik, aşağıda) ve **gösteri** (serbest gezegenler, çarpışma, kara delik). Geçiş: **G** tuşu, üst şeritteki **🎆 gösteri / 🔬 laboratuvar** düğmesi ya da *"Jarvis, gösteri modunu aç"* / *"uzay laboratuvarını aç"*. Adresle: `?el=1&mod=lab` ya da `?el=1&mod=gosteri`. Gösteri komutları (kara delik, Theia, kayan yıldız, gerçek boyutlar) laboratuvardayken söylenirse sahne kendiliğinden gösteriye geçer; laboratuvar komutları için tersi.
+
 **Arka plan (B tuşu ya da *"Jarvis, arka planı uzaya çevir / odayı geri getir"*):**
-- **Tam uzay** (varsayılan): sizi odadan ayırır (MediaPipe Selfie Segmenter), arka plan tamamen uzay olur, siz önde kalırsınız. Kamera görüntüsü kopyalanmaz; yıldız katmanında sizin olduğunuz yere yumuşak kenarlı bir delik açılır.
-- **Katman**: oda görünür, yıldızlar yalnızca görüntünün karanlık bölgelerinde hafifçe parlar.
+- **Oda** (varsayılan): odanız olduğu gibi görünür. Üstüne yalnızca süzülen ince yıldızlar biner; bunlar "screen" karışımıyla aydınlık yerlerde kaybolur, karanlık köşelerde belirir. Kenarlarda hafif sinematik bir karartma olur. Kişi ayırma çalışmaz, FPS yüksek kalır. Tarama ve yakınlaşma ekranları odayı kapatmaz; yalnızca paneller koyu durur.
+- **Tam uzay**: sizi odadan ayırır (MediaPipe Selfie Segmenter), arka plan tamamen uzay olur, siz önde kalırsınız. Kamera görüntüsü kopyalanmaz; yıldız katmanında sizin olduğunuz yere yumuşak kenarlı bir delik açılır.
 
 Yıldız alanı tamamen prosedüreldir: 3 derinlik katmanı (yavaş sürüklenme, parallax), göz kırpan sıcak/soğuk yıldızlar, Samanyolu bandı, soluk nebulalar, 15-30 sn'de bir kayan yıldız.
 
 **Gezegenler:** Merkür, Venüs, Dünya, Mars, Jüpiter, Satürn, Uranüs, Neptün, Ay ve Güneş. Her biri 3.600 noktadan oluşur; noktaların rengi gerçek yüzey haritasından (aşağıdaki dokular) ya da dokusu olmayanlarda gerçek görünüşe benzeyen desenden gelir. Gece/gündüz gölgesi vardır, halka yalnızca Satürn'de (belirgin) ve Uranüs'te (ince, neredeyse dik). Gezegen değişince yanında küçük bir bilgi kartı çıkar.
 
-**Jestler:**
+**Gösteri jestleri:**
 
 | Jest | Ne olur |
 |---|---|
@@ -224,7 +226,7 @@ Yıldız alanı tamamen prosedüreldir: 3 derinlik katmanı (yavaş sürüklenme
 | ✊ → ✋ hızlı | Yakındaki gezegen kendi renklerinde patlar |
 | ✌️ 0,6 sn basılı | Mikrofon (eller meşgulken sesli komut); dinlerken elin çevresinde dalga halkası. Boşluk tuşu da olur |
 
-**Sesli komutlar** (sunucuya gitmez, anında; Türkçe eklere ve yazım farklarına dayanıklı: *dünyayı, Mars'ı, jüpiteri, satürnü…*):
+**Gösteri sesli komutları** (sunucuya gitmez, anında; Türkçe eklere ve yazım farklarına dayanıklı: *dünyayı, Mars'ı, jüpiteri, satürnü…*):
 - *"Jarvis, Satürn getir / çağır / göster"*: elinizdeki gezegen dönüşür, elde yoksa ortada oluşur
 - *"güneş sistemini göster"*, *"gerçek boyutlarda göster"* (yanına diğerleri gerçek oranlarla gelir, 4 sn), *"kara delik oluştur"*
 - *"Theia'yı fırlat"* ya da *"gezegenleri çarpıştır"*: elinizdeki Dünya'ya ekranın kenarından Mars büyüklüğünde bir gök cismi fırlar; çarpışma → Ay akışı tek komutla, elle denk getirmeye gerek yok
@@ -232,9 +234,9 @@ Yıldız alanı tamamen prosedüreldir: 3 derinlik katmanı (yavaş sürüklenme
 
 Her komutta Jarvis seçili sesle kısa bir onay söyler ("Satürn, efendim."). Uzay modu açılınca bütün hazır cümleler önceden yüklenir; ses beklemeden çalar. Uzay modunda mikrofon, komutu cümle biterken yakalamak için Chrome'un konuşma tanımasını kullanır (bu ses Google'ın sunucusuna gider); komut değilse cümle her zamanki Jarvis'e gider. Cümleler ve gezegen bilgileri `web/src/hands/space/facts.ts` dosyasındadır.
 
-**Kamerasız deneme:** `?el=demo&mod=uzay` sentetik ellerle oynatır: Dünya oluşur → bilek çevirme → 2 parmak: Mars → diğer elde Dünya → çarpışma → enkaz → Ay → Güneş sistemi → Satürn → kara delik. Demoda segmentasyon yoktur.
+**Kamerasız deneme:** `?el=demo&mod=gosteri` sentetik ellerle oynatır: Dünya oluşur → bilek çevirme → 2 parmak: Mars → diğer elde Dünya → çarpışma → enkaz → Ay → Güneş sistemi → Satürn → kara delik. Demoda segmentasyon yoktur.
 
-**Test:** `npm run test:uzay` sesli komut eşleştiricisini 72 yazımla dener (ekli, eksiz, STT hatalı ve komut olmayanlar).
+**Test:** `npm run test:uzay` sesli komut eşleştiricisini 197 yazımla ve zincirlerle (ekli, eksiz, STT hatalı ve komut olmayanlar), ardından laboratuvarın fizik testlerini çalıştırır.
 
 **Performans:** Kişi ayırma 256 piksele küçültülmüş kareyle 2 karede bir çalışır (M1 Pro'da ~6 ms); gezegenler küçük bir tampona derinlik sınamasıyla basılır. Modeller `npm run el-modeli` ile yerele indirilebilir.
 
@@ -249,6 +251,153 @@ Her komutta Jarvis seçili sesle kısa bir onay söyler ("Satürn, efendim."). U
 | Merkür | NASA/Johns Hopkins University APL/Carnegie Institution of Washington, MESSENGER, PIA16298 | NASA görseli, telif yok |
 
 Satürn, Venüs, Uranüs, Neptün ve Güneş için gerçek renkli, lisansı açık küresel harita olmadığından desenleri prosedüreldir (Satürn'ün bantları, Venüs'ün bulut örtüsü, Uranüs ve Neptün'ün renkleri, Güneş'in kaynayan yüzeyi). Kişi ayırma modeli: MediaPipe Selfie Segmenter (yatay), Google; el modeli gibi çalışırken Google'ın sunucusundan iner, repoda yoktur.
+
+#### Uzay Laboratuvarı 🔬
+
+Gösteri modunun rastgele oyunları yerine bilimsel bir laboratuvar: Güneş ve 8 gezegen **bugünkü gerçek yerlerinde** açılır, siz gezegenleri elinizle taşırken, fırlatırken ya da çarpıştırırken sonuç **gerçek bir hesaptan** gelir. Ekrandaki ve Jarvis'in söylediği her sayı aşağıdaki verilerden ve fizikten çıkar; Jarvis bu cümleleri modele sormadan, anında kurar.
+
+**Ekranda her zaman:** *"mesafeler ölçekli · boyutlar büyütülmüş · basitleştirilmiş model"*.
+
+**Açılış:** Laboratuvar açılınca (ya da zaten açıkken *"uzay laboratuvarını aç"* denince) yaklaşık 3 sn'lik bir açılış oynar:
+- merkezden halka patlaması, köşe kıskaçları ve tarama çizgisi;
+- harf harf çözülen "UZAY LABORATUVARI" başlığı;
+- Güneş'in tutuşması ve yörüngelerin içten dışa sırayla çizilmesi;
+- gezegenlerin ekranın kenarlarından sarmal çizerek yerlerine uçması.
+
+Ardından görünüm iç gezegenlere yakınlaşır.
+
+**Oda modunda okunurluk:** Gezegenlerin arkasında hafif koyu bir disk ve ince parlak bir kenar vardır, gece yarıları daha aydınlıktır. Yörüngeler koyu bir alt çizgiyle çizilir, yazılar gölgelidir. Böylece aydınlık bir odada da seçilirler. Demoda denemek için: `?el=demo&kitaplik=1&mod=lab&tara=bos&oda=1`; arka planda kitaplık demosunun raf görüntüsü olur. Basitleştirilmiş değerlerin yanında ≈ durur.
+
+**Nasıl çalışır:**
+- **Konumlar:** [astronomy-engine](https://github.com/cosinekitty/astronomy) 2.1.19 (MIT, VSOP87 tabanlı, ≈1 yay dakikası doğruluk) açılıştaki tarihte gezegenlerin konum ve hızlarını verir. Sonrası tarayıcıda N-cisim simülasyonu: Güneş ve 8 gezegen birbirini çeker.
+- **Fizik:** birimler AU, yıl ve Güneş kütlesi (G = 4π²). Entegratör leapfrog (velocity Verlet), çeyrek gün adım; bir cisim Güneş'e çok yaklaşınca adım kendiliğinden kısalır. Zamanda simetriktir: 100 yılda enerji kayması ≈ %0,00001, zaman geri sarılınca gezegenler aynı yoldan döner. Güneş'e düşen cismin kütlesi ve momentumu Güneş'e eklenir.
+- **Ölçek:** yalnızca çizim ölçeklenir, fizik değil. Ekrandaki uzaklık ∝ √AU (Merkür ile Neptün aynı ekrana sığsın diye), yön korunur; bakış kuzeyden 25° eğik. Bütün dönüşümler tek dosyada: `web/src/hands/space/scale.ts`.
+- **Sıcaklık:** denge sıcaklığı T = T☉ · √(R☉ / 2r) · (1 − A)^¼ (Dünya için ≈ 254 K) + gezegenin bugünkü sera farkı (Dünya +34 K → 15 °C). Basitleştirme: gezegen nereye taşınırsa taşınsın atmosferi aynı kabul edilir. Dünya'nın yüzeyi sıcaklığa göre değişir: 0 °C altı okyanuslar donar, 100 °C üstü kaynar, ≈450 °C üstü kızgın kaya. Okyanusu olmayan kayalık gezegenlerde yalnızca buzlanma ve kızgın kaya; gaz devlerinde değişmez.
+- **Yaşanabilir bölge:** Kopparapu ve ark. 2013 (ApJ 765:131), Güneş için tutucu sınırlar 0,99–1,70 AU.
+- **Veriler** (`web/src/hands/space/data.ts`, her değerin kaynağı yanında): NASA NSSDCA Planetary Fact Sheet (kütle, yarıçap, çekim, kaçış hızı, gün, yıl, uzaklık, ortalama sıcaklık, Bond albedosu, yoğunluk, basınç, atmosfer bileşimi), NSSDCA Sun Fact Sheet, iç katmanlar için NASA gezegen sayfaları ve InSight (Mars çekirdeği). Gaz devlerinin iç katman sınırları modellere göre değişir, "≈" ile gösterilir.
+
+**Jestler** (her hareketin tek bir işi var):
+
+| Jest | Ne olur |
+|---|---|
+| 🤏🤏 Boşlukta iki elle çimdik, elleri aç / kapat | Güneş sistemini kademesiz büyüt / küçült (harita gibi; ×0,6 – ×12) |
+| 🤏 Gezegene kısa dokunuş | O gezegene yakınlaş: gezegen büyür, uyduları gerçek yerlerinde görünür, NASA kartı açılır. İçeride: 🤏 sürükle = döndür · 🤏🤏 elleri aç = kesit (iç katmanlar, atmosfer) · 🤏🤏 elleri başlangıçtan çok kapat = geri çık · uyduya dokun = seç |
+| 🤏 Gezegeni sürükle | Yörüngesinden kopar; yanında canlı uzaklık, sıcaklık, yüzey hâli; noktalı çizgi gideceği yolu gösterir |
+| Başka bir gezegenin üstüne bırak | **Yer değiştirirler** (hedef halkası: "BIRAK: DÜNYA ⇄ MARS") |
+| Hızla başka gezegene vur | **Çarpışma**: kütleler çok farklıysa enkaz diski ve uydu, yakınsa erimiş tek gezegen; kütle ve momentum korunur |
+| Boşluğa yavaş bırak | O uzaklıkta dairesel yörünge; Jarvis sonucu söyler |
+| Boşluğa hızla bırak | Fırlat (el hızı → Δv): Güneş'e düşer, kaçar ya da yeni yörünge |
+| 🤏 + 🤏 iki gezegeni tut | Işık ipi (uzaklık, ışık süresi, Hohmann); yavaşça yaklaştır: karşılaştır |
+| ✊ 1 sn | Zamanı durdur / başlat |
+| ✌️ 0,6 sn | Mikrofon |
+
+Dokunuşun gezegeni yerinden koparmaması için kopma eşiği elin büyüklüğüne göredir. Kısa titremeler bırakma sayılmaz. İki elli çimdik başladığı moda kilitlidir: yakınlaştırma ile kesit/geri birbirine karışmaz. Zaman hızı sesle ya da ✊ ile değiştirilir.
+
+**Jest demosu:** `?el=demo&mod=lab&tara=jest` sentetik ellerle hepsini sırayla gösterir: büyüt/küçült → Mars'a dokun → döndür → kesit → geri → Dünya'yı Mars'ın üstüne bırak → çarpıştır.
+
+**Sesli komutlar** (sunucuya gitmez, anında; her biri en az 3 yazımla test edilir):
+- *"uzay laboratuvarını aç / kapat"*, *"gösteri modunu aç"*, *"sıfırla"* (bugünkü gökyüzüne döner)
+- *"Dünya'yı Güneş'e yaklaştır / uzaklaştır"* (uzaklığın %80'i / %125'i, dairesel yörünge)
+- *"Dünya'yı Venüs'ün yerine koy"* (yer değiştirirler), *"Jüpiter'i Dünya'nın yanına koy"* (aynı yörüngede; Dünya'nın yörüngesi bozulunca Jarvis basıklığın nasıl değiştiğini söyler)
+- *"Mars'a mesaj gönder"*, *"Dünya ile Mars'ı karşılaştır"*, *"Dünya'nın içini aç"*
+- *"zamanı hızlandır / yavaşlat / durdur / geri sar"*, *"1 Ocak 2030'a git"*, *"10 yıl sonrasına git"* (gezegenler o tarihteki gerçek yerlerine akar)
+- *"yaşanabilir bölgeyi göster / gizle"*, *"yakınlaştır"* (iç gezegenler), *"tüm sistemi göster"*, *"kilom 80"*
+
+**Jarvis'e soru sormak:** laboratuvar açıkken sorulan sorulara ekrandaki durum da eklenir (tarih, zaman hızı, gezegenlerin uzaklığı, sıcaklığı, yüzeyi, yörüngesi, son olaylar). *"Neden dondu?"*, *"Bu yörüngede bir yıl kaç gün sürer?"* gibi soruları Jarvis bu verilere dayanarak cevaplar.
+
+**Tuşlar:** G gösteri · Z yakınlaş / uzaklaş · Y yaşanabilir bölge · Boşluk durdur · **T temiz çekim** (menüler ve paneller gizlenir; sonuç bantları, ip, karşılaştırma, kesit ve dürüstlük etiketi kalır) · L bütün arayüzü gizle · B arka plan · U büyü modu.
+
+**Çekim için yerleşim:** paneller Reels/Shorts güvenli alanında durur (üstte %10, altta %20, sağda %8 boş). Açılışta 3 sn bütün sistem görünür, sonra iç gezegenlere yakınlaşır.
+
+**Kamerasız deneme:** `?el=demo&mod=lab` (56 sn döngü): Dünya'yı Güneş'e yaklaştır → Venüs'ün uzaklığında bırak → sıfırla → Mars'ı fırlat (kaçış) → ışık ipi ve mesaj → karşılaştır → çarpışma → kesit → zamanı hızlandır → 2030'a git → sıfırla. `&elt=36` gibi bir saniyeden başlatılabilir.
+
+##### Uydular ve yaşam izi taraması 🧬
+
+**Uydular:** *"Jüpiter'e yakınlaş"*, *"Satürn'e odaklan"* ya da *"Europa'yı göster"* deyince gezegen ortada büyür, yaşam adayı uyduları görünür: Europa ve Ganymede (Jüpiter), Enceladus ve Titan (Satürn), Ay (Dünya). Europa ve Ganymede gerçek yerlerindedir (astronomy-engine). Enceladus ve Titan için astronomy-engine konum vermez; onlar gerçek dönem ve uzaklıkla dairesel yörüngede döner, başlangıç açıları temsilidir ("≈"). Uydu uzaklıkları sıkıştırılmıştır. Bu görünümde çimdik yalnızca seçer. Veriler: NASA JPL SSD uydu parametreleri. İç katmanlar modeldir ("≈"); Titan'ınki tartışmalıdır. *"uzaklaştır"* ya da *"tüm sistemi göster"* geri döner. *"Ay'ı kaldır"*: Ay kaybolur, Jarvis gelgitlerin yaklaşık üçte birine ineceğini söyler; tarama bunu "iklim kararlılığı" maddesiyle hesaba katar.
+
+**Tarama:** *"Europa'da yaşam izi tara"*, *"yaşam izi tara"* (seçili cisim), *"bu bölgede yaşam izi tara"* (yakınlaşılan gezegen ve uyduları ya da iç gezegenler ve Ay, sonunda karşılaştırma), *"hızlı tara"*. Tarama yaklaşık 15 sn, hızlısı yaklaşık 7 sn sürer. Sekiz adım vardır ve her adımda Jarvis bir cümle söyler (cümlelerin sesi önceden hazırlanır):
+
+1. **Odak:** cisim sahnedeki yerinden ekranın soluna büyür.
+2. **Yüzey:** tarama ışını. Buzlu uydularda çatlaklar, Enceladus'ta güney kutbu püskürmeleri görünür.
+3. **Spektrum:** temsili spektrum, gerçek atmosfer bileşiminin soğurma bantlarıyla. Atmosfer yoksa "atmosfer yok / çok ince".
+4. **Yer altı:** kesit açılır, okyanus katmanı parlar. Okyanus verisi yoksa bu adım atlanır.
+5. **Kontrol listesi:** maddeler sırayla ✓ / ✗ / ? olur. Her madde **HESAPLANDI** ya da **BİLİNEN VERİ** etiketlidir:
+   - Yüzeyde sıvı su (hesaplanır): simülasyondaki sıcaklık, basınçtaki kaynama noktası (Clausius-Clapeyron), suyun üçlü noktası (0,006 bar) ve Dünya için Kopparapu iç sınırı (kaçak sera) kullanılır.
+   - Güneş ışığı (hesaplanır): 1.361 W/m² ÷ r².
+   - Yer altı suyu, gelgit ve iç ısı, koruyucu atmosfer ve manyetik alan, organik moleküller: bilinen veri.
+6. **Dünya Benzerlik Endeksi:** gösterge 0'dan değere dolar. Formül Schulze-Makuch ve ark. 2011 (Astrobiology 11:1041): ESI = Π (1 − |(x − x₀)/(x + x₀)|)^(w/4). Ağırlıklar: yarıçap 0,57, yoğunluk 1,07, kaçış hızı 0,70, yüzey sıcaklığı 5,58. Sıcaklık simülasyondan gelir; cisim taşınınca ESI değişir. ESI yalnızca yüzeyi ölçer, buzlu uyduların okyanusunu kapsamaz.
+7. **Bugüne kadar bulunanlar:** kartlar KANITLANDI / GÜÇLÜ İŞARET / TARTIŞMALI / BULUNMADI rozetiyle gelir; her kartta tek cümle, yıl ve görev adı vardır.
+8. **Sonuç:** en umut verici bölge, nedeni ve sıradaki görev.
+
+**Görünüm:** Tarama ekranı Jarvis tarzı mekanik bir HUD'dur:
+- Köşe kıskaçları ekranın kenarlarından gelip cisme kilitlenir; çevresinde dişli halkalar ve radar süpürmesi döner, canlı telemetri (AZ, EL, SNR) akar.
+- Cisimden ölçüm etiketlerine lider çizgileri uzanır.
+- Her adımın paneli kendini çizip kepenk gibi açılır; yazılar harf harf çözülür; sonuçlar damga gibi iner.
+- Arkada altıgen ızgara, kenarlarda kayan veri sütunları vardır.
+- Servo, kilit, yazı ve damga sesleri eşlik eder.
+
+**Jarvis'in hafızası:** Jarvis oturumda yapılanları hatırlar ve cümlelerini buna göre kurar. Örnekler:
+- *"Dünya'yı az önce Mars'ın yörüngesine taşımıştık. Bakalım bu ona ne yaptı."*
+- *"Europa'da 0,26 görmüştük; arada büyük fark var."*
+- *"Umut yine buzun altında; Europa'da gördüğümüz tabloya benzedi, değil mi?"*
+- Önceki oturumda neye bakıldığını da bilir: *"Geçen sefer Europa'ya bakmıştık."* Son taramalar bu cihazda saklanır.
+- Aynı cümleyi her seferinde tekrarlamaz. Laboratuvarda sorulan sorularda bu hafıza Jarvis'in sohbet bağlamına da gider.
+
+Ekranda kalıcı not: *"Yaşam bulunduğunu değil, yaşam için koşulların uygunluğunu gösterir."* Jarvis hiçbir zaman yaşam olasılığı ya da yüzdesi vermez. Bunu bir test denetler.
+
+**Senaryolar:** komutlar "sonra / ardından" ile zincirlenebilir. Her adım anlatımı bitince sıradaki başlar:
+- *"Dünya'yı Mars'ın yerine koy, sonra yaşam izi tara"*: Dünya yaklaşık −38 °C'de donar, sıvı su ✗, ESI 1,00'dan 0,86'ya iner.
+- *"Dünya'yı Venüs'ün yerine koy, sonra yaşam izi tara"*: kaçak sera etkisi, sıvı su ✗.
+- *"Ay'ı kaldır, ardından Dünya'da yaşam izi tara"*: tarama Ay'ın yokluğunu hesaba katar.
+
+Laboratuvar açıkken serbest sorularda (*"Europa'da hayat olabilir mi, tara bakalım"*) Jarvis `yasam_izi_tara` aracını kullanır. Araç sonucu laboratuvarın hesabından alır ve ekrandaki animasyonu başlatır. Animasyonun adımları Jarvis'in cevabındaki 8 sahneyle birlikte ilerler.
+
+**Keşif listesi ve kaynakları** `web/src/hands/space/facts.ts` dosyasındadır (Ekim 2026 itibarıyla doğrulandı):
+
+| Cisim | Bulgu | Durum |
+|---|---|---|
+| Mars | Jezero göl deltası (Perseverance 2021) | GÜÇLÜ İŞARET |
+| Mars | Dönemsel metan: Curiosity ölçtü, TGO bulamadı (2018-2019) | TARTIŞMALI |
+| Mars | Sapphire Canyon olası biyo-imza (2025) | TARTIŞMALI |
+| Venüs | Fosfin iddiası (2020) | TARTIŞMALI |
+| Europa | Tuzlu okyanus (Galileo, 1998-2000) | GÜÇLÜ İŞARET |
+| Enceladus | Su püskürmeleri (2005), organikler (2018), fosfat (2023) | KANITLANDI |
+| Enceladus | Hidrotermal işaretler (2015-2017) | GÜÇLÜ İŞARET |
+| Titan | Metan/etan gölleri (2006-2008) | KANITLANDI |
+| Titan | Yer altı okyanusu (2012'de işaret, 2025'te itiraz) | TARTIŞMALI |
+| Ganymede | Yer altı okyanusu (Hubble, 2015) | GÜÇLÜ İŞARET |
+
+Sıradaki görevler: Rosalind Franklin (2028), DAVINCI (Aralık 2030 hedefi) ve EnVision (2031), Europa Clipper (Nisan 2030), JUICE (2031, Ganymede yörüngesi Aralık 2034), Dragonfly (Temmuz 2028 fırlatma) ve ESA L4 (Enceladus; çalışma aşamasında).
+
+**Kamerasız deneme:**
+- `?el=demo&mod=lab&tara=europa`: Europa taraması.
+- `?el=demo&mod=lab&tara=dunya-mars-yorungesi`: Dünya'yı Mars'ın yerine koyup tarar.
+- `?el=demo&mod=lab&tara=bos`: el ve komut olmadan boş laboratuvar.
+
+**Test:** `npm run test:lab` fizik testleri: 100 Dünya yılında enerji kayması < %1, zaman geri sarılınca aynı konum, Hohmann Dünya → Mars ≈ 259 gün, Dünya'nın denge sıcaklığı ≈ 255 K ve sera farkıyla 15 °C, kaçış / bağlı / Güneş'e düşüş ayrımı, Dünya-Mars ışık süresinin astronomy-engine ile aynı çıkması, ölçeğin tersinirliği. Ardından yaşam taraması testleri:
+- ESI: Dünya 1,00; Mars yayınlanan girdilerle 0,70; Merkür 0,60, Venüs 0,44, Titan 0,24.
+- Taşınan Dünya: Mars yörüngesinde donar, Venüs yörüngesinde kaçak sera.
+- 130 taramada hiçbir çıktıda "%" ya da yaşam olasılığı ifadesi olmaması.
+
+#### Uzay modu · ekstra ✨
+
+Laboratuvar ve gösterinin yanında üçüncü sahne. Açmak için:
+- üst şeritteki **✨ ekstra** düğmesi,
+- **G** tuşu (laboratuvar → gösteri → ekstra),
+- *"Jarvis, ekstra modunu aç"*,
+- adresle `?el=1&mod=ekstra`.
+
+Beş numara vardır; **1-5** tuşları, üstteki düğmeler ya da ses ile seçilir:
+
+| | Numara | Nasıl | Arkasındaki hesap ve kaynak |
+|---|---|---|---|
+| 1 | 🌙 **Kafanızın etrafında Ay** | *"Ay'ı kafamın etrafında döndür"*. Ay başınızın çevresinde eğik bir yörüngede döner. Arkadan geçerken başınız onu kapatır: kişi ayırma maskesi ve yüz algılama kullanılır. Evreleri değişir. 🤏 sağa/sola sürükleme hızlandırır ya da yavaşlatır; *"halka ekle"* deyince başınızın çevresinde Satürn gibi bir halka belirir | Gerçek değerler etikette: 384.400 km, 27,3 gün |
+| 2 | ☄️ **Dünya'ya asteroit** | 🤏 boşlukta çimdikleyin, asteroit elinizde belirir; Dünya'ya savurun. Sesle: *"asteroit fırlat"*, *"20 kilometrelik asteroit gönder"*. Çarpmada parlama, ateş topu, şok dalgası ve enkaz oluşur; toz bulutu gezegeni karartır. Analiz panelinde çap, hız, megaton ve Hiroşima katı yazar | E = ½ m v², ρ = 3.000 kg/m³. El hızı 11,2–72 km/s çarpma hızına çevrilir. Chicxulub (≈10 km, ≈20 km/s) ile karşılaştırılır |
+| 3 | ☀️ **Güneş'in son günleri** | *"Güneş'in sonunu göster"* ya da *"5 milyar yıl ileri git"*. ≈30 sn'lik zaman tüneli: okyanuslar buharlaşır, Güneş kızıl deve dönüşür ve Merkür, Venüs, Dünya'yı yutar. Ardından helyum parlaması, gezegenimsi bulutsu ve beyaz cüce gelir. ✊ ya da *"durdur / devam et"* | Schröder ve Smith 2008: kızıl dev kolunun ucunda 256 R☉, 2.730 L☉, 0,668 M☉. Sackmann 1993. Gesicki 2018. Yörüngeler kütle kaybıyla genişler (a ∝ 1/M) |
+| 4 | 🕳 **Gezgin kara delik** | *"Kara deliği Güneş sisteminden geçir"*, *"yakından / uzaktan geçir"*. 10 M☉'lik bir kara delik 50 km/s ile sistemin içinden geçer, yıldızlar bükülür. Kamera Güneş'i izler, gezegenlerin izleri görünür. Sonuç tablosu her gezegen için şunlardan birini yazar: yörüngede (basıklık nasıl değişti), fırlatıldı, kara deliğe yakalandı ya da yutuldu. Güneş yakalanırsa "GÜNEŞ YAKALANDI" | Gerçek N-cisim hesabı (laboratuvarın fiziği), bugünkü gerçek konumlardan başlar. Adım, yakın karşılaşmalarda kısalır |
+| 5 | ⚫ **Ay yerine kara delik** | *"Ay'ın yerine kara delik koy"* ya da *"Ay kara delik olsaydı ne olurdu?"*. Ay sıkışıp aynı kütlede bir kara deliğe dönüşür (olay ufkunun çapı 0,22 mm) ve aynı yörüngede döner. Yörünge ve gelgit kütleye bağlı olduğu için neredeyse hiçbir şey değişmez; yalnızca Ay ışığı ve tutulmalar biter. **Büyütmek:** *"kara deliği büyüt / küçült"* basamak basamak ilerler (Ay → Dünya → Jüpiter → Güneş → Sgr A\*). *"Jüpiter kütlesine büyüt"*, *"kara deliği 10 kat büyüt"* de olur. 🤏 çimdikleyip yukarı / aşağı sürüklemek kütleyi sürekli değiştirir. Soldaki kütle merdiveninde iki eşik işaretlidir. Güneş kütlesinde Dünya, Roche sınırını aşınca uzayıp parçalanır ve enkazı diske dönüşür. Sgr A\* kütlesinde olay ufku Ay'ın yörüngesini yutar. Panelde ufuk çapı, gelgit, bir ayın süresi, ortak kütle merkezi, Hawking sıcaklığı ve Einstein halkası yazar | r_s = 2GM/c². Denge gelgiti 1,5·(M/M⊕)(R⊕/d)³R⊕ (Ay ≈ 0,54 m). Katı cisim Roche sınırı R⊕(2M/M⊕)^⅓: Dünya ≈ 0,33 M☉'de parçalanır. Ufuk yörüngeyi ≈ 130.000 M☉'de aşar. Hawking T = ħc³/(8πGMk): Ay kütlesinde 1,67 K, 2,7 K'lik kozmik arka plandan soğuk olduğu için buharlaşmaz. Sgr A\* 4,297×10⁶ M☉ (GRAVITY 2022) |
+
+**Kamerasız deneme:** `?el=demo&mod=ekstra&numara=ay|asteroit|kizildev|karadelik|aykaradelik`. Ay numarasında demo sahte bir kafa silüeti kullanır. Asteroit numarası 14 sn'de bir kendiliğinden fırlar. Ay yerine kara delik numarasında kara delik 13 sn'de bir bir basamak büyür ve Sgr A\*'dan sonra baştan başlar. `npm run test:lab` bu numaranın hesaplarını da sınar: Güneş'in r_s'si 2,95 km, Ay'ın gelgiti ≈ 0,54 m, parçalanma ve ufuk eşikleri, Hawking sıcaklıkları (25 test).
 
 ### Kamera cihazı (Jarvis'in gözü)
 

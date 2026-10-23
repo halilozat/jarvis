@@ -21,6 +21,7 @@ import { markBlocked } from './youtube.js';
 import { CAMERA_ENABLED, VISION_MODEL, cameraRouter, initCameras, onClientClosed } from './camera.js';
 import { control, homeState, initHome, type DeviceId, type HomeAction } from './home.js';
 import { initLibrary, libraryRouter } from './library.js';
+import { initLab, labNote, setLabRequest } from './lab.js';
 import { ELEVEN_MODEL, ELEVEN_MODEL_LABEL, elevenReady, elevenUsage, elevenVoices, isEleven } from './eleven.js';
 import type { Device, StoredMessage } from './types.js';
 
@@ -108,6 +109,7 @@ function presence() {
 }
 initCameras({ broadcast, sendTo });
 initHome(broadcast);
+initLab(broadcast);
 initLibrary(broadcast);
 
 const app = express();
@@ -332,6 +334,9 @@ app.post('/api/chat', async (req, res) => {
   const image = typeof req.body.image === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(req.body.image) ? req.body.image : undefined;
   const client = String(req.body.client || '');
   const device = asDevice(req.body.device);
+  // Uzay Laboratuvarı açıksa ekrandaki durum (istemcinin gönderdiği JSON, en çok 24 KB; tarama sonuçları dahil)
+  const labRaw = req.body.lab && typeof req.body.lab === 'object' ? JSON.stringify(req.body.lab) : '';
+  const labOk = !!labRaw && labRaw.length <= 24_000;
   if (!text && !image) return res.status(400).json({ error: 'boş mesaj' });
   if (busy) return res.status(409).json({ error: 'Jarvis şu an başka bir cevabı hazırlıyor' });
   busy = true;
@@ -356,10 +361,13 @@ app.post('/api/chat', async (req, res) => {
 
   let total = 0;
   let firstTts = false;
+  setLabRequest(labOk ? { ctx: req.body.lab, client } : null);
+  const lab = labOk ? labNote() : undefined;
   try {
     const reply = await runJarvis({
       text,
       image,
+      lab,
       device,
       prevDevice,
       history,
@@ -392,6 +400,7 @@ app.post('/api/chat', async (req, res) => {
     res.status(500).json({ error: String(e?.message || e) });
   } finally {
     busy = false;
+    setLabRequest(null);
   }
 });
 
