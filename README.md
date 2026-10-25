@@ -399,6 +399,141 @@ Beş numara vardır; **1-5** tuşları, üstteki düğmeler ya da ses ile seçil
 
 **Kamerasız deneme:** `?el=demo&mod=ekstra&numara=ay|asteroit|kizildev|karadelik|aykaradelik`. Ay numarasında demo sahte bir kafa silüeti kullanır. Asteroit numarası 14 sn'de bir kendiliğinden fırlar. Ay yerine kara delik numarasında kara delik 13 sn'de bir bir basamak büyür ve Sgr A\*'dan sonra baştan başlar. `npm run test:lab` bu numaranın hesaplarını da sınar: Güneş'in r_s'si 2,95 km, Ay'ın gelgiti ≈ 0,54 m, parçalanma ve ufuk eşikleri, Hawking sıcaklıkları (25 test).
 
+#### Haber Modu 📰
+
+Haber merkezi El Kontrolü'nde ayrı bir moddur. Günün haberlerini derler, aynı olayı farklı kaynakların nasıl anlattığını yan yana koyar, olgusal iddiaları resmî verilerle karşılaştırır ve haberlerde cevapsız kalan soruları bulur. Görünümü bir haber kanalını andırır: kanal logosu ve "● CANLI" işareti, saat, kategori şeridi, alt bant, "SON DAKİKA" bandı ve kayan yazı. Açılışta "HABER MERKEZİ" başlığının altında motto daktiloyla yazılır ve Jarvis onu okur. Seslendirme ⚙ efektler menüsünden ("📰 Haber açılışında motto") kapatılabilir.
+
+**Açmak:**
+- **N** tuşu,
+- üst şeritteki **📰 haber** düğmesi,
+- *"Jarvis, haber modunu aç"* (kapatmak için *"kapat"*),
+- adresle `?el=1&mod=haber`.
+
+Bu modda büyü ve uzay efektleri çalışmaz.
+
+**Kart karuseli:** Gündemdeki olaylar önünüzde yarım daire şeklinde holografik kartlar olarak durur. Aynı olayı veren haberler tek kartta birleşir. Kartta kategori, başlık (en fazla 2 satır), "11 kaynak", saat, ilk veren kaynak ve alan adı yazar. Kamerayla kişi ayırma maskesi kullanılır: arkada kalan kartlar başınızın arkasına geçer, siz öndekilerle arkadakilerin arasında durursunuz.
+
+**El hareketleri:**
+
+| Jest | Ne yapar |
+|---|---|
+| ✋ sağa / sola savur | Karusel döner (ivmeli, yumuşak duruş). Detayda sonraki haber, iddia kontrolünde sonraki iddia |
+| ✋ yukarı / aşağı savur | Karuselde kategori değiştirir. Detayda ve diğer görünümlerde yukarı savurmak geri döndürür. Sabah özetinde kartları kaydırır |
+| ☝️ işaret | Üstüne geldiğiniz kart öne doğru büyür. Karşılaştırmada bir kaynağa 0,4 sn tutarsanız o kaynağın metninde ilgili alıntılar renkleriyle vurgulanır. Detaydaki "? sorulmamış sorular" düğmesine 0,7 sn tutmak soruları açar |
+| 🤏 tut ve kendine çek | Haber detayı: özet, önemli sayılar, harita (yalnızca metinde geçen iller), kim ne zaman verdi, arşivde "daha önce" |
+| 🤏🤏 iki elle tut, yana aç | Kaynak karşılaştırması |
+| 🤏🤏 iki elle tut, elleri ters yönde yukarı-aşağı oynat (terazi) | İddia kontrolü |
+| 👍 1 sn | Jarvis haberi özetler |
+| ✊ 1 sn | Kartı kapatır, Jarvis'in sesini keser |
+| ✌️ | Mikrofon |
+
+**Klavye:**
+- **←/→** haber, **↑/↓** kategori,
+- **Enter** detay, **K** karşılaştır, **I** iddia, **S** sorular, **O** sabah özeti,
+- **⌫** geri, **T** temiz çekim.
+
+**Sesli komutlar** (yerelde eşleşir, modele gitmez):
+
+| Komut | |
+|---|---|
+| *"haber modunu aç / kapat"* | Her yerden |
+| *"günümü özetle"* | Her yerden. Sabah özeti açılır |
+| *"ekonomi haberlerini göster"* | gündem, ekonomi, dünya, spor, teknoloji, bilim |
+| *"deprem hakkında ne var?"* | Olaylar konuya göre süzülür |
+| *"sonraki"* / *"önceki"* | |
+| *"bu haberi özetle"* / *"detayını aç"* | |
+| *"bu haberi karşılaştır"* / *"bu haberi kimler nasıl verdi?"* | Kaynak karşılaştırması |
+| *"bunu kontrol et"* / *"bu doğru mu?"* | İddia kontrolü |
+| *"burada ne sorulmamış?"* | Kimsenin sormadığı sorular |
+| *"geri dön"* / *"kartı kapat"* | |
+
+**Kaynak karşılaştırması:** Her kaynağın kartı yelpaze gibi açılıp duvara dizilir. Kartta kaynak adı, başlık, ilk cümle ve yayın saati vardır. Altta renk kodlu, tarafsız bir şerit bulunur:
+- 🟩 **ortak bilgi:** kaynakların çoğunda alıntıyla geçenler;
+- 🟧 **farklı vurgu:** aynı olgunun farklı ifadeleri;
+- 🟦 **sadece bazı kaynaklarda:** hangi kaynakta geçtiği ve geçmediği kodla bulunur;
+- 🟥 **farklı sayılar:** çelişen rakamlar, her biri alıntıyla.
+
+Jarvis bunu 2-3 cümleyle, yorum katmadan anlatır. Kart açılınca haber sayfalarının tam metni çekilir: önce sayfadaki yapılandırılmış veri (JSON-LD), olmazsa paragraflar. Çekilemezse RSS özeti kullanılır. Ekranda yalnızca kısa alıntılar görünür.
+
+**Söylenen ve gerçek (iddia kontrolü):** Solda iddia kartı (kaynak + alıntı), sağda veri kartı (resmî veri + grafik), ortada ikisini birleştiren ışık çizgisi vardır. Sonuç etiketi damga gibi yerine oturur. Etiketi model değil, `server/src/factcheck.ts` içindeki açık kurallar verir:
+
+| Etiket | Ne zaman |
+|---|---|
+| **VERİYLE UYUMLU** | Değer resmî veriyle tutuyor. Kur farkı ≤ %1, deprem büyüklüğü farkı ≤ 0,1, sıcaklık farkı ≤ 2 °C, Resmî Gazete fihristinde özgül başlık geçiyor |
+| **VERİYLE ÇELİŞİYOR** | Yalnızca doğrudan resmî veriyle. Kur farkı > %3, AFAD büyüklüğü farkı > 0,3 |
+| **EKSİK BAĞLAM** | Veri var ama dönem, birim ya da yöntem farklı: piyasa ↔ TCMB gösterge kuru, farklı büyüklük ölçeği, yıllık ortalama ↔ yıl sonu, model verisi ↔ istasyon |
+| **DOĞRULANAMADI** | Uygun veri yok, ya da iddia genel bir ifade. Asla tahmin yürütülmez |
+
+Her etiketin yanında veri kaynağının bağlantısı ve verinin tarihi görünür. Etiket iddiaya verilir; kaynağa ya da kişiye verilmez.
+
+**Doğrulama kaynakları** (hepsi anahtarsız ve ücretsiz):
+- TCMB gösterge kurları (günlük XML arşivi),
+- AFAD deprem kataloğu,
+- Dünya Bankası göstergeleri (yalnızca yıllık),
+- Open-Meteo (model verisi),
+- Resmî Gazete günlük fihristi,
+- bağımsız doğrulama kuruluşlarının RSS'i (Teyit, Malumatfuruş; yalnızca ilgili analiz bağlantısı olarak),
+- Jarvis'in haber arşivi.
+
+TÜİK'in açık API'si olmadığı için aylık TÜİK rakamları (aylık enflasyon gibi) "doğrulanamadı" olur.
+
+**Kimsenin sormadığı sorular:** Her olay için en fazla 3 soru üretilir. Sorular kodla bulunan somut boşluklardan çıkar:
+- olayın tarihi, yeri ya da nedeni hiçbir kaynakta yok;
+- proje haberinde maliyet yok;
+- bir sayının kaynağı hiçbir haberde belirtilmiyor;
+- kaynaklar farklı sayılar veriyor;
+- arşivde daha önce verilen bir söz bugünkü haberlerde hiç geçmiyor.
+
+Her sorunun yanında hangi boşluktan çıktığı yazar ("hiçbir kaynakta maliyet bilgisi yok"). Model yalnızca soruyu cümleye döker. İma, komplo ve yönlendirme içeren sorular atılır.
+
+**Sabah özeti:** *"Jarvis, günümü özetle"* ya da günün ilk, öğleden önceki uyanışında açılır (Ayarlar → İki alkışla uyanma → "Sabah ilk uyanışta sabah özeti"). Dikey kartlar ✋ yukarı savurarak kaydırılır, Jarvis her kartı tek cümleyle okur. Kartlar:
+- **hava:** bugün ve saatlik;
+- **döviz:** TCMB, panodaki veri;
+- **trafik:** İBB Trafik İndeksi. İstanbul geneli, Anadolu ve Avrupa yakası, son 2 saat. Anahtarsız, İBB Açık Veri Lisansı; güzergâh süresi vermez;
+- **gündemin ilk 5 olayı.**
+
+Ajanda kartı, Jarvis'e bir takvim bağlanınca görünür. Altın verisi panoda olmadığı için gösterilmez.
+
+**Tarafsızlık kuralları (kodda zorunlu):**
+- Jarvis yorum yapmaz, taraf tutmaz. Hiçbir kaynağı "doğru / yanlış", "propaganda" ya da "taraflı" diye etiketlemez. Bu ifadeler Jarvis'in hiçbir cümlesinde geçemez; geçen madde atılır.
+- Kişiler hakkında suçlama ve niyet okuması yoktur. Kişilerle ilgili her şey kaynaktan alıntıdır.
+- Modelin her alıntısı kaynak metinde birebir aranır; bulunamayan madde atılır. Jarvis'in cümlelerindeki her sayı ve şehir kaynak metinlerde geçmek zorundadır.
+- Veri yoksa tahmin yoktur.
+- Haber fotoğrafları foto modu kuralına uyar. "video (stok)" modunda kartlarda haber fotoğrafı gösterilmez.
+
+**Kaynak listesi:** `server/src/newsSources.ts`. Tek dosyadır, elle düzenlenir: satır ekleyin ya da silin, `npm run test` her beslemeyi dener. Liste farklı yayın çizgilerinden dengeli seçildi:
+- **kamu ve ajans:** AA, TRT Haber;
+- **hükümete yakın:** Sabah, A Haber, Yeni Şafak;
+- **ana akım:** Hürriyet, Milliyet, CNN Türk, NTV, Habertürk;
+- **muhalif:** Sözcü, Cumhuriyet, BirGün, Evrensel, Karar;
+- **bağımsız:** Medyascope, bianet, Diken;
+- **uluslararası Türkçe:** BBC, DW, Euronews, Independent Türkçe, Sputnik;
+- **bilim ve teknoloji:** Evrim Ağacı, Webtekno.
+
+Gruplar yalnızca dengeyi görmek içindir; ekranda gösterilmez. Listede olmayanlar ve nedeni:
+- **T24:** RSS cevap vermiyor.
+- **Halk TV:** bot isteklerini başka siteye yönlendiriyor.
+- **Amerika'nın Sesi:** çalışan RSS bulunamadı.
+- **Gazete Oksijen, Doğruluk Payı:** RSS yok.
+
+"Aydınlat beni" brifingi de aynı listeyi kullanır.
+
+**Arşiv:** Birden çok kaynağın verdiği olaylar her gün `server/data/haber-arsivi/YYYY-AA-GG.json` dosyasına yazılır. Bu klasör GitHub'a gitmez. Bir kez yapılan analiz (tam metinler, karşılaştırma, sorular) burada saklanır; kart yeniden açılınca model çağrılmaz. Arşiv şunlar için kullanılır:
+- "daha önce nasıl anlatılmıştı?";
+- takibi yapılmamış sözler.
+
+90 günden eskisi silinir. Haber modu açıkken karuselin ilk 5 kartı arka planda önceden analiz edilir.
+
+**Kamerasız deneme:**
+- `?el=demo&mod=haber`: sentetik ellerle motto → karusel → ☝️ → 🤏 çek → detay → yelpaze → terazi → sorular → ✊ → sabah özeti. Veriler sunucudan gelen gerçek haberlerdir. Analiz gelmeden demo bir sonraki adıma geçmez.
+- `?el=demo&mod=haber&haber=elle`: sentetik el yok, klavyeyle gezilir.
+
+**Testler:**
+- `npm run test:haber`:
+  - 48 sesli komut yazımı;
+  - sunucu testleri (32): karşılaştırmadaki her "farklı vurgu" ve "farklı sayı" alıntısının kaynak metinde birebir bulunması, her etiketin bağlantı ve tarih taşıması, veri yoksa "doğrulanamadı", her sorunun gerçek bir boşluğa dayanması, değerlendirici dil filtresi, kümeleme, tam metin çıkarma.
+- İnternet ve model gerekmez.
+
 ### Kamera cihazı (Jarvis'in gözü)
 
 Eski bir iPhone Jarvis'in gözü olur. Görüntüsü bilgisayarda ve tablette canlı izlenir; "Jarvis, mutfakta ne var?" deyince Jarvis anlık bir kareye bakıp yorumlar.

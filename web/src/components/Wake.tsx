@@ -140,6 +140,11 @@ export function WakeSettings({ cfg, device, calibrating, onCalibrate, onSave, on
         <button className={cfg.briefOnWake ? 'on' : ''} onClick={() => onSave({ briefOnWake: true })}>Açık</button>
         <button className={!cfg.briefOnWake ? 'on' : ''} onClick={() => onSave({ briefOnWake: false })}>Kapalı</button>
       </div>
+      <label>Sabah ilk uyanışta sabah özeti (Haber Modu)</label>
+      <div className="seg">
+        <button className={cfg.sabahOzeti ? 'on' : ''} onClick={() => onSave({ sabahOzeti: true })}>Açık</button>
+        <button className={!cfg.sabahOzeti ? 'on' : ''} onClick={() => onSave({ sabahOzeti: false })}>Kapalı</button>
+      </div>
       <label>Boşta kalınca uyku</label>
       <div className="seg">
         {IDLE.map(m => <button key={m} className={cfg.idleMinutes === m ? 'on' : ''} onClick={() => onSave({ idleMinutes: m })}>{m === 0 ? 'Kapalı' : `${m} dk`}</button>)}

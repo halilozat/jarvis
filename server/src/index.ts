@@ -22,6 +22,7 @@ import { CAMERA_ENABLED, VISION_MODEL, cameraRouter, initCameras, onClientClosed
 import { control, homeState, initHome, type DeviceId, type HomeAction } from './home.js';
 import { initLibrary, libraryRouter } from './library.js';
 import { initLab, labNote, setLabRequest } from './lab.js';
+import { initNewsCenter, newsCenterRouter } from './newsCenter.js';
 import { ELEVEN_MODEL, ELEVEN_MODEL_LABEL, elevenReady, elevenUsage, elevenVoices, isEleven } from './eleven.js';
 import type { Device, StoredMessage } from './types.js';
 
@@ -110,6 +111,7 @@ function presence() {
 initCameras({ broadcast, sendTo });
 initHome(broadcast);
 initLab(broadcast);
+initNewsCenter();
 initLibrary(broadcast);
 
 const app = express();
@@ -249,6 +251,7 @@ app.use(cameraRouter());
 
 // ---------- Kitaplık (El Kontrolü: raf haritası, kapak, özet, notlar) ----------
 app.use(libraryRouter());
+app.use(newsCenterRouter(() => state.photoMode));
 
 // ---------- Akıllı ev ----------
 app.get('/api/home', (_req, res) => res.json(homeState()));
@@ -303,12 +306,18 @@ app.post('/api/attention', (req, res) => {
 });
 
 // Uyanış: tüm cihazlar açılış sekansını aynı anda (sunucu zamanı + 350 ms) başlatır.
+/** Sabah özeti günde bir kez: günün ilk, öğleden önceki uyanışında */
+let sabahGunu = '';
 app.post('/api/wake', (req, res) => {
   const cfg = wakeCfg();
+  const gun = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Istanbul' });
+  const saat = Number(new Date().toLocaleString('en-GB', { timeZone: 'Europe/Istanbul', hour: '2-digit', hour12: false }));
+  const sabah = !!cfg.sabahOzeti && sabahGunu !== gun && saat < 13;
+  if (sabah) sabahGunu = gun;
   const period = greetingPeriod();
   const at = Date.now() + 350;
   console.log(`[uyanış] ${String(req.body?.via || 'test')} · sekans ${new Date(at).toISOString().slice(11, 23)} · karşılama (${period}) ${cfg.greeter} cihazından${req.body?.heard ? ` · duyulan: "${String(req.body.heard).slice(0, 60)}"` : ''}`);
-  broadcast({ type: 'wake', at, greeting: { period, text: cfg.greetings[period] }, greeter: cfg.greeter, brief: cfg.briefOnWake, voice: currentVoice(), via: String(req.body?.via || 'test') });
+  broadcast({ type: 'wake', at, greeting: { period, text: cfg.greetings[period] }, greeter: cfg.greeter, brief: cfg.briefOnWake && !sabah, sabah, voice: currentVoice(), via: String(req.body?.via || 'test') });
   res.json({ ok: true, at });
 });
 

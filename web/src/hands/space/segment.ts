@@ -111,5 +111,20 @@ export class PersonCutout {
     g.restore();
   }
 
+  /** Yalnızca kişi: videoyu (aynalı, cover) çiz, maskenin dışını sil. Haber Modu'nda arkadaki kartların önüne çizilir. */
+  drawPerson(g: CanvasRenderingContext2D, video: HTMLVideoElement, W: number, H: number) {
+    if (!this.ready || !this.vw || video.readyState < 2) return;
+    const s = Math.max(W / this.vw, H / this.vh);
+    const dw = this.vw * s, dh = this.vh * s, ox = (W - dw) / 2, oy = (H - dh) / 2;
+    g.save();
+    g.translate(W, 0); g.scale(-1, 1);
+    g.drawImage(video, ox, oy, dw, dh);
+    g.globalCompositeOperation = 'destination-in';
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(this.maskCanvas, ox, oy, dw, dh);
+    g.restore();
+  }
+
   close() { this.seg.close(); }
 }

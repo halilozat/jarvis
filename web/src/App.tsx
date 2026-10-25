@@ -21,6 +21,7 @@ import { HomePanel, HomeToast, getHome, homeAct, type HomeState } from './compon
 import type { Kontrol } from './hands/controller';
 import type { GezegenTur } from './hands/fx';
 import { matchSpaceChain, matchSpaceCommand, type SpaceCmd } from './hands/space/commands';
+import { matchNewsCommand, type HaberCmd } from './hands/news/commands';
 import { tumCumleler } from './hands/space/facts';
 import { labContext } from './hands/space/labContext';
 import { emitCamera, getCameras, getRole, isCameraEvent, onCamera, setRole, toggleCameraPanel } from './lib/camera';
@@ -72,6 +73,8 @@ const KITAPLIK_DEMO = new URLSearchParams(location.search).get('kitaplik') === '
 /** ?el=1&mod=lab (ya da mod=uzay): El Kontrolü Uzay Laboratuvarı'nda açılır · mod=gosteri: uzay gösterisi */
 const MOD_PARAM = new URLSearchParams(location.search).get('mod');
 const EL_UZAY = MOD_PARAM === 'uzay' || MOD_PARAM === 'lab' || MOD_PARAM === 'gosteri' || MOD_PARAM === 'ekstra';
+/** ?el=1&mod=haber: El Kontrolü Haber Modu'nda açılır */
+const EL_HABER = MOD_PARAM === 'haber';
 /** "Jarvis, kitaplığımı tara" / "kitaplığı tarar mısın" / "rafları tara" (El Kontrolü kamerasıyla) */
 const KITAPLIK_TARA = /(kitapl[ıi]k|kitapl[ıi][gğ][ıi](m[ıi])?|raflar[ıi](m[ıi])?)\s.*?\btar(a|ar|at)/i;
 /** Kitap açıkken: "Jarvis, bunu özetle", "kitabı özetle", "özetini oku" */
@@ -167,7 +170,10 @@ export default function App() {
   // Uzay modu: sesli komut (sunucuya gitmez), El Kontrolü'nün o anki modu
   const [spaceCmd, setSpaceCmd] = useState<{ cmd: SpaceCmd; n: number; zincir?: SpaceCmd[] } | null>(null);
   const [startUzay, setStartUzay] = useState(EL_UZAY);
-  const elMod = useRef<'buyu' | 'uzay'>(EL_UZAY ? 'uzay' : 'buyu');
+  // Haber modu: sesli komut (yerelde eşleşir), açılışta haber modu
+  const [newsCmd, setNewsCmd] = useState<{ cmd: HaberCmd; n: number } | null>(null);
+  const [startHaber, setStartHaber] = useState(EL_HABER);
+  const elMod = useRef<'buyu' | 'uzay' | 'haber'>(EL_HABER ? 'haber' : EL_UZAY ? 'uzay' : 'buyu');
   const homeRef = useRef(home);
   homeRef.current = home;
   useEffect(() => { getHome().then(h => h && setHome(h)); }, []);
@@ -355,6 +361,12 @@ export default function App() {
       voice.onPlay = prev;
       end();
       if (e.brief && playToken.current === my) submit('Jarvis, aydınlat beni');
+      // Sabah ilk uyanış: El Kontrolü haber modunda, sabah özetiyle açılır
+      if (e.sabah && playToken.current === my) {
+        setStartHaber(true); setStartUzay(false);
+        setHands(h => h ?? (EL_PARAM === 'demo' ? 'demo' : 'kamera'));
+        setNewsCmd(c => ({ cmd: { tip: 'sabah' }, n: (c?.n ?? 0) + 1 }));
+      }
     });
   };
 
@@ -622,6 +634,13 @@ export default function App() {
       speakLine('Kitaplığınızı tarıyorum efendim.');
       return;
     }
+    // Haber modu: "haber modunu aç" ve "günümü özetle" her yerden; diğerleri haber modundayken (modele gitmez)
+    const nc = !image ? matchNewsCommand(t) : null;
+    if (nc && (nc.tip === 'haber' || nc.tip === 'sabah' || (handsRef.current && elMod.current === 'haber'))) {
+      setInput(''); setInterim(''); setCore('idle');
+      runNewsCmd(nc);
+      return;
+    }
     // Zincir: "Dünya'yı Mars'ın yerine koy, sonra yaşam izi tara" (uzay modundayken; komutlar sırayla)
     const zincir = !image && handsRef.current && elMod.current === 'uzay' ? matchSpaceChain(t) : null;
     if (zincir) {
@@ -715,6 +734,17 @@ export default function App() {
     setSpaceCmd(c => ({ cmd, n: (c?.n ?? 0) + 1, zincir }));
   };
 
+  /** Haber komutunu çalıştır: El Kontrolü kapalıysa haber modunda açılır */
+  const runNewsCmd = (cmd: HaberCmd) => {
+    voice.unlock();
+    if (!handsRef.current) {
+      if (cmd.tip === 'haber' && !cmd.ac) return;
+      setStartHaber(true); setStartUzay(false);
+      setHands(EL_PARAM === 'demo' ? 'demo' : 'kamera');
+    }
+    setNewsCmd(c => ({ cmd, n: (c?.n ?? 0) + 1 }));
+  };
+
   /**
    * Uzay modunda mikrofon: Chrome'un konuşma tanıması ara sonuçlarıyla. Komut cümle biterken yakalanır (STT'yi
    * beklemez); komut değilse cümle bitince normal Jarvis'e gider. Desteklenmiyorsa her zamanki yol.
@@ -729,6 +759,12 @@ export default function App() {
         setInterim(t);
         if (handled) return;
         if (wait) { clearTimeout(wait); wait = null; }
+        // Haber modunda haber komutları
+        if (elMod.current === 'haber') {
+          const nc = matchNewsCommand(t);
+          if (nc) wait = setTimeout(() => { handled = true; rec?.stop(); setInterim(''); setCore('idle'); runNewsCmd(nc); }, 450);
+          return;
+        }
         const z = matchSpaceChain(t);
         if (z) { wait = setTimeout(() => fire(z[0], z), 450); return; }
         // Cümlede "sonra" geçiyorsa ama henüz tam bir zincir değilse: devamını (ya da son sonucu) bekle
@@ -755,7 +791,7 @@ export default function App() {
   const toggleMic = async () => {
     voice.unlock();
     if (core === 'listening') { recRef.current?.stop(); return; }
-    if (handsRef.current && elMod.current === 'uzay' && speechRecognitionSupported()) {
+    if (handsRef.current && elMod.current !== 'buyu' && speechRecognitionSupported()) {
       stopPlayback();
       if (startSpaceListen()) return;
     }
@@ -832,10 +868,10 @@ export default function App() {
     else speakLine(k.ad ? `${k.ad} için henüz bir özetim yok efendim.` : 'Bu kitabın adını bilmiyorum efendim.');
   };
   /** El Kontrolü kapandı: bir sonraki açılış büyü modunda, bekleyen uzay komutu yok */
-  const closeHands = () => { setHands(null); setSpaceCmd(null); setStartUzay(false); elMod.current = 'buyu'; };
+  const closeHands = () => { setHands(null); setSpaceCmd(null); setNewsCmd(null); setStartUzay(false); setStartHaber(false); elMod.current = 'buyu'; };
 
   /** El Kontrolü modu değişti. Uzaya geçince Jarvis'in bütün uzay cümleleri önceden yüklenir (komutta ses beklemez). */
-  const onElMod = (m: 'buyu' | 'uzay') => {
+  const onElMod = (m: 'buyu' | 'uzay' | 'haber') => {
     elMod.current = m;
     if (m === 'uzay' && voiceSel) for (const line of tumCumleler()) voice.preload(line, voiceSel, undefined, undefined, true);
   };
@@ -1364,7 +1400,8 @@ export default function App() {
             uzay={startUzay} uzaySahne={MOD_PARAM === 'gosteri' ? 'gosteri' : MOD_PARAM === 'ekstra' ? 'ekstra' : 'lab'} spaceCmd={spaceCmd}
             sahneIlerleme={{ i: sceneIdx, bitti: done }}
             onPreload={lines => { if (voiceSel) for (const l of lines) voice.preload(l, voiceSel, undefined, undefined, true); }} listening={core === 'listening'}
-            onSay={t => speakLine(t)} onMic={toggleMic} onModeChange={onElMod} />
+            onSay={t => speakLine(t)} onMic={toggleMic} onModeChange={onElMod}
+            haber={startHaber} newsCmd={newsCmd} onSus={stopPlayback} />
         </Suspense>
       )}
 

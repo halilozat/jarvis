@@ -16,13 +16,15 @@ export interface ElAyar {
   /** El raf bölgesindeyken ateş, iz ve şimşek çıkmasın (kitaba uzanırken araya girmesin) */
   rafSessiz: boolean;
   ses: boolean;
+  /** Haber Modu açılışında motto seslendirilsin */
+  haberMotto: boolean;
   /** Çimdikle oluşan gezegen: sırayla (her çimdikte sonraki) ya da hep aynısı */
   gezegenTur: 'sirayla' | GezegenTur;
 }
 
 type AcKapa = { [K in keyof ElAyar]: ElAyar[K] extends boolean ? K : never }[keyof ElAyar];
 
-export const VARSAYILAN: ElAyar = { ates: true, muhur: true, gezegen: true, patlat: true, simsek: true, iz: true, kontroller: true, yuz: true, kitaplik: true, rafSessiz: true, ses: true, gezegenTur: 'sirayla' };
+export const VARSAYILAN: ElAyar = { ates: true, muhur: true, gezegen: true, patlat: true, simsek: true, iz: true, kontroller: true, yuz: true, kitaplik: true, rafSessiz: true, ses: true, haberMotto: true, gezegenTur: 'sirayla' };
 
 /** Menüdeki sıra ve adlar */
 export const AYAR_LISTESI: { k: AcKapa; ad: string; alt?: string }[] = [
@@ -37,6 +39,7 @@ export const AYAR_LISTESI: { k: AcKapa; ad: string; alt?: string }[] = [
   { k: 'kitaplik', ad: '📚 Kitaplık', alt: 'kitap seç, çek, aç' },
   { k: 'rafSessiz', ad: '📚 Raf bölgesinde ateş/iz yok', alt: 'kitaba uzanırken araya girmesin' },
   { k: 'ses', ad: '🔊 Efekt sesleri', alt: 'M' },
+  { k: 'haberMotto', ad: '📰 Haber açılışında motto', alt: 'Jarvis seslendirir' },
 ];
 
 const KEY = 'jarvis.el.ayar';

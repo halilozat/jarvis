@@ -47,12 +47,12 @@ export class Controller {
   private captured = false;
   /** Efekt ayarları (⚙): kapalı efekt tetiklenmez */
   ayar: ElAyar = { ...VARSAYILAN };
-  /** Mod: büyü (ateş, mühür, gezegen, şimşek, iz, kitaplık) ya da uzay (laboratuvar ya da gösteri sahnesi). Biri diğerini tetiklemez. */
-  mode: 'buyu' | 'uzay' = 'buyu';
+  /** Mod: büyü (ateş, mühür, gezegen, şimşek, iz, kitaplık), uzay (laboratuvar, gösteri, ekstra) ya da haber (haber merkezi). Biri diğerini tetiklemez. */
+  mode: 'buyu' | 'uzay' | 'haber' = 'buyu';
   space: SpaceScene | null = null;
 
   /** Mod değişti: önceki modun efektleri temizlenir */
-  setMode(m: 'buyu' | 'uzay') {
+  setMode(m: 'buyu' | 'uzay' | 'haber') {
     if (m === this.mode) return;
     this.mode = m;
     this.fx.planet = null;
@@ -105,8 +105,8 @@ export class Controller {
       if (!seen.has(id) && now - h.lastSeen > 220) { h.reset(); this.hands.delete(id); }
     }
     const live = [...this.hands.values()].filter(h => seen.has(h.id) || now - h.lastSeen < 220);
-    // Uzay modu: eller doğrudan uzay beynine gider (büyü efektleri ve kitaplık çalışmaz)
-    if (this.mode === 'uzay' && this.space) {
+    // Uzay ve haber modu: eller doğrudan sahneye gider (büyü efektleri ve kitaplık çalışmaz)
+    if (this.mode !== 'buyu' && this.space) {
       const r = this.space.update(live, now, dt);
       if (this.debug) for (const h of live) fx.skeleton(h.pts, `${h.id} · ${h.gesture}`);
       return { hands: live.map(h => ({ id: h.id, gesture: h.gesture })), mode: r.mode };
@@ -232,7 +232,7 @@ export class Controller {
   /** Jest değişti: yumruk → açık = patlat, ateş → yumruk = söndür */
   private onGestureChange(h: TrackedHand, now: number) {
     const f = this.fxOf(h.id);
-    if (this.mode === 'uzay') { this.space?.onGesture(h, now); return; }
+    if (this.mode !== 'buyu') { this.space?.onGesture(h, now); return; }
     if (this.captured) return; // kitap açıkken yumruk → açık patlatmaz
     if (h.gesture === 'acik' && h.prevGesture === 'yumruk' && now - h.lastFist < 500) {
       // yumruğun ne kadar sürdüğü: uzun tutulduysa (sustur) patlatma

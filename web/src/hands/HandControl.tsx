@@ -1,6 +1,7 @@
 // El Kontrolü: kamera görüntüsü üstünde el takibi, büyü efektleri ve jestle Jarvis kontrolü.
 // Tuşlar: Esc kapat · L arayüzü gizle/göster (temiz çekim) · D iskelet · M ses · C kamera değiştir · F yüz kilidi · K kitaplık ayarı
-// U uzay modu · B arka plan (tam uzay / oda) · G laboratuvar ↔ gösteri · T temiz çekim (yalnızca sonuçlar)
+// U uzay modu · N haber modu · B arka plan (tam uzay / oda) · G laboratuvar ↔ gösteri · T temiz çekim (yalnızca sonuçlar)
+// Haber modunda: ←/→ haber · ↑/↓ kategori · Enter detay · K karşılaştır · I iddia kontrolü · S sorular · O sabah özeti · ⌫ geri
 // Laboratuvarda: Z yakınlaş/uzaklaş · Y yaşanabilir bölge · Boşluk zamanı durdur
 import type { HandLandmarker } from '@mediapipe/tasks-vision';
 import { useEffect, useRef, useState } from 'react';
@@ -29,7 +30,11 @@ import { ONAY } from './space/facts';
 import { loadTextures } from './space/planets';
 import { PersonCutout, loadSegmenter } from './space/segment';
 import { Starfield } from './space/starfield';
+import { NewsScene } from './news/scene';
+import type { HaberCmd } from './news/commands';
+import { demoNews } from './news/demo';
 import './hands.css';
+import './news/news.css';
 
 export interface HandControlProps {
   /** Sentetik ellerle çalış (kamera yok): ?el=demo */
@@ -70,7 +75,13 @@ export interface HandControlProps {
   onSay?(text: string): Promise<void> | void;
   /** ✌️ basılı (uzay modu): mikrofonu aç */
   onMic?(): void;
-  onModeChange?(m: 'buyu' | 'uzay'): void;
+  onModeChange?(m: 'buyu' | 'uzay' | 'haber'): void;
+  /** Haber modunda başla (?mod=haber ya da "Jarvis, haber modunu aç") */
+  haber?: boolean;
+  /** Haber modu sesli komutu: n her istekte artar */
+  newsCmd?: { cmd: HaberCmd; n: number } | null;
+  /** ✊ (haber modu): Jarvis'in sesini kes */
+  onSus?(): void;
   /** Uzay modunun sahnesi: laboratuvar (varsayılan) ya da gösteri (?mod=gosteri) */
   uzaySahne?: 'lab' | 'gosteri' | 'ekstra';
 }
@@ -79,6 +90,8 @@ export interface HandControlProps {
 const DEMO_TARA = new URLSearchParams(location.search).get('tara');
 /** Demoda oda görünümü (kitaplık demosunun raf görüntüsü arka plan olur): ?el=demo&kitaplik=1&mod=lab&oda=1 */
 const DEMO_ODA = new URLSearchParams(location.search).get('oda') === '1';
+/** Haber demosu sentetik ellersiz (klavyeyle denemek için): ?el=demo&mod=haber&haber=elle */
+const DEMO_HABER_ELLE = new URLSearchParams(location.search).get('haber') === 'elle';
 
 /** Uzay Laboratuvarı jestleri */
 const LEGEND_LAB: [string, string][] = [
@@ -97,6 +110,12 @@ const LAB_KOMUT = new Set<SpaceCmd['tip']>(['sifirla', 'yaklastir', 'tasi', 'mes
 const LEGEND_UZAY: [string, string][] = [
   ['🤏', 'gezegen tut'], ['🤏+1…5', 'diğer el: Dünya · Mars · Jüpiter · Satürn · Güneş'], ['↻', 'bileği çevir'], ['🤏🤏', 'büyüt'],
   ['💥', 'iki gezegeni çarpıştır'], ['✋✋', 'güneş sistemi'], ['✊ 1,5 sn', 'kara delik'], ['✊→✋', 'patlat'], ['✌️', 'mikrofon'],
+];
+
+/** Haber modu jestleri */
+const LEGEND_HABER: [string, string][] = [
+  ['✋ ↔', 'haber'], ['✋ ↕', 'kategori · geri'], ['☝️', 'vurgula'], ['🤏 çek', 'detay'], ['🤏🤏 ↔', 'kaynakları karşılaştır'],
+  ['🤏🤏 ↕', 'terazi: iddia kontrolü'], ['👍 1 sn', 'özetle'], ['✊ 1 sn', 'kapat'], ['✌️', 'mikrofon'],
 ];
 
 const LEGEND: [string, string][] = [
@@ -130,7 +149,9 @@ export default function HandControl(p: HandControlProps) {
   const cekimRef = useRef(cekim);
   useEffect(() => { sahneRef.current = sahne; cekimRef.current = cekim; }, [sahne, cekim]);
   /** Mod: büyü ya da uzay (U). Arka plan: tam uzay (sizi odadan ayırır) ya da katman (oda görünür) (B). */
-  const [mod, setMod] = useState<'buyu' | 'uzay'>(p.uzay ? 'uzay' : 'buyu');
+  const [mod, setMod] = useState<'buyu' | 'uzay' | 'haber'>(p.haber ? 'haber' : p.uzay ? 'uzay' : 'buyu');
+  const newsRef = useRef<NewsScene | null>(null);
+  const newsStageRef = useRef<HTMLDivElement>(null);
   /** Varsayılan oda: kullanıcının arka planı kapanmaz (tam uzay B ile) */
   const [arka, setArka] = useState<'tam' | 'katman'>('katman');
   const modRef = useRef(mod);
@@ -243,13 +264,29 @@ export default function HandControl(p: HandControlProps) {
     extra.demo = !!p.demo;
     if (DEMO_NUMARA) extra.numara = DEMO_NUMARA;
     extraRef.current = extra;
+    // Haber Modu: haber merkezi (DOM katmanı; kişi ayırma maskesiyle derinlik)
+    const news = new NewsScene(newsStageRef.current!, fx, sfx, {
+      say: t => {
+        if (p.demo) {
+          const msg = `demo · Jarvis: ${t}`, ms = Math.min(9000, Math.max(1300, t.length * 52));
+          setToast(msg); setTimeout(() => setToast(c => (c === msg ? null : c)), ms + 600);
+          return new Promise<void>(r => setTimeout(r, ms));
+        }
+        return propsRef.current.onSay?.(t);
+      },
+      mic: () => propsRef.current.onMic?.(),
+      sus: () => propsRef.current.onSus?.(),
+    });
+    news.demo = !!p.demo;
+    news.mottoSesli = ayarRef.current.haberMotto;
+    newsRef.current = news;
     ctl.space = sahneRef.current === 'lab' ? lab : brain;
     loadTextures();
     let cutout: PersonCutout | null = null, segLoading = false, uzOn = false;
     const size = () => {
       const W = window.innerWidth, H = window.innerHeight;
       fx.resize(W, H); hudFace.resize(W, H); lib.resize(W, H);
-      stars.resize(W, H); brain.resize(W, H); lab.resize(W, H); extra.resize(W, H);
+      stars.resize(W, H); brain.resize(W, H); lab.resize(W, H); extra.resize(W, H); news.resize(W, H);
       setDims({ W, H, vw: video.videoWidth || 1920, vh: video.videoHeight || 1080 });
     };
     size();
@@ -273,7 +310,7 @@ export default function HandControl(p: HandControlProps) {
       lib.setBooks(demoBooks, { genislik: demoShelf.frame.width, yukseklik: demoShelf.frame.height, kucukResim: thumbOf(demoShelf.frame) });
       demoJiggle.current = demoCam.jiggle;
     }
-    let lastMoved = false, libOn = true, sahneOn: 'lab' | 'gosteri' | 'ekstra' | null = null, sonYuz: FaceBox | null = null;
+    let lastMoved = false, libOn = true, sahneOn: 'lab' | 'gosteri' | 'ekstra' | null = null, sonYuz: FaceBox | null = null, hbOn = false;
     const demoFired = new Set<string>();
 
     const loop = () => {
@@ -294,9 +331,18 @@ export default function HandControl(p: HandControlProps) {
         if (sh === 'lab') lab.open(now);
         if (sh === 'ekstra') extra.open(now);
       }
+      // Haber modu: haber merkezi açılır (motto), büyü ve uzay efektleri kapanır
+      const hb = modRef.current === 'haber';
+      if (hb !== hbOn) {
+        hbOn = hb;
+        if (hb) { news.mottoSesli = ayarRef.current.haberMotto; news.open(now); lib.reset(); libOn = false; hudFace.clear(); }
+        else news.reset();
+      }
+      const ctlMod = hb ? 'haber' : uz ? 'uzay' : 'buyu';
+      if (ctl.mode !== ctlMod) ctl.setMode(ctlMod);
+      ctl.space = hb ? news : sahneOf(sh ?? 'lab');
       if (uz !== uzOn) {
         uzOn = uz;
-        ctl.setMode(uz ? 'uzay' : 'buyu');
         if (uz) { stars.warp(now); sfx.warp(); lib.reset(); libOn = false; hudFace.clear(); if (sh === 'lab') lab.open(now); if (sh === 'ekstra') extra.open(now); }
         else stars.clear();
       }
@@ -322,6 +368,13 @@ export default function HandControl(p: HandControlProps) {
         if (extra.numara === 'asteroit' && t > 3 && (t - 3) % 14 < 0.3 && !demoFired.has(`ast:${k}`)) { demoFired.add(`ast:${k}`); extra.command({ tip: 'sifirla' }, now); setTimeout(() => extra.command({ tip: 'ekstra', numara: 'asteroit' }, performance.now()), 400); }
         const j = Math.floor(t / 13), jk = `akd:${j}`;
         if (extra.numara === 'aykaradelik' && j >= 1 && !demoFired.has(jk)) { demoFired.add(jk); extra.command(j % 6 === 0 ? { tip: 'sifirla' } : { tip: 'ekstra', numara: 'aykaradelik', kutle: 'buyut' }, now); }
+      } else if (hb && p.demo && DEMO_HABER_ELLE) {
+        hands = []; step = '';
+      } else if (hb && p.demo) {
+        // Haber demosu: motto → karusel → kart çek → detay → karşılaştırma → iddia → sorular → sabah özeti
+        const d = demoNews((now - demoStart) / 1000, fx.W, fx.H, news);
+        hands = d.hands; step = d.step;
+        if (d.cmd && !demoFired.has(d.cmd.key)) { demoFired.add(d.cmd.key); void news.haber(d.cmd.cmd); }
       } else if (uz && p.demo) {
         const t = (now - demoStart) / 1000;
         const d = sh === 'lab' ? demoLabHands(t, fx.W, fx.H, lab) : demoSpaceHands(t, fx.W, fx.H);
@@ -373,8 +426,20 @@ export default function HandControl(p: HandControlProps) {
         }
         scene.listening = !!propsRef.current.listening;
       }
+      // Haber: kişi ayırma maskesi (arkadaki kartlar başınızın arkasında kalsın)
+      if (hb) {
+        if (!p.demo) {
+          if (!cutout && !segLoading) {
+            segLoading = true;
+            loadSegmenter().then(sg => { if (!alive) { sg.close(); return; } cutout = new PersonCutout(sg); }).catch(e => console.warn('[haber] segmentasyon yüklenemedi', e));
+          }
+          cutout?.update(video, now);
+          news.cutout = cutout; news.video = video;
+        }
+        news.listening = !!propsRef.current.listening;
+      }
       // Yüz: demoda sahte yüz; kamerada her 3. yeni karede algıla (el takibine yer kalsın), arada yumuşatılmış kutu
-      if (faceOn.current && !uz) {
+      if (faceOn.current && !uz && !hb) {
         if (p.demo) hudFace.update(demoFace((now - demoStart) / 1000, fx.W, fx.H), now);
         else if (fd && video.readyState >= 2 && ++faceTick % 3 === 0) {
           try { hudFace.update(detectFaces(fd, video, now, fx.W, fx.H), now); } catch (e) { console.warn('[el] yüz', e); }
@@ -384,7 +449,7 @@ export default function HandControl(p: HandControlProps) {
       ctl.ayar = ayarRef.current;
       const st = ctl.update(hands, now, dt);
       // Kitaplık ayardan kapatılınca (ya da uzay modunda) dışarıdaki kitap ve raf katmanı temizlenir
-      if (ctl.ayar.kitaplik && !uz) { libOn = true; lib.render(now); }
+      if (ctl.ayar.kitaplik && !uz && !hb) { libOn = true; lib.render(now); }
       else if (libOn) { libOn = false; lib.reset(); }
       if (lib.moved !== lastMoved) { lastMoved = lib.moved; setMoved(lib.moved); }
       frames++;
@@ -441,6 +506,8 @@ export default function HandControl(p: HandControlProps) {
       brainRef.current = null;
       extra.reset();
       extraRef.current = null;
+      news.dispose();
+      newsRef.current = null;
       lab.reset();
       labRef.current = null;
     };
@@ -576,6 +643,25 @@ export default function HandControl(p: HandControlProps) {
   }, [p.sahneIlerleme?.i, p.sahneIlerleme?.bitti]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { propsRef.current.onModeChange?.(mod); }, [mod]);
 
+  // Haber modu sesli komutları: mod burada, gerisi haber sahnesinde
+  const lastNewsCmd = useRef(0);
+  useEffect(() => {
+    const c = p.newsCmd;
+    if (!c || c.n === lastNewsCmd.current) return;
+    lastNewsCmd.current = c.n;
+    const cmd = c.cmd;
+    void Promise.resolve().then(() => {
+      if (cmd.tip === 'haber' && !cmd.ac) { setMod('buyu'); say('Haber merkezini kapattım efendim.'); return; }
+      // Haber modu henüz açılmadıysa: önce aç (motto başlar), komut açılıştan sonra çalışsın
+      if (modRef.current !== 'haber' || !newsRef.current?.acik) {
+        setMod('haber');
+        if (cmd.tip !== 'haber') setTimeout(() => void newsRef.current?.haber(cmd), 1300);
+        return;
+      }
+      void newsRef.current.haber(cmd);
+    });
+  }, [p.newsCmd]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Sunucuda kitaplık değişti (not eklendi, Ayarlar'dan düzenlendi): haritayı yenile
   useEffect(() => {
     if (!p.libraryKey || shelfDemo) return;
@@ -616,6 +702,15 @@ export default function HandControl(p: HandControlProps) {
       else if (e.code === 'KeyE') setAyarOpen(v => !v);
       else if (e.code === 'KeyK' && modRef.current === 'buyu') setEditing(v => !v);
       else if (e.code === 'KeyU') { setEditing(false); setMod(m => (m === 'uzay' ? 'buyu' : 'uzay')); }
+      else if (e.code === 'KeyN') { setEditing(false); setMod(m => (m === 'haber' ? 'buyu' : 'haber')); }
+      else if (modRef.current === 'haber' && newsRef.current && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', 'Backspace', 'KeyK', 'KeyI', 'KeyS', 'KeyO'].includes(e.code)) {
+        e.preventDefault();
+        const n = newsRef.current;
+        const cmd: HaberCmd | null = e.code === 'ArrowLeft' ? { tip: 'onceki' } : e.code === 'ArrowRight' ? { tip: 'sonraki' } : e.code === 'Enter' ? { tip: 'detay' } : e.code === 'Backspace' ? { tip: 'geri' }
+          : e.code === 'KeyK' ? { tip: 'karsilastir' } : e.code === 'KeyI' ? { tip: 'kontrol' } : e.code === 'KeyS' ? { tip: 'sorular' } : e.code === 'KeyO' ? { tip: 'sabah' } : null;
+        if (cmd) void n.haber(cmd);
+        else n.kategoriAdim(e.code === 'ArrowDown' ? 1 : -1);
+      }
       else if (e.code === 'KeyB' && modRef.current === 'uzay') setArka(a => (a === 'tam' ? 'katman' : 'tam'));
       else if (e.code === 'KeyJ' && demoJiggle.current) { jiggled.current = !jiggled.current; demoJiggle.current(jiggled.current); }
       else if (e.code === 'KeyC' && cams.length > 1) nextCam();
@@ -630,13 +725,14 @@ export default function HandControl(p: HandControlProps) {
 
   const st = stats.st;
   return (
-    <div className={'el-root' + (p.demo ? ' demo' : '') + (shelfDemo ? ' shelf' : '') + (mod === 'uzay' ? ` uzay ${p.demo && !DEMO_ODA ? 'tam' : arka}` : '') + (mod === 'uzay' && sahne === 'ekstra' && numara !== 'ay' ? ' ekstra' : '')}>
+    <div className={'el-root' + (p.demo ? ' demo' : '') + (shelfDemo ? ' shelf' : '') + (mod === 'uzay' ? ` uzay ${p.demo && !DEMO_ODA ? 'tam' : arka}` : '') + (mod === 'uzay' && sahne === 'ekstra' && numara !== 'ay' ? ' ekstra' : '') + (mod === 'haber' ? ' haber' : '') + (hud ? '' : ' temiz')}>
       <video ref={videoRef} className="el-video" playsInline muted />
       {/* Oda modunda videonun hemen üstünde sinematik karartma (yıldızların ve HUD'un altında) */}
       <div className="sp-grade" />
       <canvas ref={starsRef} className="sp-stars" />
       <canvas ref={shelfRef} className="el-shelf" />
       <canvas ref={spaceRef} className="sp-canvas" />
+      <div ref={newsStageRef} className="hb-stage" />
       <canvas ref={canvasRef} className="el-canvas" />
       <div ref={stageRef} className="lb-stage" />
       <canvas ref={faceRef} className="el-face" />
@@ -645,12 +741,13 @@ export default function HandControl(p: HandControlProps) {
         <>
           <i className="el-corner tl" /><i className="el-corner tr" /><i className="el-corner bl" /><i className="el-corner br" />
           <div className="el-top">
-            <span className="el-title">JARVIS · {mod === 'uzay' ? (sahne === 'lab' ? 'UZAY LABORATUVARI' : sahne === 'ekstra' ? 'UZAY · EKSTRA' : 'UZAY · GÖSTERİ') : 'EL KONTROLÜ'}</span>
+            <span className="el-title">JARVIS · {mod === 'haber' ? 'HABER MERKEZİ' : mod === 'uzay' ? (sahne === 'lab' ? 'UZAY LABORATUVARI' : sahne === 'ekstra' ? 'UZAY · EKSTRA' : 'UZAY · GÖSTERİ') : 'EL KONTROLÜ'}</span>
             <span className="el-chip">MOD: {st.mode.toLocaleUpperCase('tr')}</span>
             <span className="el-meta">{stats.fps} FPS · {st.hands.length} el{stats.delegate ? ` · ${stats.delegate}` : ''}{p.demo ? ' · DEMO' : ''}</span>
             {st.hands.map(h => <span key={h.id} className="el-meta">{GESTURE_LABEL[h.gesture]}</span>)}
             <span className="el-sp" />
             <button className={'el-btn' + (mod === 'uzay' ? ' on' : '')} onClick={() => { setEditing(false); setMod(m => (m === 'uzay' ? 'buyu' : 'uzay')); }} title="Uzay modu (U)">{mod === 'uzay' ? '✨ büyü' : '🪐 uzay'}</button>
+            <button className={'el-btn' + (mod === 'haber' ? ' on' : '')} onClick={() => { setEditing(false); setMod(m => (m === 'haber' ? 'buyu' : 'haber')); }} title="Haber modu (N)">{mod === 'haber' ? '✨ büyü' : '📰 haber'}</button>
             {mod === 'uzay' && (['lab', 'gosteri', 'ekstra'] as const).map(x => (
               <button key={x} className={'el-btn' + (sahne === x ? ' on' : '')} onClick={() => setSahne(x)} title="Sahne (G)">{x === 'lab' ? '🔬 laboratuvar' : x === 'gosteri' ? '🎆 gösteri' : '✨ ekstra'}</button>
             ))}
@@ -664,8 +761,8 @@ export default function HandControl(p: HandControlProps) {
             <button className="el-btn" onClick={p.onClose} title="Kapat (Esc)">✕</button>
           </div>
           {!st.mode.includes('taraması') && <div className="el-legend">
-            {(mod === 'uzay' ? (sahne === 'lab' ? LEGEND_LAB : sahne === 'ekstra' ? LEGEND_EKSTRA : LEGEND_UZAY) : st.mode.startsWith('kitap') ? LEGEND_KITAP : LEGEND).map(([g, t]) => <span key={g + t}><b>{g}</b> {t}</span>)}
-            <span className="el-keys">{mod === 'uzay' ? (sahne === 'ekstra' ? '1-5 numara · G sahne · T temiz çekim · L arayüz · B arka plan · U büyü · Esc çık' : sahne === 'lab' ? 'G gösteri · Z yakınlaş · Y yaşanabilir bölge · Boşluk durdur · T temiz çekim · L arayüz · B arka plan · U büyü · Esc çık' : 'G laboratuvar · U büyü modu · B arka plan · T temiz çekim · L arayüz · D iskelet · M ses · Esc çık') : 'U uzay · L arayüz · E efektler · F yüz kilidi · K kitaplık · D iskelet · M ses · Esc çık'}</span>
+            {(mod === 'haber' ? LEGEND_HABER : mod === 'uzay' ? (sahne === 'lab' ? LEGEND_LAB : sahne === 'ekstra' ? LEGEND_EKSTRA : LEGEND_UZAY) : st.mode.startsWith('kitap') ? LEGEND_KITAP : LEGEND).map(([g, t]) => <span key={g + t}><b>{g}</b> {t}</span>)}
+            <span className="el-keys">{mod === 'haber' ? '←/→ haber · ↑/↓ kategori · Enter detay · K karşılaştır · I iddia · S sorular · O sabah · ⌫ geri · T temiz çekim · N kapat · Esc çık' : mod === 'uzay' ? (sahne === 'ekstra' ? '1-5 numara · G sahne · T temiz çekim · L arayüz · B arka plan · U büyü · Esc çık' : sahne === 'lab' ? 'G gösteri · Z yakınlaş · Y yaşanabilir bölge · Boşluk durdur · T temiz çekim · L arayüz · B arka plan · U büyü · Esc çık' : 'G laboratuvar · U büyü modu · B arka plan · T temiz çekim · L arayüz · D iskelet · M ses · Esc çık') : 'U uzay · N haber · L arayüz · E efektler · F yüz kilidi · K kitaplık · D iskelet · M ses · Esc çık'}</span>
           </div>}
           {p.demo && stats.step && !st.mode.includes('taraması') && <div className="el-step">{stats.step}</div>}
         </>

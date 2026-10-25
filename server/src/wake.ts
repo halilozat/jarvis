@@ -21,6 +21,8 @@ export interface WakeConfig {
   rhythmOn: boolean;
   greetings: Record<GreetingPeriod, string>;
   briefOnWake: boolean;
+  /** Günün ilk (öğleden önce) uyanışında Haber Modu'nun sabah özeti açılsın */
+  sabahOzeti: boolean;
   /** İşlem olmazsa kaç dakikada uykuya geçsin (0 = kapalı) */
   idleMinutes: number;
 }
@@ -35,6 +37,7 @@ export const DEFAULT_WAKE: WakeConfig = {
   rhythmOn: false,
   greetings: { sabah: 'Günaydın efendim.', gun: 'İyi günler efendim.', aksam: 'İyi akşamlar efendim.' },
   briefOnWake: false,
+  sabahOzeti: false,
   idleMinutes: 5,
 };
 
@@ -63,6 +66,7 @@ export function mergeWake(prev: WakeConfig, p: any): WakeConfig {
       aksam: text(p.greetings?.aksam, prev.greetings.aksam),
     },
     briefOnWake: typeof p.briefOnWake === 'boolean' ? p.briefOnWake : prev.briefOnWake,
+    sabahOzeti: typeof p.sabahOzeti === 'boolean' ? p.sabahOzeti : prev.sabahOzeti ?? false,
     idleMinutes: 'idleMinutes' in p ? Math.round(clamp(p.idleMinutes, 0, 120, prev.idleMinutes)) : prev.idleMinutes,
   };
 }

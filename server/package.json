@@ -9,7 +9,8 @@
     "test": "tsx src/selftest.ts",
     "voices": "tsx src/voices.ts",
     "eleven": "tsx src/eleven-cli.ts",
-    "test:kitaplik": "tsx src/kitaplik-test.ts"
+    "test:kitaplik": "tsx src/kitaplik-test.ts",
+    "test:haber": "MOCK=1 tsx src/haber-test.ts"
   },
   "keywords": [],
   "author": "",

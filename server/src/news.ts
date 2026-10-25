@@ -1,24 +1,9 @@
 import Parser from 'rss-parser';
 import type { NewsItem } from './types.js';
 
-// Farklı yayın çizgilerinden kaynaklar. URL'ler değişebilir; `npm run test` hangilerinin çalıştığını gösterir.
-export const FEEDS: { source: string; url: string; category: string }[] = [
-  { source: 'BBC Türkçe', url: 'https://feeds.bbci.co.uk/turkce/rss.xml', category: 'gundem' },
-  { source: 'DW Türkçe', url: 'https://rss.dw.com/rdf/rss-tur-all', category: 'gundem' },
-  { source: 'Anadolu Ajansı', url: 'https://www.aa.com.tr/tr/rss/default?cat=guncel', category: 'gundem' },
-  { source: 'TRT Haber', url: 'https://www.trthaber.com/manset_articles.rss', category: 'gundem' },
-  { source: 'NTV', url: 'https://www.ntv.com.tr/gundem.rss', category: 'gundem' },
-  { source: 'NTV', url: 'https://www.ntv.com.tr/ekonomi.rss', category: 'ekonomi' },
-  { source: 'NTV', url: 'https://www.ntv.com.tr/teknoloji.rss', category: 'teknoloji' },
-  { source: 'NTV', url: 'https://www.ntv.com.tr/spor.rss', category: 'spor' },
-  { source: 'NTV', url: 'https://www.ntv.com.tr/dunya.rss', category: 'dunya' },
-  { source: 'NTV', url: 'https://www.ntv.com.tr/saglik.rss', category: 'saglik' },
-  { source: 'T24', url: 'https://t24.com.tr/rss', category: 'gundem' },
-  { source: 'Sözcü', url: 'https://www.sozcu.com.tr/feeds-rss-category-gundem', category: 'gundem' },
-  { source: 'Cumhuriyet', url: 'https://www.cumhuriyet.com.tr/rss/son_dakika.xml', category: 'gundem' },
-  { source: 'Sabah', url: 'https://www.sabah.com.tr/rss/gundem.xml', category: 'gundem' },
-  { source: 'Sabah', url: 'https://www.sabah.com.tr/rss/ekonomi.xml', category: 'ekonomi' },
-];
+// Kaynak listesi tek dosyada: newsSources.ts (elle düzenlenir)
+import { FEEDS, type Kategori } from './newsSources.js';
+export { FEEDS };
 
 const parser = new Parser({
   timeout: 8000,
@@ -31,6 +16,25 @@ const parser = new Parser({
     ],
   },
 });
+
+/**
+ * "gundem" beslemelerindeki haberin kategorisi: bağlantı adresindeki bölüm adından ("/ekonomi/", "/dunya-haberleri/").
+ * Bulunamazsa beslemenin kategorisi kalır.
+ */
+export function kategoriTahmin(url: string, besleme: Kategori): Kategori {
+  if (besleme !== 'gundem') return besleme;
+  const yol = (() => { try { return new URL(url).pathname.toLowerCase(); } catch { return ''; } })();
+  if (/\/(ekonomi|finans|piyasa|borsa|para)\b|ekonomi-haber/.test(yol)) return 'ekonomi';
+  if (/\/(dunya|world)\b|dunya-haber/.test(yol)) return 'dunya';
+  if (/\/(spor|futbol|basketbol)\b|spor-haber/.test(yol)) return 'spor';
+  if (/\/(teknoloji|bilim-teknoloji|tekno)\b|teknoloji-haber/.test(yol)) return 'teknoloji';
+  if (/\/(bilim|saglik|uzay)\b|saglik-haber|bilim-haber/.test(yol)) return 'bilim';
+  return 'gundem';
+}
+
+/** Tazelenen tarama dinleyicileri (haber arşivi) */
+const dinleyiciler: ((items: NewsItem[]) => void)[] = [];
+export const onNewsRefresh = (f: (items: NewsItem[]) => void) => { dinleyiciler.push(f); };
 
 /** Kaynak bazında son tarama: o kaynağın en az bir beslemesi cevap verdi mi, kaç haber geldi */
 export interface SourceStatus { name: string; ok: boolean; count: number }
@@ -66,17 +70,20 @@ async function fetchAll(): Promise<{ items: NewsItem[]; scanned: number; sources
   for (const r of results) {
     if (r.status !== 'fulfilled') continue;
     const { f, feed } = r.value;
-    for (const it of feed.items.slice(0, 15)) {
+    for (const it of feed.items.slice(0, 25)) {
       const title = stripHtml(it.title);
       if (!title) continue;
+      // Aynı kaynağın iki beslemesinde (gündem + ekonomi) aynı haber: bir kez
+      const link = (it.link || '').trim();
+      if (link && items.some(x => x.url === link)) continue;
       items.push({
         id: '',
         title,
         summary: stripHtml(it.contentSnippet || it.content || it.summary || '').slice(0, 400),
-        category: f.category,
+        category: kategoriTahmin(link, f.category),
         source: f.source,
         published_at: new Date(it.isoDate || it.pubDate || Date.now()).toISOString(),
-        url: it.link || '',
+        url: link,
         image_url: pickImage(it),
       });
     }
@@ -92,6 +99,7 @@ async function fetchAll(): Promise<{ items: NewsItem[]; scanned: number; sources
   // Hiçbir kaynak cevap vermediyse (internet yok) boş sonucu önbelleğe alma; bir sonraki istekte tekrar dene.
   if (scanned === 0) return { items, scanned, sources };
   cache = { at: Date.now(), items, scanned, sources };
+  for (const f of dinleyiciler) { try { f(items); } catch (e) { console.warn('Haber dinleyicisi:', e); } }
   return cache;
 }
 

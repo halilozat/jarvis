@@ -68,7 +68,7 @@ export type ServerEvent =
   | { type: 'settings'; photoMode: 'haber' | 'video'; voice: VoiceSel; sfx: boolean; wake: WakeConfig; ui: UiMode }
   | { type: 'attention'; ms: number; by: Device }
   | { type: 'attention_end' }
-  | { type: 'wake'; at: number; greeting: { period: GreetingPeriod; text: string }; greeter: Device; brief: boolean; voice: VoiceSel; via: string }
+  | { type: 'wake'; at: number; greeting: { period: GreetingPeriod; text: string }; greeter: Device; brief: boolean; sabah?: boolean; voice: VoiceSel; via: string }
   | { type: 'sleep' }
   | { type: 'dashboard'; data: Dashboard }
   | { type: 'cleared' }
@@ -92,6 +92,7 @@ export interface WakeConfig {
   rhythmOn: boolean;
   greetings: Record<GreetingPeriod, string>;
   briefOnWake: boolean;
+  sabahOzeti?: boolean;
   idleMinutes: number;
 }
 export interface Health {

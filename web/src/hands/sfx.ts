@@ -159,6 +159,23 @@ export class Sfx {
   /** Patlama */
   boom() { this.tone(140, 1.2, 0.8, 'sine', 32); this.burst(1.4, 1800, 120, 0.9, 'lowpass', 0.6); this.burst(0.25, 4000, 1500, 0.4, 'highpass', 0.6); }
   /** Basılı tutma tamamlandı: HUD onayı */
+  // Haber Modu
+  /** Kanal jeneriği: iki akor ve parıltı */
+  jenerik() {
+    [[220, 277.2, 329.6], [246.9, 311.1, 370]].forEach((ak, j) => ak.forEach((f, i) => this.tone(f, 0.55, 0.05, 'sawtooth', undefined, j * 0.42 + i * 0.012)));
+    this.tone(880, 1.1, 0.04, 'sine', 1760, 0.84);
+    this.burst(0.9, 6000, 9000, 0.06, 'highpass', 1, 0.84);
+  }
+  /** Bölüm geçişi: ışık süpürmesi */
+  stinger() { this.burst(0.45, 800, 6000, 0.18, 'bandpass', 1.4); this.tone(523.3, 0.18, 0.05, 'square', undefined, 0.12); this.tone(784, 0.25, 0.05, 'square', undefined, 0.2); }
+  kartKaydir() { this.burst(0.28, 1200, 4200, 0.16, 'bandpass', 1.1); }
+  kartCek() { this.tone(330, 0.3, 0.07, 'triangle', 660); this.burst(0.25, 3000, 900, 0.1, 'lowpass', 1); }
+  yelpaze() { for (let i = 0; i < 7; i++) this.burst(0.06, 2500 + i * 300, 1800, 0.08, 'bandpass', 2, i * 0.045); }
+  terazi() { this.tone(1320, 0.35, 0.06, 'triangle'); this.tone(1980, 0.3, 0.04, 'sine', undefined, 0.16); this.tone(990, 0.4, 0.05, 'triangle', undefined, 0.34); }
+  vurgu() { this.tone(2400, 0.035, 0.035, 'square'); }
+  soru() { [660, 880, 1100].forEach((f, i) => this.tone(f, 0.16, 0.05, 'sine', f * 1.25, i * 0.11)); }
+  damga() { this.tone(110, 0.2, 0.18, 'sine', 60); this.burst(0.1, 2400, 700, 0.12, 'lowpass', 1); }
+
   confirm() { this.tone(880, 0.12, 0.18, 'square'); this.tone(1320, 0.22, 0.14, 'square', undefined, 0.09); }
   /** Basılı tutma ilerlerken tık */
   tick(p: number) { this.tone(500 + p * 700, 0.05, 0.05, 'sine'); }
