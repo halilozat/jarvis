@@ -5,12 +5,15 @@
 // - Tamamlama: sabit kameranın taramasında adı okunamayan sırtlar, o bölümün kamera kırpıntısı (numaralı kutular
 //   çizili) ve yakın çekim listesiyle görüntü modeline sorulur. Model YALNIZCA listedeki adlardan birini seçebilir;
 //   emin değilse null. Kod da denetler: ad listede mi, bu kitap başka bir sırta zaten yerleşmiş mi.
-// - Telefon kamerası: karede görünen kayıtlı kitaplar (yalnızca kullanıcının kitapları) kutularıyla.
+// - Tahmini yerleştirme: hâlâ adsız kalan sırtlara rafta yeri olmayan kayıtlı kitaplar (model tahmini, sonra
+//   eklenme sırası); kitap "tahmini" işaretlenir, sonraki taramada adı okunursa düzelir.
+// - Telefon kamerası: karede görünen kayıtlı kitaplar kutularıyla. Kitaplıkta olmayan ama adı net okunan (emin ≥
+//   YENI_EMIN) kitaplar kitaplığa eklenir (rafta yeri olmadan); aynı ad ikinci kez eklenmez.
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Router } from 'express';
-import { BOLUM_SAYISI, DATA_DIR, deps, foldTitle, parseDataUrl, readLibrary, str, validBox, writeLibrary, type Bolum, type Kitap, type Kutu } from './library.js';
+import { addBook, BOLUM_SAYISI, DATA_DIR, deps, foldTitle, normTitle, parseDataUrl, readLibrary, str, validBox, writeLibrary, type Bolum, type Kitap, type Kutu } from './library.js';
 
 const FOTO_DIR = path.join(DATA_DIR, 'kitaplik-bolumler');
 const fotoFile = (bolum: number, id: string) => path.join(FOTO_DIR, `${bolum}-${id.replace(/[^\w-]/g, '')}.jpg`);
@@ -180,36 +183,137 @@ export async function tamamla(no: number, jpeg: Buffer, kutular: { n: number; id
   return { tamamlanan, kitaplik: k };
 }
 
+// ———————————————————— Tahmini yerleştirme ————————————————————
+
+export const yerlestirPrompt = (n: number, adlar: string[]) =>
+  `Bu görüntü, sabit bir kameradan uzaktan görülen bir kitaplık. Görüntüde 1'den ${n}'e kadar NUMARALI kutular var; her biri adı okunamamış bir kitap sırtı.\n` +
+  'Kullanıcının kitaplığında olup rafta yeri henüz bilinmeyen kitaplar aşağıda (kabaca rafta eklendikleri sırayla):\n' +
+  `${adlar.map(a => `"${a}"`).join(', ')}\n` +
+  'Her numaralı kutu için listedeki kitaplardan EN OLASI olanı seç. Okunabilen harfler, kelime uzunluğu, sırtın rengi ve kalınlığı, ' +
+  'yayınevi logosu, aynı serinin yan yana durması ve listedeki sıra ipucudur. Tam emin olmasan da en iyi tahminini ver.\n' +
+  'YALNIZCA bir JSON dizisi döndür: [{"n": 1, "ad": "listedeki ad, yazıldığı gibi", "emin": 0.0}]\n' +
+  '- ad YALNIZCA listedeki adlardan biri olabilir. Bir kitabı yalnızca bir kutuya ver.\n' +
+  '- emin: tahminin ne kadar güçlü (0-1). Hiçbir ipucu yoksa o kutuyu yazma.';
+
+/** Model tahminleri: listedeki adlar, bir kitap tek kutuya, bir kutu tek kitaba (en güçlü tahmin önce) */
+export function parseYerlestir(text: string, n: number, adlar: string[]): { n: number; ad: string; emin: number }[] {
+  const izinli = new Map(adlar.map(a => [foldTitle(a), a]));
+  const adaylar: { n: number; ad: string; emin: number }[] = [];
+  for (const it of jsonDizi(text)) {
+    if (!it || typeof it !== 'object') continue;
+    const o = it as Record<string, unknown>;
+    const no = Math.round(Number(o.n));
+    const ad = typeof o.ad === 'string' ? izinli.get(foldTitle(o.ad)) : undefined;
+    if (!(no >= 1 && no <= n) || !ad) continue;
+    adaylar.push({ n: no, ad, emin: typeof o.emin === 'number' ? Math.max(0, Math.min(1, o.emin)) : 0.3 });
+  }
+  const kitapDolu = new Set<string>(), kutuDolu = new Set<number>(), out: typeof adaylar = [];
+  for (const a of adaylar.sort((p, q) => q.emin - p.emin)) {
+    const key = foldTitle(a.ad);
+    if (kitapDolu.has(key) || kutuDolu.has(a.n)) continue;
+    kitapDolu.add(key); kutuDolu.add(a.n); out.push(a);
+  }
+  return out.sort((p, q) => p.n - q.n);
+}
+
+/**
+ * Taramadan (ve bölüm tamamlamasından) sonra hâlâ adsız kalan sırtlara, rafta yeri olmayan kayıtlı kitapları
+ * TAHMİNİ yerleştir. kutular: görüntüde çizili numaralar → haritadaki adsız sırtlar, okuma sırasıyla (raf raf, soldan
+ * sağa). Önce görüntü modelinin tahmini; model yerleştiremediği kitaplar kalan sırtlara eklenme sırasıyla dağıtılır
+ * (telefonla raf raf eklendiği için sıra rafın sırasına yakındır). Kayıt (notlar, özet) sırta taşınır, yer tutucu
+ * silinir; kitap "tahmini" işaretlenir.
+ */
+export async function tahminiYerlestir(jpeg: Buffer | null, kutular: { n: number; id: string }[]) {
+  const k0 = readLibrary();
+  const yersiz = k0.kitaplar.filter(b => b.ad && !b.kutu && !b.rafDisi);
+  if (!yersiz.length || !kutular.length) return { yerlesen: [], kitaplik: k0 };
+  const adlar = yersiz.map(b => b.ad!).slice(0, 400);
+  let tahmin: { n: number; ad: string; emin: number }[] = [];
+  if (jpeg) {
+    try { tahmin = parseYerlestir(await deps.vision(jpeg.toString('base64'), yerlestirPrompt(kutular.length, adlar)), kutular.length, adlar); }
+    catch (e) { console.warn('[kitaplık] tahmini yerleştirme: model', (e as Error).message); }
+  }
+  const k = readLibrary();
+  const yerlesen: { id: string; ad: string; emin: number; sirayla: boolean }[] = [];
+  const dolu = new Set<number>();
+  const tasi = (no: number, kayit: Kitap, emin: number, sirayla: boolean) => {
+    const yer = k.kitaplar.find(x => x.id === kutular.find(y => y.n === no)?.id);
+    if (!yer || yer.ad || !yer.kutu || kayit.kutu) return false; // bu arada adlandırılmış ya da kitap yerleşmiş
+    Object.assign(kayit, { kutu: yer.kutu, emin, tahmini: true });
+    // Yer tutucunun notu yoksa silinir (notlu bir yer tutucu kalır, yalnızca sırtı kayda geçer)
+    if (!yer.notlar.length && !yer.alintilar.length) k.kitaplar = k.kitaplar.filter(x => x.id !== yer.id);
+    else yer.kutu = null;
+    dolu.add(no);
+    yerlesen.push({ id: kayit.id, ad: kayit.ad!, emin, sirayla });
+    return true;
+  };
+  const kayitBul = (ad: string) => k.kitaplar.find(x => x.ad && !x.kutu && !x.rafDisi && foldTitle(x.ad) === foldTitle(ad));
+  for (const t of tahmin) { const kayit = kayitBul(t.ad); if (kayit) tasi(t.n, kayit, t.emin, false); }
+  // Kalanlar: eklenme sırasıyla boş sırtlara (okuma sırası)
+  const kalanKutu = kutular.map(x => x.n).filter(n => !dolu.has(n)).sort((p, q) => p - q);
+  const kalanKitap = k.kitaplar.filter(x => x.ad && !x.kutu && yersiz.some(y => y.id === x.id));
+  for (const no of kalanKutu) {
+    const kayit = kalanKitap.shift();
+    if (!kayit) break;
+    if (!tasi(no, kayit, 0, true)) kalanKitap.unshift(kayit);
+  }
+  writeLibrary(k);
+  console.log(`[kitaplık] tahmini yerleştirme · ${kutular.length} adsız sırt · ${yersiz.length} yersiz kitap · ${yerlesen.filter(x => !x.sirayla).length} model tahmini · ${yerlesen.filter(x => x.sirayla).length} sırayla`);
+  return { yerlesen, kitaplik: k };
+}
+
 // ———————————————————— Telefon kamerası ————————————————————
 
 export const kameraPrompt = (adlar: string[]) =>
   'Bu, bir kitaplığın telefonla çekilmiş fotoğrafı. Aşağıda kullanıcının kitaplığındaki kitapların listesi var.\n' +
-  'Fotoğrafta sırtı ya da kapağı görünen ve adını OKUYABİLDİĞİN kitaplardan YALNIZCA listede olanları bul.\n' +
-  'YALNIZCA bir JSON dizisi döndür: [{"ad": "listedeki ad, yazıldığı gibi", "kutu": [ymin, xmin, ymax, xmax], "emin": 0.0}]\n' +
+  'Fotoğrafta sırtı ya da kapağı görünen ve adını OKUYABİLDİĞİN her kitabı bul.\n' +
+  'YALNIZCA bir JSON dizisi döndür: [{"ad": "kitabın adı", "yazar": "yazarı ya da null", "yeni": false, "kutu": [ymin, xmin, ymax, xmax], "emin": 0.0}]\n' +
+  '- Kitap listede varsa ad listedeki gibi yazılır ve yeni: false olur.\n' +
+  '- Listede yoksa ad sırtta/kapakta yazdığı gibi (yayınevi adı değil, kitabın adı), yazar sırtta yazıyorsa o, yeni: true.\n' +
   '- kutu: o kitabın görünen sırtını ya da kapağını saran dikdörtgen, 0-1000 arası normalize.\n' +
-  '- Listede olmayan kitabı yazma. Okuyamadığın kitabı tahmin etme.\n' +
-  `Liste: ${adlar.map(a => `"${a}"`).join(', ')}`;
+  '- emin: adı ne kadar net okuduğun. Okuyamadığın kitabı tahmin etme, yazma.\n' +
+  (adlar.length ? `Liste: ${adlar.map(a => `"${a}"`).join(', ')}` : 'Liste: (boş)');
 
-export function parseKamera(text: string, kitaplar: Kitap[]): { id: string; ad: string; yazar: string | null; kutu: Kutu; emin: number }[] {
+export interface KameraBulunan { id: string; ad: string; yazar: string | null; kutu: Kutu; emin: number; yeni?: boolean }
+/** Yeni kitap ancak bu kadar net okunduysa eklenir (yanlış okunan ad kitaplığa girmesin) */
+export const YENI_EMIN = 0.75;
+
+/** Kayıtlı kitaplar (id'siyle) ve kitaplıkta olmayan, net okunan yeni adlar (id boş) */
+export function parseKamera(text: string, kitaplar: Kitap[]): { bulunan: KameraBulunan[]; yeniler: Omit<KameraBulunan, 'id'>[] } {
   const adla = new Map(kitaplar.filter(b => b.ad).map(b => [foldTitle(b.ad!), b]));
-  const out: { id: string; ad: string; yazar: string | null; kutu: Kutu; emin: number }[] = [];
+  const normla = new Map(kitaplar.filter(b => b.ad).map(b => [normTitle(b.ad!), b]));
+  const bulunan: KameraBulunan[] = [], yeniler: Omit<KameraBulunan, 'id'>[] = [];
   for (const it of jsonDizi(text).slice(0, 120)) {
     if (!it || typeof it !== 'object') continue;
     const o = it as Record<string, unknown>;
-    const b = typeof o.ad === 'string' ? adla.get(foldTitle(o.ad)) : undefined;
+    const ad = str(o.ad, 160);
     const k = Array.isArray(o.kutu) && o.kutu.length === 4 && o.kutu.every(v => typeof v === 'number' && v >= 0 && v <= 1000) ? validBox((o.kutu as number[]).map(v => v / 1000)) : null;
     const emin = typeof o.emin === 'number' ? o.emin : 0.5;
-    if (!b || !k || emin < 0.5 || out.some(x => x.id === b.id)) continue;
-    out.push({ id: b.id, ad: b.ad!, yazar: b.yazar, kutu: k, emin });
+    if (!ad || !k || emin < 0.5) continue;
+    const b = adla.get(foldTitle(ad)) ?? normla.get(normTitle(ad));
+    if (b) {
+      if (!bulunan.some(x => x.id === b.id)) bulunan.push({ id: b.id, ad: b.ad!, yazar: b.yazar, kutu: k, emin });
+    } else if (emin >= YENI_EMIN && ad.replace(/[^\p{L}\p{N}]/gu, '').length >= 2 && !yeniler.some(x => foldTitle(x.ad) === foldTitle(ad))) {
+      yeniler.push({ ad, yazar: str(o.yazar, 120), kutu: k, emin, yeni: true });
+    }
   }
-  return out;
+  return { bulunan, yeniler };
 }
 
-export async function kameraTani(jpeg: Buffer) {
+/** Karede görünen kayıtlı kitaplar; kitaplıkta olmayan ama net okunanlar kitaplığa eklenir (rafta yeri olmadan) */
+export async function kameraTani(jpeg: Buffer): Promise<{ bulunan: KameraBulunan[]; eklenen: Kitap[] }> {
   const kitaplar = readLibrary().kitaplar.filter(b => b.ad);
-  if (!kitaplar.length) return { bulunan: [] };
   const text = await deps.vision(jpeg.toString('base64'), kameraPrompt(kitaplar.slice(0, 400).map(b => b.ad!)));
-  return { bulunan: parseKamera(text, kitaplar) };
+  const { bulunan, yeniler } = parseKamera(text, kitaplar);
+  const eklenen: Kitap[] = [];
+  for (const y of yeniler.slice(0, 40)) {
+    const r = addBook(y.ad, y.yazar);
+    if ('hata' in r) continue;
+    if (r.yeni) eklenen.push(r.kitap);
+    if (!bulunan.some(x => x.id === r.kitap.id)) bulunan.push({ ...y, id: r.kitap.id, ad: r.kitap.ad!, yazar: r.kitap.yazar, yeni: r.yeni });
+  }
+  if (bulunan.length || eklenen.length) console.log(`[kitaplık] telefon kamerası · ${bulunan.length} kitap · ${eklenen.length} yeni eklendi`);
+  return { bulunan, eklenen };
 }
 
 // ———————————————————— HTTP ————————————————————
@@ -262,7 +366,18 @@ export function libraryPartsRouter(): Router {
     catch (e) { res.status(502).json({ error: `Tamamlanamadı: ${String((e as Error).message).slice(0, 120)}` }); }
   });
 
-  // Telefon kamerası: karede görünen kayıtlı kitaplar
+  // Tahmini yerleştirme: adsız sırtlar (numaralı görüntü) → rafta yeri olmayan kayıtlı kitaplar
+  r.post('/api/kitaplik/yerlestir', async (req, res) => {
+    const img = parseDataUrl(req.body?.resim);
+    const kutular = Array.isArray(req.body?.kutular)
+      ? (req.body.kutular as unknown[]).slice(0, 300).flatMap((x: any, i) => (typeof x?.id === 'string' ? [{ n: Number(x.n) || i + 1, id: x.id }] : []))
+      : [];
+    if (!kutular.length || (img && img.length > 8e6)) return res.status(400).json({ error: 'kutular gerekli ([{ n, id }]), resim isteğe bağlı' });
+    try { res.json(await tahminiYerlestir(img, kutular)); }
+    catch (e) { res.status(502).json({ error: `Yerleştirilemedi: ${String((e as Error).message).slice(0, 120)}` }); }
+  });
+
+  // Telefon kamerası: karede görünen kayıtlı kitaplar; net okunan yeni kitaplar eklenir
   r.post('/api/kitaplik/kamera', async (req, res) => {
     const img = parseDataUrl(req.body?.resim);
     if (!img || img.length > 6e6) return res.status(400).json({ error: 'resim (JPEG data URL) gerekli' });

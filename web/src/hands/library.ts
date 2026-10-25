@@ -217,10 +217,12 @@ interface ScanAnim {
   belirsiz: number;
   error: string | null;
   /** Bölüm listeleriyle tamamlama: bekliyorken tarama sonucu ekranda kalır; bitince tamamlanan sırtlar yeşil parlar */
-  tamam?: { at: number; bekliyor: boolean; list: { id: string; ad: string; bolum: number }[] };
+  /** tur: 'bolum' (bölüm listelerinden, yeşil) ya da 'tahmin' (kayıtlı kitaplar tahmini yerleşti, mor) */
+  tamam?: { at: number; bekliyor: boolean; tur: 'bolum' | 'tahmin'; list: { id: string; ad: string; bolum: number }[] };
 }
 
 const YESIL = '125,255,176';
+const MOR = '190,150,255';
 
 /** Sesle eklenen kayıt: kalemle yazılır */
 export type KalemKaydi = { tip: 'not'; metin: string } | { tip: 'alinti'; metin: string } | { tip: 'durum'; durum: Kitap['durum'] } | { tip: 'sayfa'; sayfa: number; toplam?: number };
@@ -956,12 +958,12 @@ export class Library {
   }
   scanFail(msg: string) { if (this.scan) { this.scan.error = msg; this.scan.doneAt = performance.now(); } }
   /** Bölüm listeleriyle tamamlama başladı: tarama sonucu ekranda kalır */
-  scanCompleting() { if (this.scan && !this.scan.error) this.scan.tamam = { at: performance.now(), bekliyor: true, list: [] }; }
-  /** Tamamlama bitti: tamamlanan sırtlar yeşil parlar, adları yazılır */
-  scanCompleted(list: { id: string; ad: string; bolum: number }[], books: Kitap[]) {
+  scanCompleting(tur: 'bolum' | 'tahmin' = 'bolum') { if (this.scan && !this.scan.error) this.scan.tamam = { at: performance.now(), bekliyor: true, tur, list: [] }; }
+  /** Tamamlama bitti: tamamlanan sırtlar yeşil (tahmini yerleşenler mor) parlar, adları yazılır */
+  scanCompleted(list: { id: string; ad: string; bolum: number; tahmini?: boolean }[], books: Kitap[]) {
     const s = this.scan;
     if (!s) return;
-    s.tamam = { at: performance.now(), bekliyor: false, list };
+    s.tamam = { at: performance.now(), bekliyor: false, tur: list.some(x => x.tahmini) || s.tamam?.tur === 'tahmin' ? 'tahmin' : 'bolum', list };
     s.books = books;
     s.belirsiz = books.filter(b => b.kutu && !b.ad).length;
     if (list.length) this.sfx.scanBeam?.(1.2);
@@ -1184,17 +1186,19 @@ export class Library {
         // Sonuç kısa süre kalır (tamamlama sürerken kalır); bir kitap seçilince hemen çekilir (etiketle çakışmasın)
         const fade = this.faz !== 'bos' ? 0 : lineX === null ? clamp(1 - (now - bitis) / 1800, 0, 1) : 1;
         if (fade <= 0) continue;
-        // Bölüm listesinden tamamlanan: yeşil parıltı, adı sırayla yazılır, üstünde bölüm numarası
+        // Bölüm listesinden tamamlanan: yeşil parıltı, adı sırayla yazılır, üstünde bölüm numarası.
+        // Tahmini yerleşen: mor, adın önünde "≈", üstünde "TAHMİN"
         const ti = s.tamam && !s.tamam.bekliyor ? s.tamam.list.findIndex(x => x.id === b.id) : -1;
+        const TC = s.tamam?.tur === 'tahmin' ? MOR : YESIL;
         if (ti >= 0) {
           const tt = clamp((now - s.tamam!.at - ti * 120) / 800, 0, 1);
           if (tt > 0) {
             g.save();
             g.globalAlpha = fade;
-            g.fillStyle = `rgba(${YESIL},${0.12 + (1 - tt) * 0.45})`;
+            g.fillStyle = `rgba(${TC},${0.12 + (1 - tt) * 0.45})`;
             g.fillRect(r.x, r.y, r.w, r.h);
-            this.outline(g, r, YESIL, 0.6 + 0.4 * (1 - tt));
-            const ad = b.ad!.toLocaleUpperCase('tr');
+            this.outline(g, r, TC, 0.6 + 0.4 * (1 - tt));
+            const ad = (s.tamam!.tur === 'tahmin' ? '≈ ' : '') + b.ad!.toLocaleUpperCase('tr');
             const yazilan = ad.slice(0, Math.ceil(ad.length * tt));
             g.translate(r.x + r.w / 2, r.y + 4);
             g.rotate(Math.PI / 2);
@@ -1202,12 +1206,12 @@ export class Library {
             g.textBaseline = 'middle';
             g.fillStyle = 'rgba(0,0,0,0.7)';
             g.fillRect(-2, -clamp(r.w * 0.35, 6, 10), Math.min(g.measureText(yazilan).width, r.h - 8) + 4, clamp(r.w * 0.7, 12, 20));
-            g.fillStyle = `rgb(${YESIL})`;
+            g.fillStyle = `rgb(${TC})`;
             g.fillText(yazilan, 0, 1, r.h - 8);
             g.restore();
             g.save(); g.globalAlpha = fade * tt;
             g.font = `700 11px Rajdhani, sans-serif`; g.textAlign = 'center';
-            g.fillStyle = `rgb(${YESIL})`; g.fillText(`B${s.tamam!.list[ti].bolum}`, r.x + r.w / 2, r.y - 6);
+            g.fillStyle = `rgb(${TC})`; g.fillText(s.tamam!.tur === 'tahmin' ? '≈' : `B${s.tamam!.list[ti].bolum}`, r.x + r.w / 2, r.y - 6);
             g.restore();
             continue;
           }
@@ -1239,8 +1243,9 @@ export class Library {
         const a = clamp(1 - (now - bitis - 2500) / 1500, 0, 1);
         if (a <= 0) { this.scan = null; return; }
         g.save(); g.globalAlpha = a;
-        if (s.tamam?.bekliyor) this.banner(g, `${s.bulunan} KİTAP TANINDI · BELİRSİZLER BÖLÜM LİSTELERİYLE TAMAMLANIYOR ${'·'.repeat(1 + Math.floor(now / 400) % 3)}`, YESIL, 70);
-        else this.banner(g, `${s.bulunan} KİTAP TANINDI${s.tamam?.list.length ? ` · ${s.tamam.list.length} BÖLÜM LİSTESİNDEN` : ''}${s.belirsiz ? ` · ${s.belirsiz} BELİRSİZ` : ''}`, s.tamam?.list.length ? YESIL : CYAN, 70);
+        const nokta = '·'.repeat(1 + Math.floor(now / 400) % 3);
+        if (s.tamam?.bekliyor) this.banner(g, s.tamam.tur === 'tahmin' ? `${s.bulunan} KİTAP TANINDI · KAYITLI KİTAPLAR TAHMİNEN YERLEŞTİRİLİYOR ${nokta}` : `${s.bulunan} KİTAP TANINDI · BELİRSİZLER BÖLÜM LİSTELERİYLE TAMAMLANIYOR ${nokta}`, s.tamam.tur === 'tahmin' ? MOR : YESIL, 70);
+        else this.banner(g, `${s.bulunan} KİTAP TANINDI${s.tamam?.list.length ? ` · ${s.tamam.list.length} ${s.tamam.tur === 'tahmin' ? 'TAHMİNEN YERLEŞTİ' : 'BÖLÜM LİSTESİNDEN'}` : ''}${s.belirsiz ? ` · ${s.belirsiz} BELİRSİZ` : ''}`, s.tamam?.list.length ? (s.tamam.tur === 'tahmin' ? MOR : YESIL) : CYAN, 70);
         g.restore();
       }
     } else {

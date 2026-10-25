@@ -156,7 +156,8 @@ YALNIZCA JSON: {"ozet": "...", "oneriler": [{"ad": "...", "yazar": "...", "neden
 }
 
 /** Öneriyi kitaplığa ekle (okunacaklar) */
-export function oneriyiEkle(ad: string, yazar: string) { return addBook(ad, yazar); }
+/** Öneri okuma listesine eklenir: henüz rafta değil (tahmini yerleştirmede bir sırta konmaz) */
+export function oneriyiEkle(ad: string, yazar: string) { return addBook(ad, yazar, { rafDisi: true }); }
 
 // ———————————————————— Son sonuçlar (Kitaplığım → Öneriler) ————————————————————
 

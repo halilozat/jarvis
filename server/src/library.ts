@@ -45,6 +45,11 @@ export interface Kitap {
   bolum?: number;
   /** Adı kamera taramasında bölüm listesinden tamamlandı */
   tamamlandi?: boolean;
+  /** Rafta yeri tahmini: sırtı okunamadı, kayıtlı kitap olasılığa (ya da eklenme sırasına) göre yerleştirildi.
+   *  Sonraki taramada sırtın adı okunursa düzelir; elle düzeltince kalkar. */
+  tahmini?: boolean;
+  /** Rafta değil (öneriden okuma listesine eklendi): tahmini yerleştirmede bir sırta konmaz */
+  rafDisi?: boolean;
   /** "Okundu" olduğu an (istatistik: bu yıl okunanlar) */
   bittiAt?: string;
   /** Kayıt geçmişi (Kitaplığım'daki zaman çizelgesi): not, alıntı, durum ve sayfa değişiklikleri */
@@ -176,6 +181,9 @@ function clean(b: any, prev?: Kitap): Kitap {
     jarvis: prev?.jarvis,
     bolum: b && 'bolum' in b ? (posInt(b.bolum, BOLUM_SAYISI) ?? undefined) : prev?.bolum,
     tamamlandi: prev?.tamamlandi,
+    rafDisi: prev?.rafDisi,
+    // Ayar modunda adı ya da yeri elle değişen kitabın yeri artık tahmini değil
+    tahmini: prev?.tahmini && b?.elle !== true && (!(b && 'ad' in b) || str(b.ad, 160) === prev.ad) ? true : undefined,
     bittiAt: prev?.bittiAt,
     kayitlar: prev?.kayitlar,
   };
@@ -252,19 +260,21 @@ export function mergeScan(old: Kitap[], found: Bulunan[]): Kitap[] {
   const out: Kitap[] = found.map(f => {
     let hit = f.ad ? old.find(o => !used.has(o.id) && o.ad && foldTitle(o.ad) === foldTitle(f.ad!)) : undefined;
     // Model adı okuyamadı ama bu yerde elle adı yazılmış bir kitap vardı
-    if (!hit) hit = old.find(o => !used.has(o.id) && o.kutu && iou(o.kutu, f.kutu) > 0.5 && (o.elle || !f.ad));
+    // (Tahmini yer elle düzeltme sayılmaz: sırtın gerçek adı okunduysa tahmin bırakılır)
+    if (!hit) hit = old.find(o => !used.has(o.id) && o.kutu && iou(o.kutu, f.kutu) > 0.5 && ((o.elle && !o.tahmini) || !f.ad));
     if (hit) {
       used.add(hit.id);
       const keepName = hit.elle || !f.ad;
-      return { ...hit, ad: keepName ? hit.ad : f.ad, yazar: keepName ? hit.yazar : f.yazar ?? hit.yazar, kutu: f.kutu, emin: f.emin };
+      // Ad bu sırtta okunduysa yeri artık tahmini değil; okunamadıysa tahmini yer korunur
+      return { ...hit, ad: keepName ? hit.ad : f.ad, yazar: keepName ? hit.yazar : f.yazar ?? hit.yazar, kutu: f.kutu, emin: f.emin, tahmini: f.ad ? undefined : hit.tahmini };
     }
     return { id: randomUUID().slice(0, 8), ad: f.ad, yazar: f.yazar, kutu: f.kutu, kapak: null, ozet: null, notlar: [], alintilar: [], durum: 'okunacak', emin: f.emin };
   });
-  for (const o of old) if (!used.has(o.id) && (o.ad || o.notlar.length)) out.push({ ...o, kutu: null });
+  for (const o of old) if (!used.has(o.id) && (o.ad || o.notlar.length)) out.push({ ...o, kutu: null, tahmini: undefined });
   return out;
 }
 
-const SCAN_PROMPT =
+const SCAN_PROMPT_TABAN =
   'Bu, sabit bir kameradan çekilmiş bir kitaplık görüntüsünün bir parçası. Görünen HER kitabı bul: rafta dik duran kitapların sırtlarını ve kapağı öne dönük duranları.\n' +
   'YALNIZCA bir JSON dizisi döndür, başka hiçbir şey yazma:\n' +
   '[{"ad": "...", "yazar": "...", "kutu": [ymin, xmin, ymax, xmax], "emin": 0.0}]\n' +
@@ -275,6 +285,41 @@ const SCAN_PROMPT =
   '- emin: adı ne kadar net okuduğun (0-1).\n' +
   '- Okunamasa da her sırtı listele (ad: null).\n' +
   '- Kitap olmayan nesneleri ekleme: tablo, çerçeveli resim, kutu, fener, bitki, oyuncak, biblo, duvar yazısı.';
+
+/**
+ * Tarama istemi. Kayıtlı kitapların listesi verilirse model, uzaktan tam okunamayan bir sırtı (yarım okunan yazı,
+ * yazar, yayınevi, sırt rengi ve yazı düzeni) listedeki bir kitapla eşleştirebilir. Kod denetler: listedeki ada
+ * daha yüksek güven gerekir (LISTE_EMIN) ve bir ad yalnızca bir sırta verilir (tekilAdlar).
+ */
+export const scanPrompt = (adlar: string[]) =>
+  SCAN_PROMPT_TABAN +
+  (adlar.length
+    ? '\n\nKullanıcının kitaplığında kayıtlı kitaplar aşağıda. Bir sırttaki yazıyı tam okuyamasan da okuyabildiğin harfler, ' +
+      'kelime uzunlukları ve yazar adı listedeki bir kitapla AÇIKÇA uyuşuyorsa "ad" alanına listedeki adı aynen yaz. ' +
+      'Uyuşma zayıfsa ya da birden çok kitaba benziyorsa "ad": null ver. Listedeki bir adı yalnızca bir sırta ver. ' +
+      'Listede olmayan ama net okuduğun kitabın adını da yazabilirsin.\n' +
+      `Liste: ${adlar.map(x => `"${x}"`).join(', ')}`
+    : '');
+const SCAN_PROMPT = scanPrompt([]);
+/** Kayıtlı listeden eşleştirilen ad için gereken en düşük güven */
+export const LISTE_EMIN = 0.6;
+
+/**
+ * Aynı ad birden çok sırta verildiyse en emin olanda kalır, ötekiler belirsiz olur. Kayıtlı listedeki bir ad
+ * LISTE_EMIN'den düşük güvenle geldiyse belirsiz olur (yanlış sırta yerleşmesin).
+ */
+export function tekilAdlar(found: Bulunan[], adlar: string[]): Bulunan[] {
+  const kayitli = new Set(adlar.map(foldTitle));
+  const enIyi = new Map<string, Bulunan>();
+  for (const f of found) {
+    if (!f.ad) continue;
+    const k = foldTitle(f.ad);
+    if (kayitli.has(k) && f.emin < LISTE_EMIN) continue;
+    const o = enIyi.get(k);
+    if (!o || f.emin > o.emin) enIyi.set(k, f);
+  }
+  return found.map(f => (f.ad && enIyi.get(foldTitle(f.ad)) === f ? f : f.ad ? { ...f, ad: null, yazar: null } : f));
+}
 
 /** Telefonla yakından çekilmiş raf fotoğrafı: yalnızca okunan kitaplar (kutu gerekmez) */
 const PHOTO_PROMPT =
@@ -352,13 +397,13 @@ export function mergeParts(parts: { x: number; y: number; w: number; h: number; 
 }
 
 /** Parçaları görüntü modeline aynı anda gönder (en fazla 6) */
-async function visionAll(parts: Parca[]): Promise<{ text: string; err?: string }[]> {
+async function visionAll(parts: Parca[], prompt: string): Promise<{ text: string; err?: string }[]> {
   const out: { text: string; err?: string }[] = new Array(parts.length);
   let next = 0;
   const worker = async () => {
     while (next < parts.length) {
       const i = next++;
-      try { out[i] = { text: await deps.vision(parts[i].jpegBase64) }; } catch (e) { out[i] = { text: '', err: (e as Error).message }; }
+      try { out[i] = { text: await deps.vision(parts[i].jpegBase64, prompt) }; } catch (e) { out[i] = { text: '', err: (e as Error).message }; }
     }
   };
   await Promise.all(Array.from({ length: Math.min(6, parts.length) }, worker));
@@ -367,9 +412,11 @@ async function visionAll(parts: Parca[]): Promise<{ text: string; err?: string }
 
 export async function scanShelf(parts: Parca[], ref: Omit<Referans, 'at'>): Promise<TaramaCevabi> {
   const t0 = Date.now();
-  const res = await visionAll(parts);
+  // Kayıtlı kitaplar (telefonla, bölüm fotoğraflarıyla ya da elle eklenenler) modele aday liste olarak verilir
+  const adlar = [...new Set(read().kitaplar.filter(b => b.ad).map(b => b.ad!))].slice(0, 400);
+  const res = await visionAll(parts, scanPrompt(adlar));
   if (res.every(r => r.err)) throw new Error(res[0].err);
-  const found = mergeParts(parts.map((p, i) => ({ ...p, found: parseScan(res[i].text) })));
+  const found = tekilAdlar(mergeParts(parts.map((p, i) => ({ ...p, found: parseScan(res[i].text) }))), adlar);
   const text = res.map(r => r.text).join(' ');
   const cur = read();
   if (!found.length) {
@@ -381,7 +428,7 @@ export async function scanShelf(parts: Parca[], ref: Omit<Referans, 'at'>): Prom
   write(next);
   const belirsiz = found.filter(f => !f.ad).length;
   const failed = res.filter(r => r.err).length;
-  console.log(`[kitaplık] tarandı · ${parts.length} parça${failed ? ` (${failed} hata)` : ''} · ${found.length - belirsiz} tanındı · ${belirsiz} belirsiz · ${Date.now() - t0} ms · ${VISION_MODEL}`);
+  console.log(`[kitaplık] tarandı · ${parts.length} parça${failed ? ` (${failed} hata)` : ''} · ${found.length - belirsiz} tanındı · ${belirsiz} belirsiz · ${adlar.length} kayıtlı aday · ${Date.now() - t0} ms · ${VISION_MODEL}`);
   return { kitaplik: next, bulunan: found.length - belirsiz, belirsiz, ms: Date.now() - t0, model: VISION_MODEL, parca: parts.length };
 }
 
@@ -535,13 +582,13 @@ export function findBook(q: string): { kitap: Kitap } | { hata: string; adaylar?
 }
 
 /** Kitabı kitaplığa ekle (rafta yeri olmadan; K ayarında bir kutuya yerleştirilebilir). Varsa olanı döndürür. */
-export function addBook(ad: string, yazar?: string | null): { kitap: Kitap; yeni: boolean } | { hata: string } {
+export function addBook(ad: string, yazar?: string | null, ek: Partial<Pick<Kitap, 'rafDisi'>> = {}): { kitap: Kitap; yeni: boolean } | { hata: string } {
   const t = str(ad, 160);
   if (!t) return { hata: 'Kitap adı boş.' };
   const k = read();
   const old = k.kitaplar.find(b => b.ad && foldTitle(b.ad) === foldTitle(t));
   if (old) return { kitap: old, yeni: false };
-  const b: Kitap = { id: randomUUID().slice(0, 8), ad: t, yazar: str(yazar ?? null, 120), kutu: null, kapak: null, ozet: null, notlar: [], alintilar: [], durum: 'okunacak', elle: true, kayitlar: [{ tur: 'durum', metin: 'eklendi', at: new Date().toISOString() }] };
+  const b: Kitap = { id: randomUUID().slice(0, 8), ad: t, yazar: str(yazar ?? null, 120), kutu: null, kapak: null, ozet: null, notlar: [], alintilar: [], durum: 'okunacak', elle: true, ...ek, kayitlar: [{ tur: 'durum', metin: 'eklendi', at: new Date().toISOString() }] };
   write({ ...k, kitaplar: [...k.kitaplar, b] });
   console.log(`[kitaplık] eklendi · ${t}${b.yazar ? ` (${b.yazar})` : ''}`);
   return { kitap: b, yeni: true };

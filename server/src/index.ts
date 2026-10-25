@@ -9,7 +9,7 @@ import { BRIEF_OPENING, BRIEF_TRIGGER } from './brief.js';
 import { buildDashboard } from './dashboard.js';
 import { IMG_DIR } from './imagegen.js';
 import { MOCK, CHAT_MODEL } from './routellm.js';
-import { transcribe, STT_MODEL } from './stt.js';
+import { hitapDuzelt, transcribe, STT_MODEL } from './stt.js';
 import {
   BROWSER, DEFAULT_RATE, clampRate, envVoice, isRoutedModel, loadCatalog, preview, synthesize, ttsEnabled, usableVoices, voiceId, warmOpening,
   type VoiceSel,
@@ -344,7 +344,8 @@ app.post('/api/clear', (_req, res) => {
 // ---------- Sohbet: sahneler hazır oldukça akar ----------
 let busy = false;
 app.post('/api/chat', async (req, res) => {
-  const text = String(req.body.text || '').trim().slice(0, 2000);
+  // Tarayıcının ses tanımasından gelen metinde de yanlış duyulmuş hitap düzelir ("Cervis" → "Jarvis")
+  const text = hitapDuzelt(String(req.body.text || '').trim().slice(0, 2000));
   const image = typeof req.body.image === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(req.body.image) ? req.body.image : undefined;
   const client = String(req.body.client || '');
   const device = asDevice(req.body.device);
@@ -447,7 +448,8 @@ app.post('/api/stt', express.raw({ type: ['audio/*', 'application/octet-stream']
   const mime = String(req.headers['content-type'] || '');
   if (!Buffer.isBuffer(req.body) || req.body.length < 1000) return res.status(400).json({ error: 'kayıt boş' });
   try {
-    const r = await transcribe(req.body, mime);
+    // Bağlam: son konuşma (belirsiz kelime doğru seçilsin, "ağır gelmesi" → "yağmur gelmesi" olmasın)
+    const r = await transcribe(req.body, mime, state.messages.slice(-4).map(m => m.text));
     console.log(`[stt] ${r.model} · ${mime.split(';')[0]} · ${Math.round(req.body.length / 1024)} KB · ${r.ms} ms · "${r.text.slice(0, 60)}"`);
     res.json(r);
   } catch (e: any) {

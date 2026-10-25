@@ -15,10 +15,10 @@ import { FaceHud, demoFace, detectFaces, loadFaceDetector, type FaceBox } from '
 import type { FaceDetector } from '@mediapipe/tasks-vision';
 import { Library, loadCover, thumbOf, type KalemKaydi } from './library';
 import LibraryEditor from './LibraryEditor';
-import { DEMO_BOLUM_ALANLARI, DEMO_TARGET, buildDemoShelf, demoStream, demoTarama } from './shelfDemo';
+import { DEMO_BOLUM_ALANLARI, DEMO_TARGET, buildDemoShelf, demoStream, demoTahmin, demoTarama } from './shelfDemo';
 import { AYAR_LISTESI, loadAyar, saveAyar, type ElAyar } from './settings';
 import { GEZEGENLER, type GezegenTur } from './fx';
-import { completeSection, fillBook, getLibrary, saveLibrary, scanLibrary, shelfRegion, tileFrame, type Bolum, type Kitap, type Kitaplik, type Kutu } from '../lib/library';
+import { completeSection, fillBook, getLibrary, placeEstimated, saveLibrary, scanLibrary, shelfRegion, tileFrame, type Bolum, type Kitap, type Kitaplik, type Kutu } from '../lib/library';
 import { SpaceBrain } from './space/brain';
 import type { SpaceCmd } from './space/commands';
 import { demoSpaceHands } from './space/demo';
@@ -31,6 +31,7 @@ import { loadTextures } from './space/planets';
 import { PersonCutout, loadSegmenter } from './space/segment';
 import { Starfield } from './space/starfield';
 import { NewsScene } from './news/scene';
+import { numaraliKirpinti, okumaSirasi } from './numbered';
 import type { HaberCmd } from './news/commands';
 import { demoNews } from './news/demo';
 import './hands.css';
@@ -54,7 +55,7 @@ export interface HandControlProps {
   libraryKey?: number;
   /** "Jarvis, kitaplığımı tara": her artışta bir tarama */
   scanSignal?: number;
-  onScanDone?(r: { bulunan: number; belirsiz: number; tamamlanan?: number; hata?: string }): void;
+  onScanDone?(r: { bulunan: number; belirsiz: number; tamamlanan?: number; tahmini?: number; hata?: string }): void;
   /** Açık kitaba sesle eklenen kayıt: kalemle yazılır (n her istekte artar) */
   kalemKaydi?: { kayit: KalemKaydi; n: number } | null;
   /** Jarvis'in önerdiği kitap: raftan kendiliğinden çıkar (n her öneride artar) */
@@ -96,6 +97,20 @@ const DEMO_TARA = new URLSearchParams(location.search).get('tara');
 const DEMO_ODA = new URLSearchParams(location.search).get('oda') === '1';
 /** Haber demosu sentetik ellersiz (klavyeyle denemek için): ?el=demo&mod=haber&haber=elle */
 const DEMO_HABER_ELLE = new URLSearchParams(location.search).get('haber') === 'elle';
+/** Açık kitapta sesli komutlar (lib/bookCommands.ts ile aynı kalıplar): [vurgu anahtarı, söylenen, sonuç] */
+const KITAP_KOMUTLARI: [string, string, string][] = [
+  ['durum-bitti', 'okudum', 'OKUNDU ✓'],
+  ['durum-okunuyor', 'okuyorum', 'OKUNUYOR'],
+  ['durum-okunacak', 'okunacaklara ekle', 'OKUNACAK'],
+  ['sayfa', '120. sayfadayım', 'sayfa ve ilerleme'],
+  ['not', 'not al: …', 'kalem notu yazar'],
+  ['alinti', 'alıntı ekle: …', 'kalem alıntıyı yazar'],
+  ['ozetle', 'bunu özetle', 'Jarvis özeti okur'],
+  ['ad', 'bu kitabın adı …', 'adsız kitabı adlandırır'],
+  ['sohbet', 'bu kitap hakkında konuşalım', 'kitap sohbeti'],
+];
+/** Kitaplık demosunda tarama sonrası tahmini yerleştirme (bölüm tamamlaması yerine, mor): ?el=demo&kitaplik=1&tahmin=1 */
+const DEMO_TAHMIN = new URLSearchParams(location.search).get('tahmin') === '1';
 /** Kitaplık demosunda sentetik el yok (sesli komut ve öneri denemesi için): ?el=demo&kitaplik=1&eller=yok */
 const DEMO_ELSIZ = new URLSearchParams(location.search).get('eller') === 'yok';
 /** Kitaplık demosu: taramadan sonra Jarvis bu kitabı önerir (raftan kendiliğinden çıkar): &oneri=Kitap Adı (boşsa hedef kitap) */
@@ -154,6 +169,8 @@ export default function HandControl(p: HandControlProps) {
   const sahneRef = useRef(sahne);
   /** Çekim: tam arayüz · temiz (T: yalnızca sonuçlar) · yok (L) */
   const [cekim, setCekim] = useState<'tam' | 'temiz' | 'yok'>('tam');
+  /** Açık kitapta sesle verilen son komut (sesli komutlar panelinde parlar) */
+  const [sonKomut, setSonKomut] = useState<{ kayit: KalemKaydi; n: number } | null>(null);
   const cekimRef = useRef(cekim);
   useEffect(() => { sahneRef.current = sahne; cekimRef.current = cekim; }, [sahne, cekim]);
   /** Mod: büyü ya da uzay (U). Arka plan: tam uzay (sizi odadan ayırır) ya da katman (oda görünür) (B). */
@@ -407,13 +424,25 @@ export default function HandControl(p: HandControlProps) {
           setTimeout(() => {
             if (!alive) return;
             lib.scanResult(dt.maskeli, dt.maskeli.filter(b => b.ad).length, dt.maskeli.filter(b => b.kutu && !b.ad).length);
-            setTimeout(() => { if (!alive) return; lib.scanCompleting(); setTimeout(() => { if (alive) { lib.setBooks(dt.tam, null); lib.scanCompleted(dt.tamamlanan, dt.tam); } }, 2000); }, 2800);
+            // &tahmin=1: bölüm tamamlaması yerine kayıtlı kitaplar tahmini yerleşir (mor)
+            const son = DEMO_TAHMIN ? demoTahmin(demoBooks, dt.maskeli, demoShelf!.gizli) : null;
+            setTimeout(() => {
+              if (!alive) return;
+              lib.scanCompleting(son ? 'tahmin' : 'bolum');
+              setTimeout(() => { if (alive) { lib.setBooks(son?.tam ?? dt.tam, null); lib.scanCompleted(son?.yerlesen ?? dt.tamamlanan, son?.tam ?? dt.tam); } }, 2000);
+            }, 2800);
           }, 1300);
         }
-        hands = d.hands; step = d.step;
+        hands = d.hands;
+        step = DEMO_TAHMIN ? d.step.replace('bölüm listeleriyle tamamlanıyor', 'kayıtlı kitaplar tahminen yerleşiyor').replace('bölüm listesinden tamamlandı (yeşil)', 'kayıtlı kitaplar tahmini yerleşti (mor)') : d.step;
         // Sesli kayıt (demo): kalem açık kitaba yazar
         const kk = d.kalem ? `kalem:${d.loop}:${d.kalem}` : '';
-        if (kk && !demoFired.has(kk)) { demoFired.add(kk); void lib.kitabaYaz(d.kalem === 'not' ? { tip: 'not', metin: 'Yeni videoda bu kitabın ana fikrini anlat.' } : { tip: 'durum', durum: 'bitti' }); }
+        if (kk && !demoFired.has(kk)) {
+          demoFired.add(kk);
+          const kayit: KalemKaydi = d.kalem === 'not' ? { tip: 'not', metin: 'Yeni videoda bu kitabın ana fikrini anlat.' } : { tip: 'durum', durum: 'bitti' };
+          setSonKomut(c => ({ kayit, n: (c?.n ?? 0) + 1 }));
+          void lib.kitabaYaz(kayit);
+        }
       } else if (p.demo) {
         const d = demoHands((now - demoStart) / 1000, fx.W, fx.H);
         hands = d.hands; step = d.step;
@@ -549,11 +578,21 @@ export default function HandControl(p: HandControlProps) {
     scanBusy.current = true;
     setScanning(true);
     lib.scanStart();
-    const done = (r: { bulunan: number; belirsiz: number; tamamlanan?: number; hata?: string }) => { scanBusy.current = false; setScanning(false); propsRef.current.onScanDone?.(r); };
+    const done = (r: { bulunan: number; belirsiz: number; tamamlanan?: number; tahmini?: number; hata?: string }) => { scanBusy.current = false; setScanning(false); propsRef.current.onScanDone?.(r); };
     if (shelfDemo && demoShelf) {
       const dt = demoTarama(demoShelf.books, demoShelf.gizli);
       setTimeout(() => {
         lib.scanResult(dt.maskeli, dt.maskeli.filter(b => b.ad).length, dt.maskeli.filter(b => b.kutu && !b.ad).length);
+        if (DEMO_TAHMIN) {
+          const dtt = demoTahmin(demoShelf.books, dt.maskeli, demoShelf.gizli);
+          lib.scanCompleting('tahmin');
+          setTimeout(() => {
+            lib.setBooks(dtt.tam, null); setLibBooks(dtt.tam);
+            lib.scanCompleted(dtt.yerlesen, dtt.tam);
+            done({ bulunan: dt.maskeli.filter(b => b.ad).length, belirsiz: dtt.tam.filter(b => b.kutu && !b.ad).length, tahmini: dtt.yerlesen.length });
+          }, 2400);
+          return;
+        }
         lib.scanCompleting();
         setTimeout(() => {
           lib.setBooks(dt.tam, null); setLibBooks(dt.tam);
@@ -579,7 +618,11 @@ export default function HandControl(p: HandControlProps) {
       lib.scanResult(r.kitaplik.kitaplar.filter(b => b.kutu), r.bulunan, r.belirsiz);
       // Belirsiz sırtlar bölüm listeleriyle tamamlanır (bölümün yakın çekim fotoğrafları varsa)
       const t = await bolumlerleTamamla(c, r.kitaplik).catch(e => { console.warn('[kitaplık] tamamlama', e); return null; });
-      done({ bulunan: r.bulunan, belirsiz: t?.belirsiz ?? r.belirsiz, tamamlanan: t?.sayi ?? 0 });
+      // Hâlâ adsız sırtlar: kayıtlı kitaplar tahmini yerleşir
+      const sonra = t ? await getLibrary() : r.kitaplik;
+      const tahmini = await tahminenYerlestir(c, sonra).catch(e => { console.warn('[kitaplık] tahmini yerleştirme', e); return 0; });
+      const belirsiz = tahmini ? (libRef.current?.books ?? []).filter(x => x.kutu && !x.ad).length : t?.belirsiz ?? r.belirsiz;
+      done({ bulunan: r.bulunan, belirsiz, tamamlanan: t?.sayi ?? 0, tahmini });
     } catch (e) {
       const msg = (e as Error).message;
       lib.scanFail(msg);
@@ -598,23 +641,7 @@ export default function HandControl(p: HandControlProps) {
       const a = b.alan!;
       const belirsiz = k.kitaplar.filter(x => x.kutu && !x.ad && icinde(x.kutu, a)).slice(0, 60);
       if (!belirsiz.length) return null;
-      const sx = a[1] * c.width, sy = a[0] * c.height, sw = (a[3] - a[1]) * c.width, sh = (a[2] - a[0]) * c.height;
-      const s = Math.min(1.6, 1600 / sw);
-      const crop = document.createElement('canvas');
-      crop.width = Math.round(sw * s); crop.height = Math.round(sh * s);
-      const g = crop.getContext('2d')!;
-      g.drawImage(c, sx, sy, sw, sh, 0, 0, crop.width, crop.height);
-      // Numaralı kutular: modelin hangi sırttan söz ettiği belli olsun
-      belirsiz.forEach((x, i) => {
-        const [y0, x0, y1, x1] = x.kutu!;
-        const rx = (x0 * c.width - sx) * s, ry = (y0 * c.height - sy) * s, rw = (x1 - x0) * c.width * s, rh = (y1 - y0) * c.height * s;
-        g.strokeStyle = '#00e5ff'; g.lineWidth = 3; g.strokeRect(rx, ry, rw, rh);
-        const fs = Math.max(18, Math.min(30, rw * 0.9));
-        g.font = `700 ${fs}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
-        const ly = Math.max(fs * 0.6, ry - fs * 0.6);
-        g.fillStyle = '#000'; g.fillRect(rx + rw / 2 - fs * 0.7, ly - fs * 0.6, fs * 1.4, fs * 1.2);
-        g.fillStyle = '#ffeb3b'; g.fillText(String(i + 1), rx + rw / 2, ly);
-      });
+      const crop = numaraliKirpinti(c, a, belirsiz.map(x => x.kutu!), 1600);
       return completeSection(b.id, crop.toDataURL('image/jpeg', 0.88), belirsiz.map((x, i) => ({ n: i + 1, id: x.id })))
         .then(r => r.tamamlanan.map(t => ({ ...t, bolum: b.id })))
         .catch(e => { console.warn(`[kitaplık] ${b.ad} tamamlanamadı`, e); return []; });
@@ -628,6 +655,31 @@ export default function HandControl(p: HandControlProps) {
     setLibBolumler(yeni.bolumler ?? []);
     lib.scanCompleted(list, yeni.kitaplar);
     return { sayi: list.length, belirsiz: yeni.kitaplar.filter(x => x.kutu && !x.ad).length };
+  };
+
+  /**
+   * Bölüm tamamlamasından sonra hâlâ adsız kalan sırtlara, rafta yeri olmayan kayıtlı kitaplar TAHMİNİ yerleşir:
+   * sırtlar okuma sırasıyla (raf raf, soldan sağa) numaralanıp rafın kırpıntısına çizilir; sunucu önce görüntü
+   * modelinin tahminini, sonra eklenme sırasını kullanır. Yerleşenler mor parlar.
+   */
+  const tahminenYerlestir = async (c: HTMLCanvasElement, k: Kitaplik): Promise<number> => {
+    const lib = libRef.current;
+    if (!lib || !k.kitaplar.some(x => x.ad && !x.kutu && !x.rafDisi)) return 0;
+    const adsiz = okumaSirasi(k.kitaplar.filter(x => x.kutu && !x.ad)).slice(0, 150);
+    if (!adsiz.length) return 0;
+    const kutular = k.kitaplar.map(x => x.kutu).filter((v): v is Kutu => !!v);
+    const m = 0.03;
+    const alan: Kutu = [
+      Math.max(0, Math.min(...kutular.map(v => v[0])) - m), Math.max(0, Math.min(...kutular.map(v => v[1])) - m),
+      Math.min(1, Math.max(...kutular.map(v => v[2])) + m), Math.min(1, Math.max(...kutular.map(v => v[3])) + m),
+    ];
+    const crop = numaraliKirpinti(c, alan, adsiz.map(x => x.kutu!), 2400);
+    lib.scanCompleting('tahmin');
+    const r = await placeEstimated(crop.toDataURL('image/jpeg', 0.88), adsiz.map((x, i) => ({ n: i + 1, id: x.id })));
+    lib.setBooks(r.kitaplik.kitaplar, r.kitaplik.referans);
+    setLibBooks(r.kitaplik.kitaplar);
+    lib.scanCompleted(r.yerlesen.map(x => ({ id: x.id, ad: x.ad, bolum: 0, tahmini: true })), r.kitaplik.kitaplar);
+    return r.yerlesen.length;
   };
 
   // "Jarvis, kitaplığımı tara"
@@ -750,12 +802,13 @@ export default function HandControl(p: HandControlProps) {
     if (k) lib.cagir(k.id);
   }, [p.oneriCmd]);
 
-  // Açık kitaba sesle eklenen kayıt: kalemle yazılır
+  // Açık kitaba sesle eklenen kayıt: kalemle yazılır; sesli komutlar panelinde o satır parlar
   const lastKalem = useRef(0);
   useEffect(() => {
     const c = p.kalemKaydi;
     if (!c || c.n === lastKalem.current) return;
     lastKalem.current = c.n;
+    setSonKomut(s => ({ kayit: c.kayit, n: (s?.n ?? 0) + 1 }));
     void libRef.current?.kitabaYaz(c.kayit);
   }, [p.kalemKaydi]);
 
@@ -863,6 +916,19 @@ export default function HandControl(p: HandControlProps) {
             <span className="el-keys">{mod === 'haber' ? '←/→ haber · ↑/↓ kategori · Enter detay · K karşılaştır · I iddia · S sorular · O sabah · ⌫ geri · T temiz çekim · N kapat · Esc çık' : mod === 'uzay' ? (sahne === 'ekstra' ? '1-5 numara · G sahne · T temiz çekim · L arayüz · B arka plan · U büyü · Esc çık' : sahne === 'lab' ? 'G gösteri · Z yakınlaş · Y yaşanabilir bölge · Boşluk durdur · T temiz çekim · L arayüz · B arka plan · U büyü · Esc çık' : 'G laboratuvar · U büyü modu · B arka plan · T temiz çekim · L arayüz · D iskelet · M ses · Esc çık') : 'U uzay · N haber · L arayüz · E efektler · F yüz kilidi · K kitaplık · D iskelet · M ses · Esc çık'}</span>
           </div>}
           {p.demo && stats.step && !st.mode.includes('taraması') && <div className="el-step">{stats.step}</div>}
+          {mod !== 'haber' && mod !== 'uzay' && st.mode.startsWith('kitap · sayfa') && (
+            <div className="el-komutlar" aria-label="Açık kitapta sesli komutlar">
+              <div className="el-komutlar-h">🎙 SESLİ KOMUTLAR</div>
+              <p className="el-komutlar-nasil">✌️ 0,6 sn basılı tut ya da <kbd>boşluk</kbd>, sonra söyle</p>
+              <ul>
+                {KITAP_KOMUTLARI.map(([anahtar, soz, sonuc]) => {
+                  const k = sonKomut?.kayit;
+                  const son = k && (k.tip === 'durum' ? `durum-${k.durum}` : k.tip) === anahtar;
+                  return <li key={anahtar + (son ? sonKomut!.n : '')} className={son ? 'son' : ''}><q>{soz}</q><span>{sonuc}</span></li>;
+                })}
+              </ul>
+            </div>
+          )}
         </>
       )}
 

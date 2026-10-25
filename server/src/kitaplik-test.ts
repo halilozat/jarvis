@@ -289,15 +289,25 @@ await t('tamamlama: yalnızca listedeki adlar, emin ≥ 0,6, bir kitap tek sırt
   assert.equal(r.body.kitaplik.kitaplar.find((b: any) => b.id === 'yer00002').ad, null, 'listede olmayan ad yazılmaz');
   assert.equal(r.body.kitaplik.kitaplar.find((b: any) => b.id === 'yer00003').ad, null, 'başka sırttaki kitap taşınmaz');
 });
-await t('telefon kamerası: yalnızca kayıtlı kitaplar, geçerli kutular', async () => {
+await t('telefon kamerası: kayıtlılar tanınır, net okunan yeniler eklenir, geçersiz kutu atlanır', async () => {
   lib.deps.vision = async () => JSON.stringify([
     { ad: 'tutunamayanlar', kutu: [100, 200, 800, 260], emin: 0.8 },
-    { ad: 'Kayıtsız Kitap', kutu: [100, 300, 800, 360], emin: 0.9 },
+    { ad: 'Kayıtsız Kitap', yazar: 'Bir Yazar', yeni: true, kutu: [100, 300, 800, 360], emin: 0.9 },
+    { ad: 'Bulanık Ad', yeni: true, kutu: [100, 500, 800, 560], emin: 0.6 },
     { ad: 'Körlük', kutu: [100, 400, 1200, 460], emin: 0.9 },
   ]);
   const r = await api('/api/kitaplik/kamera', { resim: JPEG });
-  assert.deepEqual(r.body.bulunan.map((x: any) => x.ad), ['Tutunamayanlar']);
+  assert.deepEqual(r.body.bulunan.map((x: any) => x.ad), ['Tutunamayanlar', 'Kayıtsız Kitap']);
   assert.deepEqual(r.body.bulunan[0].kutu, [0.1, 0.2, 0.8, 0.26]);
+  assert.deepEqual(r.body.eklenen.map((x: any) => [x.ad, x.yazar, x.kutu]), [['Kayıtsız Kitap', 'Bir Yazar', null]]);
+  assert.equal(r.body.bulunan[1].yeni, true);
+  const k = (await api('/api/kitaplik')).body.kitaplar;
+  assert.ok(k.some((b: any) => b.ad === 'Kayıtsız Kitap'), 'yeni kitap kitaplıkta');
+  assert.ok(!k.some((b: any) => b.ad === 'Bulanık Ad'), 'emin olunmayan ad eklenmez');
+  // İkinci tarama: aynı kitap artık kayıtlı, tekrar eklenmez
+  const r2 = await api('/api/kitaplik/kamera', { resim: JPEG });
+  assert.equal(r2.body.eklenen.length, 0);
+  assert.ok(r2.body.bulunan.some((x: any) => x.ad === 'Kayıtsız Kitap' && !x.yeni));
 });
 await t('kayıt geçmişi: not, alıntı, durum ve sayfa; okundu anı', async () => {
   const k = (await api('/api/kitaplik')).body.kitaplar.find((b: any) => b.ad === 'Tutunamayanlar');
@@ -354,6 +364,76 @@ await t('kitap sohbeti notu: kaldığı yer, notlar, spoiler kuralı', async () 
   assert.equal(adv.kitapSohbetiNotu('yok-boyle', false), null);
 });
 
+await t('tara: kayıtlı adlar modele aday verilir; rafta yeri olmayan kayıt sırta yerleşir, bir ad tek sırta, düşük güvenli liste adı atılır', async () => {
+  await api('/api/kitaplik/yeni', { ad: 'Uzaktaki Kitap', yazar: 'Yazar A' });
+  await api('/api/kitaplik/yeni', { ad: 'Bulanık Kitap' });
+  let istem = '';
+  lib.deps.vision = async (_j: string, p?: string) => { istem = p ?? ''; return JSON.stringify([
+    { ad: 'Uzaktaki Kitap', kutu: [100, 100, 500, 130], emin: 0.7 },
+    { ad: 'uzaktaki kitap', kutu: [100, 300, 500, 330], emin: 0.65 },
+    { ad: 'Bulanık Kitap', kutu: [100, 500, 500, 530], emin: 0.45 },
+    { ad: 'Net Okunan Yeni', kutu: [100, 700, 500, 730], emin: 0.5 },
+  ]); };
+  const r = await api('/api/kitaplik/tara', { resim: jpeg, genislik: 1920, yukseklik: 1080, kucukResim: 'AAAA' });
+  assert.equal(r.status, 200);
+  assert.ok(istem.includes('"Uzaktaki Kitap"') && istem.includes('Liste:'), 'kayıtlı adlar istemde');
+  const kutulu = r.body.kitaplik.kitaplar.filter((b: any) => b.kutu);
+  assert.deepEqual(kutulu.map((b: any) => b.ad), ['Uzaktaki Kitap', null, null, 'Net Okunan Yeni']);
+  const u = r.body.kitaplik.kitaplar.filter((b: any) => b.ad === 'Uzaktaki Kitap');
+  assert.equal(u.length, 1, 'aynı kitap iki kez oluşmaz');
+  assert.equal(u[0].yazar, 'Yazar A', 'kayıt korunur (kimlik ve yazar)');
+  assert.ok(Math.abs(u[0].kutu[1] - 0.1) < 0.001, 'en emin sırta yerleşir');
+  assert.equal(r.body.kitaplik.kitaplar.find((b: any) => b.ad === 'Bulanık Kitap').kutu, null, 'düşük güvenli liste adı yerleşmez');
+});
+await t('tahmini yerleştirme: model tahmini, kalanlar eklenme sırasıyla, raf dışı kitap konmaz; sonraki taramada okunan ad tahmini ezer', async () => {
+  const kb = (id: string, ad: string | null, kutu: number[] | null, ek: object = {}) => ({ id, ad, yazar: null, kutu, kapak: null, ozet: null, notlar: [], alintilar: [], durum: 'okunacak', elle: !!ad, ...ek });
+  const k0 = lib.readLibrary();
+  lib.writeLibrary({ ...k0, kitaplar: [
+    kb('rafta001', 'Rafta Duran', [0.1, 0.0, 0.4, 0.03]),
+    kb('kayit001', 'Birinci', null), kb('kayit002', 'İkinci', null), kb('kayit003', 'Üçüncü', null),
+    kb('oneri001', 'Öneri Kitabı', null, { rafDisi: true }),
+    kb('yerT0001', null, [0.1, 0.1, 0.4, 0.13]), kb('yerT0002', null, [0.1, 0.2, 0.4, 0.23]),
+    kb('yerT0003', null, [0.1, 0.3, 0.4, 0.33]), kb('yerT0004', null, [0.1, 0.4, 0.4, 0.43]),
+  ] as any });
+  let istem = '';
+  lib.deps.vision = async (_j: string, p?: string) => { istem = p ?? ''; return JSON.stringify([
+    { n: 2, ad: 'ikinci', emin: 0.4 },
+    { n: 3, ad: 'Öneri Kitabı', emin: 0.9 },
+    { n: 1, ad: 'Yok Böyle', emin: 0.9 },
+  ]); };
+  const kutular = [1, 2, 3, 4].map(n => ({ n, id: `yerT000${n}` }));
+  assert.equal((await api('/api/kitaplik/yerlestir', { kutular: [] })).status, 400);
+  const r = await api('/api/kitaplik/yerlestir', { resim: JPEG, kutular });
+  assert.equal(r.status, 200);
+  assert.ok(istem.includes('"Birinci"') && !istem.includes('Öneri Kitabı'), 'raf dışı kitap modele aday verilmez');
+  const yer = (id: string) => r.body.kitaplik.kitaplar.find((b: any) => b.id === id);
+  assert.deepEqual(yer('kayit002').kutu, [0.1, 0.2, 0.4, 0.23], 'model tahmini');
+  assert.deepEqual(yer('kayit001').kutu, [0.1, 0.1, 0.4, 0.13], 'sırayla: ilk boş sırt');
+  assert.deepEqual(yer('kayit003').kutu, [0.1, 0.3, 0.4, 0.33], 'sırayla: sonraki boş sırt');
+  assert.ok(yer('kayit001').tahmini && yer('kayit002').tahmini);
+  assert.equal(yer('oneri001').kutu, null, 'raf dışı kitap yerleşmez');
+  assert.ok(!yer('yerT0001') && !yer('yerT0002') && !yer('yerT0003'), 'yer tutucular silindi');
+  assert.ok(yer('yerT0004'), 'kitap kalmayınca sırt belirsiz kalır');
+  assert.deepEqual(r.body.yerlesen.map((x: any) => [x.ad, x.sirayla]), [['İkinci', false], ['Birinci', true], ['Üçüncü', true]]);
+  // Sonraki tarama: İkinci'nin sırtında gerçek ad okundu, Birinci'ninki yine okunamadı
+  lib.deps.vision = async () => JSON.stringify([
+    { ad: null, kutu: [100, 100, 400, 130], emin: 0.2 },
+    { ad: 'Gerçek Ad', kutu: [100, 200, 400, 230], emin: 0.9 },
+    { ad: null, kutu: [100, 500, 400, 530], emin: 0.2 },
+  ]);
+  const t2 = await api('/api/kitaplik/tara', { resim: jpeg, genislik: 1920, yukseklik: 1080, kucukResim: 'AAAA' });
+  const b2 = (ad: string) => t2.body.kitaplik.kitaplar.find((b: any) => b.ad === ad);
+  assert.ok(b2('Birinci').kutu && b2('Birinci').tahmini, 'okunamayan sırtta tahmin korunur');
+  assert.equal(b2('İkinci').kutu, null, 'gerçek ad okununca tahmin bırakılır');
+  assert.ok(b2('Gerçek Ad').kutu && !b2('Gerçek Ad').tahmini);
+  // Model hata verirse yalnızca sırayla yerleşir
+  lib.deps.vision = async () => { throw new Error('model yok'); };
+  const r3 = await api('/api/kitaplik/yerlestir', { kutular: t2.body.kitaplik.kitaplar.filter((b: any) => b.kutu && !b.ad).map((b: any, i: number) => ({ n: i + 1, id: b.id })) });
+  assert.equal(r3.status, 200);
+  // Bu taramada görünmeyen sırtların kitapları da yersiz kaldı; sıradaki ilk kitap boş sırta yerleşir
+  assert.deepEqual(r3.body.yerlesen.map((x: any) => [x.ad, x.sirayla]), [['Rafta Duran', true]]);
+  assert.deepEqual(r3.body.kitaplik.kitaplar.find((b: any) => b.ad === 'Rafta Duran').kutu, [0.1, 0.5, 0.4, 0.53]);
+});
 server.close();
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(`\n${ok} test geçti.`);

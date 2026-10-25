@@ -86,7 +86,7 @@ export function BookSheet({ k, bolumler, yeni, onChange, onDelete, onClose, flas
               </select>
             </div>
             {prog !== null && <div className={'kp-bar' + (yeni?.tip === 'sayfa' ? ' kp-isaret' : '')}><i style={{ width: `${prog}%` }} /><span>%{prog}</span></div>}
-            <p className="kp-mini">{k.kutu ? '● rafta yeri biliniyor' : '○ rafta yeri yok'}{k.tamamlandi ? ' · adı bölüm listesinden tamamlandı' : ''}{k.bittiAt ? ` · okundu: ${tarih(k.bittiAt)}` : ''}</p>
+            <p className="kp-mini">{k.kutu ? (k.tahmini ? '≈ rafta yeri tahmini (sırtı okunamadı)' : '● rafta yeri biliniyor') : k.rafDisi ? '○ rafta değil · okuma listesinde' : '○ rafta yeri yok'}{k.tamamlandi ? ' · adı bölüm listesinden tamamlandı' : ''}{k.bittiAt ? ` · okundu: ${tarih(k.bittiAt)}` : ''}</p>
           </div>
         </header>
 

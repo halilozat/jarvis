@@ -154,7 +154,7 @@ export default function Kitapligim(p: KitapligimProps) {
         </div>
       )}
 
-      {kamera && <ShelfCamera kitaplar={kitaplar ?? []} onOpen={k => { setAcik(k.id); }} onClose={() => setKamera(false)} />}
+      {kamera && <ShelfCamera kitaplar={kitaplar ?? []} onOpen={k => { setAcik(k.id); }} onAdded={() => void yukle()} onClose={() => setKamera(false)} />}
       {acikKitap && (
         <BookSheet k={acikKitap} bolumler={bolumler} yeni={yeni && p.kalemKaydi?.id === acikKitap.id ? yeni : null} flash={p.flash}
           onChange={degisti} onClose={() => setAcik(null)} onDelete={() => { setAcik(null); void yukle(); }} />

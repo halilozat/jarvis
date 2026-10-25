@@ -1,11 +1,12 @@
 // Kitaplığım · telefon kamerası. Telefonun arka kamerasıyla rafa bakın: telefon kısa süre sabit durunca kare taranır,
-// karede görünen KAYITLI kitaplar holografik çerçeveyle işaretlenir; dokununca kitabın sayfası açılır. Telefon
+// karede görünen kayıtlı kitaplar holografik çerçeveyle işaretlenir; dokununca kitabın sayfası açılır. Kitaplıkta
+// olmayan ama adı net okunan kitaplar kitaplığa eklenir (mor çerçeve, "＋ eklendi"). Telefon
 // oynayınca kutular soluklaşır ve yeniden taranır. Tanıma görüntü modeliyle (sunucu: /api/kitaplik/kamera); gerçek
 // zamanlı değildir, bir tarama birkaç saniye sürer. Kare diske yazılmaz.
 import { useEffect, useRef, useState } from 'react';
 import { recognizeShelf, type Kitap, type Kutu } from '../lib/library';
 
-interface Bulunan { id: string; ad: string; yazar: string | null; kutu: Kutu; emin: number }
+interface Bulunan { id: string; ad: string; yazar: string | null; kutu: Kutu; emin: number; yeni?: boolean }
 
 /** Hareket ölçümü için küçük gri kare */
 const KW = 48, KH = 27;
@@ -20,7 +21,7 @@ function gri(v: HTMLVideoElement, c: HTMLCanvasElement): Float32Array {
 }
 const fark = (a: Float32Array, b: Float32Array) => { let s = 0; for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]); return s / a.length; };
 
-export function ShelfCamera({ kitaplar, onOpen, onClose }: { kitaplar: Kitap[]; onOpen(k: Kitap): void; onClose(): void }) {
+export function ShelfCamera({ kitaplar, onOpen, onAdded, onClose }: { kitaplar: Kitap[]; onOpen(k: Kitap): void; onAdded(): void; onClose(): void }) {
   const video = useRef<HTMLVideoElement>(null);
   const [durum, setDurum] = useState('kamera açılıyor…');
   const [bulunan, setBulunan] = useState<Bulunan[]>([]);
@@ -29,6 +30,9 @@ export function ShelfCamera({ kitaplar, onOpen, onClose }: { kitaplar: Kitap[]; 
   const [hata, setHata] = useState<string | null>(null);
   const [boyut, setBoyut] = useState({ W: window.innerWidth, H: window.innerHeight });
   const elle = useRef(false);
+  // Bu oturumda eklenenler (kitaplar prop'u yenilenene kadar da dokunulabilsin)
+  const [eklenen, setEklenen] = useState<Kitap[]>([]);
+  const [toplamYeni, setToplamYeni] = useState(0);
 
   useEffect(() => {
     const v = video.current!;
@@ -53,7 +57,12 @@ export function ShelfCamera({ kitaplar, onOpen, onClose }: { kitaplar: Kitap[]; 
         setKare({ w: v.videoWidth, h: v.videoHeight });
         setBulunan(r.bulunan);
         setEski(false);
-        setDurum(r.bulunan.length ? `${r.bulunan.length} kayıtlı kitap · dokunun` : 'kayıtlı kitap görünmedi · biraz yaklaşın');
+        const yeni = r.eklenen?.length ?? 0;
+        if (yeni) { setEklenen(l => [...l, ...r.eklenen]); setToplamYeni(n => n + yeni); onAdded(); }
+        const kayitli = r.bulunan.length - r.bulunan.filter(b => b.yeni).length;
+        setDurum(r.bulunan.length
+          ? [kayitli && `${kayitli} kayıtlı`, yeni && `${yeni} yeni kitap eklendi`].filter(Boolean).join(' · ') + ' · dokunun'
+          : 'kitap adı okunamadı · biraz yaklaşın');
       } catch (e) {
         if (alive) setDurum(`tanınamadı: ${(e as Error).message}`);
       } finally {
@@ -84,7 +93,7 @@ export function ShelfCamera({ kitaplar, onOpen, onClose }: { kitaplar: Kitap[]; 
       })
       .catch(e => setHata(e?.name === 'NotAllowedError' ? 'Kamera izni verilmedi.' : `Kamera açılamadı: ${e?.message || e}. (Telefonda kamera yalnızca HTTPS adresinde çalışır.)`));
     return () => { alive = false; clearTimeout(timer); stream?.getTracks().forEach(t => t.stop()); window.removeEventListener('resize', onResize); };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- onAdded yalnızca kitaplığı yeniden yükler
 
   // Kare → ekran (object-fit: cover, ayna yok: arka kamera)
   const yerlestir = (k: Kutu) => {
@@ -100,18 +109,18 @@ export function ShelfCamera({ kitaplar, onOpen, onClose }: { kitaplar: Kitap[]; 
       <div className="kp-kamera-hud">
         {bulunan.map(b => {
           const r = yerlestir(b.kutu);
-          const k = kitaplar.find(x => x.id === b.id);
+          const k = kitaplar.find(x => x.id === b.id) ?? eklenen.find(x => x.id === b.id);
           if (!r || !k) return null;
           return (
-            <button key={b.id} className={'kp-tanindi ' + k.durum + (eski ? ' eski' : '')} style={r} onClick={() => onOpen(k)}>
-              <span>{b.ad}<em>{k.durum === 'bitti' ? 'okundu' : k.durum}{k.notlar.length + k.alintilar.length ? ` · ${k.notlar.length + k.alintilar.length} kayıt` : ''}</em></span>
+            <button key={b.id} className={'kp-tanindi ' + (b.yeni ? 'yeni' : k.durum) + (eski ? ' eski' : '')} style={r} onClick={() => onOpen(k)}>
+              <span>{b.ad}<em>{b.yeni ? '＋ kitaplığa eklendi' : k.durum === 'bitti' ? 'okundu' : k.durum}{k.notlar.length + k.alintilar.length ? ` · ${k.notlar.length + k.alintilar.length} kayıt` : ''}</em></span>
             </button>
           );
         })}
       </div>
       <header className="kp-kamera-ust">
         <b>KİTAPLIK KAMERASI</b>
-        <span>{hata ?? durum}</span>
+        <span>{hata ?? durum}{toplamYeni > 0 && !hata && <i className="kp-kamera-yeni">bu oturumda {toplamYeni} kitap eklendi</i>}</span>
         <button onClick={() => { elle.current = true; }} disabled={!!hata}>⟳ Tara</button>
         <button onClick={onClose} aria-label="Kapat">✕</button>
       </header>

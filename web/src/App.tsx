@@ -906,9 +906,9 @@ export default function App() {
     if (m === 'uzay' && voiceSel) for (const line of tumCumleler()) voice.preload(line, voiceSel, undefined, undefined, true);
   };
 
-  const onScanDone = (r: { bulunan: number; belirsiz: number; hata?: string }) => {
+  const onScanDone = (r: { bulunan: number; belirsiz: number; tamamlanan?: number; tahmini?: number; hata?: string }) => {
     if (r.hata) speakLine('Kitaplığı tarayamadım efendim. Ayrıntı ekranda.');
-    else speakLine(`${r.bulunan} kitap tanıdım efendim${r.belirsiz ? `, ${r.belirsiz} tanesinin sırtını okuyamadım` : ''}.`);
+    else speakLine(`${r.bulunan} kitap tanıdım efendim${r.tamamlanan ? `, ${r.tamamlanan} tanesini bölüm listelerinden tamamladım` : ''}${r.tahmini ? `, ${r.tahmini} kayıtlı kitabı tahmini yerlerine koydum` : ''}${r.belirsiz ? `. ${r.belirsiz} sırt hâlâ belirsiz` : ''}.`);
   };
 
   /** El kontrolünde basılı tutma tamamlandı */

@@ -385,6 +385,14 @@ export function demoTarama(books: Kitap[], gizli: Map<string, { ad: string; yaza
   return { maskeli, tamamlanan, tam };
 }
 
+/** Demo tahmini yerleştirme (&tahmin=1): okunamayan sırtlara kitaplar mor "≈" ile yerleşir (gizli adlar ya da asıl adlar) */
+export function demoTahmin(books: Kitap[], maskeli: Kitap[], gizli: Map<string, { ad: string; yazar: string }>) {
+  const asil = (b: Kitap) => gizli.get(b.id)?.ad ?? books.find(x => x.id === b.id)?.ad ?? null;
+  const yerlesen = maskeli.filter(b => b.kutu && !b.ad && asil(b)).map(b => ({ id: b.id, ad: asil(b)!, bolum: 0, tahmini: true }));
+  const tam = maskeli.map(b => { const t = yerlesen.find(x => x.id === b.id); return t ? { ...b, ad: t.ad, tahmini: true } : b; });
+  return { yerlesen, tam };
+}
+
 /** Sahte kamera akışı: kare canvas'ı <video>'ya bağlanır (videoWidth/Height, kırpma ve küçük resim gerçek gibi çalışır) */
 export function demoStream(frame: HTMLCanvasElement): { stream: MediaStream; stop(): void; jiggle(on: boolean): void } {
   const live = document.createElement('canvas');

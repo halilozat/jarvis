@@ -86,6 +86,7 @@ Notlar:
 ## Kullanım
 
 - 🎙️ Mikrofon düğmesi (masaüstünde **boşluk** tuşu): konuş, susunca gönderir
+- Konuşmanın devamı: ses tanımaya son 4 mesaj bağlam olarak verilir (belirsiz kelime konuşmaya göre yazılır: kitaptan konuşurken "ağır gelmesi", "yağmur gelmesi" değil). Cümle başında yanlış duyulmuş hitap ("Cervis", "Jarus") "Jarvis" olur. Jarvis kısa devam sorularını ("normal mi", "peki neden") son konuya bağlar; yanlış duyulmuş kelimeyi bağlamdan anlar. Test: `npm run test:sohbet`.
 - **Esc** ya da ■: Jarvis'i sustur
 - **W** / **S**: test uyanışı / uyku modu (aşağıda)
 - ☰ → **Detay**: gündemin uzun özeti ve kaynakları · **Geçmiş**: tüm cihazlardaki konuşma, her cevabı bu cihazda yeniden oynatabilirsin
@@ -180,7 +181,10 @@ Kitaplık bölgesinde çimdik gezegen oluşturmaz, kitap seçer. Kitap dışarı
 **Kitapları kalıcı olarak tanıtmak:** Kamera uzaktaki sırtların çoğunu okuyamaz; Jarvis'in kitaplarınızı bilmesi için kamerayı beklemeyin:
 - **Kitaplığım → Bölümler:** her bölümü telefonla yakından çekip yükleyin (aşağıda). Okunan kitaplar kalıcı olarak kaydedilir, zaten olanlar tekrar eklenmez.
 - **Elle:** aynı yerde ad ve yazar yazıp **Ekle**. Sesle: *"Jarvis, kitaplığıma Davranış'ı ekle"*.
-- Bu kitapların rafta yeri yoktur; El Kontrolü'nde **K** ile adsız (amber) bir kutuya tıklayıp adını yazmaya başlayın, kayıtlı kitaplar öneri olarak çıkar; seçince kitap o kutuya yerleşir (notları ve özeti korunur). **Kaydet**'e basın.
+- **Telefonla:** Kitaplığım → 📷 Kitaplık kamerası adı net okunan yeni kitapları ekler (aşağıda).
+- Bir sonraki **taramada** kayıtlı kitapların listesi görüntü modeline aday olarak verilir: uzaktan yarım okunan bir sırt (harfler, kelime uzunluğu, yazar) listedeki bir adla açıkça uyuşuyorsa kitap o sırta kendiliğinden yerleşir. Listedeki bir ad yalnızca bir sırta verilir ve daha yüksek güven ister (`LISTE_EMIN` = 0.6); uyuşma zayıfsa sırt belirsiz kalır.
+- **Tahmini yerleştirme:** taramadan (ve bölüm tamamlamasından) sonra hâlâ adsız kalan sırtlar okuma sırasıyla (raf raf, soldan sağa) numaralanıp rafın kırpıntısına çizilir; rafta yeri olmayan kayıtlı kitaplar bu sırtlara **tahminen** yerleşir. Önce görüntü modeli her sırta en olası kitabı seçer (harfler, renk, kalınlık, seri); kalan kitaplar boş sırtlara eklenme sırasıyla dağıtılır (telefonla raf raf eklendiği için sıra rafa yakındır). Rafta mor "≈" ile yazılır; Kitaplığım'da "rafta yeri tahmini" görünür. Sonraki taramada o sırtın gerçek adı okunursa tahmin bırakılır; okunmazsa yer korunur. Öneriden okuma listesine eklenen kitaplar (rafta değil) yerleşmez. Demo: `?el=demo&kitaplik=1&tahmin=1`.
+- Yerleşmeyen kitapların rafta yeri yoktur; El Kontrolü'nde **K** ile adsız (amber) bir kutuya tıklayıp adını yazmaya başlayın, kayıtlı kitaplar öneri olarak çıkar; seçince kitap o kutuya yerleşir (notları ve özeti korunur). **Kaydet**'e basın.
 
 **Notlar ve hafıza:** **Kitaplığım**'da her kitabın durumu (okunacak / okunuyor / okundu), sayfası, bölümü, notları, alıntıları, özeti ve kapağı düzenlenir. Sesle de olur (**boşluk** tuşuyla konuşun, El Kontrolü açıkken de çalışır): *"Jarvis, Mülksüzler'e not ekle: …"* (kitap kayıtlı değilse eklenir), *"Tahıla Karşı'yı bitirdim"*, *"Oblomov'da 120. sayfadayım"*. Kitap açıkken adını söylemeden konuşabilirsiniz (aşağıda, "Açık kitapta sesli komutlar"). Kaydedilen kitaplar Jarvis'in talimatına kendiliğinden girer: *"kitaplığımda ne var"*, *"raftan bir kitap öner"* sorularını yalnızca kendi kitaplarınızdan cevaplar.
 
@@ -218,7 +222,7 @@ Telefonda tam ekran çalışır. Ayarlar'da yalnızca buraya giden bir bağlant�
 
 Fotoğraflar `server/data/kitaplik-bolumler/` altında durur (repoya girmez).
 
-**Açık kitapta sesli komutlar ve kalem:** Kitap El Kontrolü'nde ya da Kitaplığım'da açıkken adını söylemeden konuşun. Bu komutlar modele gitmez:
+**Açık kitapta sesli komutlar ve kalem:** Kitap El Kontrolü'nde ya da Kitaplığım'da açıkken adını söylemeden konuşun. Bu komutlar modele gitmez. El Kontrolü'nde kitap açıkken sağda **SESLİ KOMUTLAR** paneli bunları ve mikrofonun nasıl açılacağını (✌️ 0,6 sn basılı ya da boşluk) gösterir; sesle verilen son komutun satırı kısa süre yeşil parlar. Panel temiz çekimde (L/T) gizlenir, dar ekranda görünmez:
 
 | Komut | Ne olur |
 |---|---|
@@ -234,6 +238,7 @@ Jarvis kısa bir onay söyler. Kitaplığım'da yeni kayıt satırı harf harf y
 **Telefonda kitaplık kamerası:** **Kitaplığım → 📷 Kitaplık kamerası**. Telefonun arka kamerasıyla rafa bakın:
 - Telefon kısa süre sabit durunca kare taranır.
 - Karede görünen **kayıtlı** kitaplarınız holografik çerçeveyle işaretlenir. Renk duruma göredir: okunuyor amber, okundu yeşil.
+- Kitaplıkta **olmayan** ama adı net okunan kitaplar kitaplığa eklenir (rafta yeri olmadan) ve mor çerçeveyle "＋ kitaplığa eklendi" diye işaretlenir. Aynı kitap ikinci kez eklenmez; adı bulanık okunan kitap eklenmez.
 - Kitaba dokununca sayfası açılır; durum, not ve alıntı sesle de eklenir.
 - Telefon oynayınca çerçeveler soluklaşır ve yeniden taranır. **⟳ Tara** elle tarar.
 
@@ -278,7 +283,7 @@ Bitirmek için *"sohbeti bitir"* deyin ya da şeritteki ✕'e basın; 20 dakika 
 
 **Test:** `npm run test:kitap`. İnternet ve model gerekmez, gerçek kitaplığa dokunmaz. İki parça çalışır:
 - 46 sesli komut yazımı (açık kitap komutları ve kitap sohbeti);
-- `test:kitaplik` (21 test), sahte model cevaplarıyla: tarama (geçersiz JSON, taşan kutu, boş sonuç, parçaların birleştirilmesi, notlar), bölüm fotoğrafı (raf ve sıra, okunamayanın sırası, aynı kitap iki kez girmez), tamamlama (yalnızca listedeki adlar, emin olunmayan atlanır, başka sırttaki kitap taşınmaz, kayıt notlarıyla taşınır), telefon kamerası (yalnızca kayıtlı kitaplar), kayıt geçmişi, ruh hali önerisi (yalnızca okunmamış kitaplardan, "Ad · Yazar" biçimi de eşleşir), tarz analizi (kitaplıkta olan ve Open Library'de bulunamayan öneri atılır) ve kitap sohbeti notu (kaldığı yer, notlar, spoiler kuralı).
+- `test:kitaplik` (23 test), sahte model cevaplarıyla: tarama (geçersiz JSON, taşan kutu, boş sonuç, parçaların birleştirilmesi, notlar, kayıtlı adların aday verilmesi ve tek sırta yerleşmesi, tahmini yerleştirme), bölüm fotoğrafı (raf ve sıra, okunamayanın sırası, aynı kitap iki kez girmez), tamamlama (yalnızca listedeki adlar, emin olunmayan atlanır, başka sırttaki kitap taşınmaz, kayıt notlarıyla taşınır), telefon kamerası (kayıtlılar tanınır, net okunan yeniler bir kez eklenir, bulanık ad eklenmez), kayıt geçmişi, ruh hali önerisi (yalnızca okunmamış kitaplardan, "Ad · Yazar" biçimi de eşleşir), tarz analizi (kitaplıkta olan ve Open Library'de bulunamayan öneri atılır) ve kitap sohbeti notu (kaldığı yer, notlar, spoiler kuralı).
 
 #### Uzay Modu 🪐
 

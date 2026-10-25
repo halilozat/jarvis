@@ -24,6 +24,10 @@ export interface Kitap {
   bolum?: number;
   /** Adı kamera taramasında bölüm listesinden tamamlandı */
   tamamlandi?: boolean;
+  /** Rafta yeri tahmini (sırtı okunamadı; olasılığa ya da eklenme sırasına göre yerleşti) */
+  tahmini?: boolean;
+  /** Rafta değil (öneriden okuma listesine eklendi) */
+  rafDisi?: boolean;
   bittiAt?: string;
   /** Kayıt geçmişi: not, alıntı, durum ve sayfa değişiklikleri */
   kayitlar?: KitapKayit[];
@@ -131,8 +135,11 @@ export const patchSection = (bolum: number, patch: { ad?: string; alan?: Kutu | 
 /** Taramadan sonra: bölümün kamera kırpıntısı (numaralı kutular çizili) ile belirsiz sırtları tamamla */
 export const completeSection = (bolum: number, resim: string, kutular: { n: number; id: string }[]) =>
   post<{ tamamlanan: { id: string; ad: string }[]; kitaplik: Kitaplik }>('/api/kitaplik/tamamla', { bolum, resim, kutular });
-/** Telefon kamerası: karede görünen kayıtlı kitaplar (kutu: kareye göre 0..1) */
-export const recognizeShelf = (resim: string) => post<{ bulunan: { id: string; ad: string; yazar: string | null; kutu: Kutu; emin: number }[] }>('/api/kitaplik/kamera', { resim });
+/** Adsız sırtlara (numaralı görüntü) rafta yeri olmayan kayıtlı kitapları tahmini yerleştir */
+export const placeEstimated = (resim: string | null, kutular: { n: number; id: string }[]) =>
+  post<{ yerlesen: { id: string; ad: string; emin: number; sirayla: boolean }[]; kitaplik: Kitaplik }>('/api/kitaplik/yerlestir', { resim, kutular });
+/** Telefon kamerası: karedeki kayıtlı kitaplar; net okunan yeni kitaplar sunucuda kitaplığa eklenir (yeni: true) */
+export const recognizeShelf = (resim: string) => post<{ bulunan: { id: string; ad: string; yazar: string | null; kutu: Kutu; emin: number; yeni?: boolean }[]; eklenen: Kitap[] }>('/api/kitaplik/kamera', { resim });
 
 /** Kitabı adından bul (ekler ve şapka farkı önemsiz): tam eşleşme, sonra içerme */
 export function kitapBul(list: Kitap[], q: string): Kitap | null {
