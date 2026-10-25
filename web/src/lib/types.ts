@@ -74,7 +74,10 @@ export type ServerEvent =
   | { type: 'cleared' }
   | { type: 'kitaplik' }
   /** Uzay Laboratuvarı komutu (Jarvis'in aracından; şekli web/src/hands/space/commands.ts SpaceCmd) */
-  | { type: 'lab_cmd'; cmd: unknown; origin: string };
+  | { type: 'lab_cmd'; cmd: unknown; origin: string }
+  /** Jarvis kitap önerdi (raftaki kitap El Kontrolü'nde çıkar) · tarz analizi bitti */
+  | { type: 'kitap_oner'; id: string | null; ad: string | null; ruhHali: string }
+  | { type: 'kitap_tarzi' };
 
 /** Ekran: mark1 sade, mark2 yoğun HUD (tüm cihazlarda ortak) */
 export type UiMode = 'mark1' | 'mark2';

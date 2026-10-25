@@ -20,6 +20,23 @@ export interface Kitap {
   elle?: boolean;
   /** Jarvis'in kitap defteri sayfaları (RouteLLM) */
   jarvis?: JarvisSayfa;
+  /** Kitaplığın bölümü (1-6) */
+  bolum?: number;
+  /** Adı kamera taramasında bölüm listesinden tamamlandı */
+  tamamlandi?: boolean;
+  bittiAt?: string;
+  /** Kayıt geçmişi: not, alıntı, durum ve sayfa değişiklikleri */
+  kayitlar?: KitapKayit[];
+}
+export interface KitapKayit { tur: 'not' | 'alinti' | 'durum' | 'sayfa'; metin: string; at: string }
+/** Kitaplığın bir bölümü: yakın çekim fotoğrafları ve onlardan okunan sıralı liste */
+export interface Bolum {
+  id: number;
+  ad: string;
+  /** Sabit kameradaki yeri (video normalize, aynalanmamış) */
+  alan: Kutu | null;
+  fotograflar: { id: string; at: string; okunan: number; belirsiz: number }[];
+  liste: { foto: string; raf: number; sira: number; ad: string | null; yazar: string | null; kitapId: string | null }[];
 }
 export interface JarvisSayfa {
   bilinmiyor?: boolean;
@@ -34,7 +51,7 @@ export interface JarvisSayfa {
   at: string;
 }
 export interface Referans { genislik: number; yukseklik: number; kucukResim: string; at?: string }
-export interface Kitaplik { kitaplar: Kitap[]; referans: Referans | null }
+export interface Kitaplik { kitaplar: Kitap[]; referans: Referans | null; bolumler?: Bolum[] }
 export interface TaramaCevabi { kitaplik: Kitaplik; bulunan: number; belirsiz: number; ms: number; model: string; parca: number; hata?: string }
 /** Karenin bir parçası (JPEG) ve karedeki yeri (0..1, aynalanmamış) */
 export interface TaramaParcasi { resim: string; x: number; y: number; w: number; h: number }
@@ -47,7 +64,7 @@ async function json<T>(r: Response): Promise<T> {
 const post = <T>(url: string, body: unknown) => fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify(body) }).then(r => json<T>(r));
 
 export const getLibrary = () => fetch('/api/kitaplik', { headers: headers() }).then(r => json<Kitaplik>(r));
-export const saveLibrary = (k: { kitaplar: Kitap[]; referans?: Referans | null }) => post<Kitaplik>('/api/kitaplik', k);
+export const saveLibrary = (k: { kitaplar: Kitap[]; referans?: Referans | null; bolumler?: { id: number; alan: Kutu | null }[] }) => post<Kitaplik>('/api/kitaplik', k);
 export const scanLibrary = (body: { parcalar: TaramaParcasi[]; genislik: number; yukseklik: number; kucukResim: string }) => post<TaramaCevabi>('/api/kitaplik/tara', body);
 
 /**
@@ -102,3 +119,43 @@ export function shortLabel(k: Pick<Kitap, 'ad' | 'yazar'>): string {
   const last = k.yazar ? k.yazar.split(/[&,]| ve /)[0].trim().split(/\s+/).pop() : '';
   return (last ? `${ad} · ${last}` : ad).toLocaleUpperCase('tr');
 }
+
+// ---------------------------------------------------------------- Bölümler, tamamlama, telefon kamerası
+
+/** Bölüm fotoğrafı (<img src>) */
+export const bolumFotoUrl = (bolum: number, id: string) => `/api/kitaplik/bolum/${bolum}/foto/${encodeURIComponent(id)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+/** Bölüme yakın çekim fotoğrafı ekle: okunan kitaplar bölümün sıralı listesine ve kitaplığa girer */
+export const addSectionPhoto = (bolum: number, resim: string) => post<{ bolum: Bolum; eklenen: string[]; zatenVar: string[]; okunan: number; belirsiz: number }>(`/api/kitaplik/bolum/${bolum}/foto`, { resim });
+export const deleteSectionPhoto = (bolum: number, id: string) => fetch(`/api/kitaplik/bolum/${bolum}/foto/${encodeURIComponent(id)}`, { method: 'DELETE', headers: headers() }).then(r => json<{ bolum: Bolum }>(r));
+export const patchSection = (bolum: number, patch: { ad?: string; alan?: Kutu | null }) => post<{ bolum: Bolum }>(`/api/kitaplik/bolum/${bolum}`, patch);
+/** Taramadan sonra: bölümün kamera kırpıntısı (numaralı kutular çizili) ile belirsiz sırtları tamamla */
+export const completeSection = (bolum: number, resim: string, kutular: { n: number; id: string }[]) =>
+  post<{ tamamlanan: { id: string; ad: string }[]; kitaplik: Kitaplik }>('/api/kitaplik/tamamla', { bolum, resim, kutular });
+/** Telefon kamerası: karede görünen kayıtlı kitaplar (kutu: kareye göre 0..1) */
+export const recognizeShelf = (resim: string) => post<{ bulunan: { id: string; ad: string; yazar: string | null; kutu: Kutu; emin: number }[] }>('/api/kitaplik/kamera', { resim });
+
+/** Kitabı adından bul (ekler ve şapka farkı önemsiz): tam eşleşme, sonra içerme */
+export function kitapBul(list: Kitap[], q: string): Kitap | null {
+  const f = (t: string) => t.toLocaleLowerCase('tr').replace(/ı/g, 'i').normalize('NFD').replace(/\p{M}/gu, '').replace(/['’`][^\s]*/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  const n = f(q);
+  if (!n) return null;
+  const adli = list.filter(b => b.ad);
+  return adli.find(b => f(b.ad!) === n) ?? adli.find(b => f(b.ad!).includes(n) || n.includes(f(b.ad!))) ?? null;
+}
+
+// ---------------------------------------------------------------- Kitap danışmanı (server/src/bookAdvisor.ts)
+
+export interface Profil {
+  toplam: number; okunacak: number; okunuyor: number; okundu: number; buYil: number;
+  turler: { ad: string; n: number }[]; temalar: { ad: string; n: number }[]; yazarlar: { ad: string; n: number }[];
+  enCokNot: { ad: string; n: number }[]; sonOkunan: string[];
+}
+export interface RafOnerisi { id: string; ad: string; yazar: string | null; neden: string; rafta: boolean; durum: Durum }
+export interface YeniOneri { ad: string; yazar: string; neden: string; benzer: string[]; kapak: string | null; yil: number | null }
+export interface TarzSonucu { profil: Profil; ozet: string; oneriler: YeniOneri[]; elenen: number; at: string }
+export interface Oneriler { ruh: { ruhHali: string; oneriler: RafOnerisi[]; at: string } | null; tarz: TarzSonucu | null; profil: Profil }
+
+export const getSuggestions = () => fetch('/api/kitaplik/oneriler', { headers: headers() }).then(r => json<Oneriler>(r));
+export const suggestForMood = (ruh_hali: string, adet = 1) => post<{ oneriler: RafOnerisi[]; aday: number }>('/api/kitaplik/oner', { ruh_hali, adet });
+export const analyzeTaste = (adet = 5) => post<TarzSonucu>('/api/kitaplik/tarz', { adet });
+export const addSuggestion = (ad: string, yazar: string) => post<{ kitap: Kitap; yeni: boolean }>('/api/kitaplik/oneri-ekle', { ad, yazar });

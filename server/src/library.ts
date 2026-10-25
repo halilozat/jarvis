@@ -41,6 +41,27 @@ export interface Kitap {
   kapakArandi?: number;
   /** Jarvis'in kitap defteri sayfaları (RouteLLM); kullanıcının notlarından ayrı */
   jarvis?: JarvisSayfa;
+  /** Kitaplığın hangi bölümünde (1-6); bölüm fotoğrafından ya da elle */
+  bolum?: number;
+  /** Adı kamera taramasında bölüm listesinden tamamlandı */
+  tamamlandi?: boolean;
+  /** "Okundu" olduğu an (istatistik: bu yıl okunanlar) */
+  bittiAt?: string;
+  /** Kayıt geçmişi (Kitaplığım'daki zaman çizelgesi): not, alıntı, durum ve sayfa değişiklikleri */
+  kayitlar?: KitapKayit[];
+}
+
+export interface KitapKayit { tur: 'not' | 'alinti' | 'durum' | 'sayfa'; metin: string; at: string }
+
+/** Kitaplığın bir bölümü: yakın çekim fotoğrafları ve onlardan okunan sıralı kitap listesi */
+export interface Bolum {
+  id: number;
+  ad: string;
+  /** Sabit kameradaki yeri (video normalize, aynalanmamış); El Kontrolü'nde K ayar modunda çizilir */
+  alan: Kutu | null;
+  fotograflar: { id: string; at: string; okunan: number; belirsiz: number }[];
+  /** Fotoğraflardan okunan kitaplar: raf (yukarıdan) ve sıra (soldan); ad null: okunamadı ama sırası belli */
+  liste: { foto: string; raf: number; sira: number; ad: string | null; yazar: string | null; kitapId: string | null }[];
 }
 
 export interface JarvisSayfa {
@@ -67,7 +88,10 @@ export interface Referans {
   at: string;
 }
 
-export interface Kitaplik { kitaplar: Kitap[]; referans: Referans | null }
+export interface Kitaplik { kitaplar: Kitap[]; referans: Referans | null; bolumler: Bolum[] }
+
+export const BOLUM_SAYISI = 6;
+const bosBolum = (id: number): Bolum => ({ id, ad: `Bölüm ${id}`, alan: null, fotograflar: [], liste: [] });
 
 const DURUMLAR: Durum[] = ['okunacak', 'okunuyor', 'bitti'];
 const MAX_BOOKS = 400;
@@ -76,14 +100,25 @@ const MAX_ITEMS = 40;
 
 // ---------------------------------------------------------------- Dosya
 
+function bolumler(v: unknown): Bolum[] {
+  const list = Array.isArray(v) ? (v as Bolum[]) : [];
+  return Array.from({ length: BOLUM_SAYISI }, (_, i) => {
+    const b = list.find(x => x?.id === i + 1);
+    return b ? { ...bosBolum(i + 1), ...b } : bosBolum(i + 1);
+  });
+}
 function read(): Kitaplik {
   try {
     const d = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-    return { kitaplar: Array.isArray(d.kitaplar) ? d.kitaplar : [], referans: d.referans ?? null };
+    return { kitaplar: Array.isArray(d.kitaplar) ? d.kitaplar : [], referans: d.referans ?? null, bolumler: bolumler(d.bolumler) };
   } catch {
-    return { kitaplar: [], referans: null };
+    return { kitaplar: [], referans: null, bolumler: bolumler(null) };
   }
 }
+/** Bölüm modülü (libraryParts.ts) için */
+export const readLibrary = () => read();
+export const writeLibrary = (k: Kitaplik) => write(k);
+export const DATA_DIR = DATA;
 function write(k: Kitaplik) {
   fs.mkdirSync(DATA, { recursive: true });
   fs.writeFileSync(FILE, JSON.stringify(k, null, 2));
@@ -99,7 +134,7 @@ export const getLibrary = (): Kitaplik => read();
 // ---------------------------------------------------------------- Doğrulama
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-const str = (v: unknown, max = MAX_TEXT): string | null => {
+export const str = (v: unknown, max = MAX_TEXT): string | null => {
   if (typeof v !== 'string') return null;
   const t = v.replace(/\s+/g, ' ').trim();
   if (!t || /^(null|none|yok|bilinmiyor|okunamadı|\?+|-)$/i.test(t)) return null;
@@ -139,7 +174,24 @@ function clean(b: any, prev?: Kitap): Kitap {
     elle: b?.elle === true || prev?.elle || undefined,
     kapakArandi: prev?.kapakArandi,
     jarvis: prev?.jarvis,
+    bolum: b && 'bolum' in b ? (posInt(b.bolum, BOLUM_SAYISI) ?? undefined) : prev?.bolum,
+    tamamlandi: prev?.tamamlandi,
+    bittiAt: prev?.bittiAt,
+    kayitlar: prev?.kayitlar,
   };
+}
+
+/** Kayıt geçmişine ekle (en fazla 200) ve "okundu" anını tut */
+export function kayitli(prev: Kitap, next: Kitap): Kitap {
+  const at = new Date().toISOString();
+  const add: KitapKayit[] = [];
+  if (next.durum !== prev.durum) add.push({ tur: 'durum', metin: next.durum, at });
+  if (next.sayfa !== prev.sayfa && next.sayfa) add.push({ tur: 'sayfa', metin: String(next.sayfa), at });
+  for (const n of next.notlar) if (!prev.notlar.includes(n)) add.push({ tur: 'not', metin: n, at });
+  for (const a of next.alintilar) if (!prev.alintilar.includes(a)) add.push({ tur: 'alinti', metin: a, at });
+  const bittiAt = next.durum === 'bitti' ? (prev.durum === 'bitti' ? prev.bittiAt : at) : undefined;
+  if (!add.length && bittiAt === prev.bittiAt) return next;
+  return { ...next, bittiAt, kayitlar: [...(prev.kayitlar ?? []), ...add].slice(-200) };
 }
 
 // ---------------------------------------------------------------- Tarama
@@ -325,7 +377,7 @@ export async function scanShelf(parts: Parca[], ref: Omit<Referans, 'at'>): Prom
     console.warn(`[kitaplık] tarama boş döndü (${text.slice(0, 120).replace(/\s+/g, ' ')})`);
     return { kitaplik: cur, bulunan: 0, belirsiz: 0, ms: Date.now() - t0, model: VISION_MODEL, parca: parts.length, hata: 'Görüntü modeli kitap bulamadı. Işığı artırıp yeniden deneyin ya da kutuları elle çizin.' };
   }
-  const next: Kitaplik = { kitaplar: mergeScan(cur.kitaplar, found), referans: { ...ref, at: new Date().toISOString() } };
+  const next: Kitaplik = { ...cur, kitaplar: mergeScan(cur.kitaplar, found), referans: { ...ref, at: new Date().toISOString() } };
   write(next);
   const belirsiz = found.filter(f => !f.ad).length;
   const failed = res.filter(r => r.err).length;
@@ -338,7 +390,20 @@ export async function scanShelf(parts: Parca[], ref: Omit<Referans, 'at'>): Prom
 const UA = { 'User-Agent': 'Jarvis kisisel asistan (kitaplik kapagi)' };
 const coverFile = (id: string) => path.join(COVERS, `${id.replace(/[^\w-]/g, '')}.jpg`);
 
-async function openLibraryCover(ad: string, yazar: string | null): Promise<Buffer | null> {
+/** Open Library'ye aynı anda en fazla 4 istek (Kitaplığım yüzlerce kapağı birden ister) */
+let olAktif = 0;
+const olSira: (() => void)[] = [];
+async function olSirada<T>(f: () => Promise<T>): Promise<T> {
+  if (olAktif >= 4) await new Promise<void>(r => olSira.push(r));
+  olAktif++;
+  try { return await f(); } finally { olAktif--; olSira.shift()?.(); }
+}
+
+function openLibraryCover(ad: string, yazar: string | null): Promise<Buffer | null> {
+  return olSirada(() => openLibraryCoverAra(ad, yazar));
+}
+
+async function openLibraryCoverAra(ad: string, yazar: string | null): Promise<Buffer | null> {
   const tries = [
     new URLSearchParams({ title: ad, ...(yazar ? { author: yazar } : {}), limit: '5', fields: 'cover_i,title' }),
     new URLSearchParams({ q: `${ad} ${yazar ?? ''}`.trim(), limit: '5', fields: 'cover_i,title' }),
@@ -362,7 +427,7 @@ function update(id: string, fn: (b: Kitap) => Kitap): Kitap | null {
   const k = read();
   const i = k.kitaplar.findIndex(b => b.id === id);
   if (i < 0) return null;
-  k.kitaplar[i] = fn(k.kitaplar[i]);
+  k.kitaplar[i] = kayitli(k.kitaplar[i], fn(k.kitaplar[i]));
   write(k);
   return k.kitaplar[i];
 }
@@ -476,7 +541,7 @@ export function addBook(ad: string, yazar?: string | null): { kitap: Kitap; yeni
   const k = read();
   const old = k.kitaplar.find(b => b.ad && foldTitle(b.ad) === foldTitle(t));
   if (old) return { kitap: old, yeni: false };
-  const b: Kitap = { id: randomUUID().slice(0, 8), ad: t, yazar: str(yazar ?? null, 120), kutu: null, kapak: null, ozet: null, notlar: [], alintilar: [], durum: 'okunacak', elle: true };
+  const b: Kitap = { id: randomUUID().slice(0, 8), ad: t, yazar: str(yazar ?? null, 120), kutu: null, kapak: null, ozet: null, notlar: [], alintilar: [], durum: 'okunacak', elle: true, kayitlar: [{ tur: 'durum', metin: 'eklendi', at: new Date().toISOString() }] };
   write({ ...k, kitaplar: [...k.kitaplar, b] });
   console.log(`[kitaplık] eklendi · ${t}${b.yazar ? ` (${b.yazar})` : ''}`);
   return { kitap: b, yeni: true };
@@ -543,7 +608,7 @@ export function libraryForPrompt(): string {
 
 // ---------------------------------------------------------------- HTTP
 
-const parseDataUrl = (s: unknown): Buffer | null => {
+export const parseDataUrl = (s: unknown): Buffer | null => {
   const m = typeof s === 'string' ? /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(s) : null;
   return m ? Buffer.from(m[2], 'base64') : null;
 };
@@ -565,7 +630,12 @@ export function libraryRouter(): Router {
       const g = posInt(body.referans.genislik, 10000), y = posInt(body.referans.yukseklik, 10000);
       if (g && y && body.referans.kucukResim.length < 20000) referans = { genislik: g, yukseklik: y, kucukResim: body.referans.kucukResim, at: new Date().toISOString() };
     }
-    const next = { kitaplar, referans };
+    // Bölüm alanları (K ayar modunda çizilir); fotoğraflar ve listeler korunur
+    const bol = cur.bolumler.map(b => {
+      const g = Array.isArray(body.bolumler) ? body.bolumler.find((x: any) => x?.id === b.id) : null;
+      return g && 'alan' in g ? { ...b, alan: g.alan === null ? null : validBox(g.alan) ?? b.alan } : b;
+    });
+    const next = { kitaplar, referans, bolumler: bol };
     write(next);
     console.log(`[kitaplık] elle kaydedildi · ${kitaplar.length} kitap`);
     res.json(next);

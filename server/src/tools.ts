@@ -1,4 +1,5 @@
 import { getNews, type GetNewsArgs } from './news.js';
+import { ruhHalineOner, tarzaGoreOner } from './bookAdvisor.js';
 import { getMarkets, getWeather } from './dashboard.js';
 import { wikiLookup } from './wiki.js';
 import { addMemory, removeMemory } from './profile.js';
@@ -133,6 +134,29 @@ export const TOOLS = [
         },
         required: ['kitap'],
       },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'kitap_oner',
+      description: "Kullanıcının ruh haline göre KENDİ kitaplığındaki okunmamış kitaplardan öneri seçer. El Kontrolü açıksa önerilen kitap raftan kendiliğinden çıkar. 'Bugün yorgunum, bana bir kitap öner', 'canım sıkkın, ne okuyayım', 'hafif bir şey okumak istiyorum' gibi isteklerde kullanılır.",
+      parameters: {
+        type: 'object',
+        properties: {
+          ruh_hali: { type: 'string', description: 'Kullanıcının söylediği ruh hali ve istek, kendi sözleriyle (ör. "yorgunum, kafamı dağıtacak hafif bir şey")' },
+          adet: { type: 'integer', description: 'Kaç kitap (varsayılan 1, en fazla 3)' },
+        },
+        required: ['ruh_hali'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'okuma_tarzi',
+      description: "Kullanıcının okuma tarzını kitaplığından analiz eder (türler, temalar, yazarlar, en çok not aldığı kitaplar) ve kitaplığında OLMAYAN, Open Library'de doğrulanmış yeni kitaplar önerir. 'Tarzımı analiz et', 'bana 5 güzel kitap öner', 'zevkime göre ne okumalıyım' gibi isteklerde kullanılır. 15-30 sn sürebilir.",
+      parameters: { type: 'object', properties: { adet: { type: 'integer', description: 'Kaç yeni kitap (varsayılan 5)' } } },
     },
   },
   {
@@ -348,6 +372,19 @@ export async function runTool(name: string, rawArgs: string, progress: ToolProgr
     const dolduruluyor = !r.kitap.jarvis;
     if (dolduruluyor) fillInBackground(r.kitap.id);
     return JSON.stringify({ ok: true, kitap: r.kitap.ad, yazar: r.kitap.yazar, yeni: r.yeni, raftaYeri: !!r.kitap.kutu, sayfalarDolduruluyor: dolduruluyor });
+  }
+  if (name === 'kitap_oner') {
+    const ruh = String(args.ruh_hali ?? '').trim() || 'belirtilmedi';
+    progress('kitaplıktan öneri seçiliyor');
+    const r = await ruhHalineOner(ruh, Math.min(3, Math.max(1, Number(args.adet) || 1)));
+    progress(r.oneriler.length ? `önerildi: ${r.oneriler.map(o => o.ad).join(', ')}` : 'öneri yok');
+    return JSON.stringify({ ...r, bilgi: r.oneriler.some(o => o.rafta) ? 'El Kontrolü açıksa ilk kitap raftan çıkıyor.' : undefined });
+  }
+  if (name === 'okuma_tarzi') {
+    progress('okuma tarzı analiz ediliyor');
+    const r = await tarzaGoreOner(Math.min(8, Math.max(3, Number(args.adet) || 5)));
+    progress(`${r.oneriler.length} kitap Open Library'de doğrulandı${r.elenen ? ` · ${r.elenen} öneri doğrulanamadığı için atıldı` : ''}`);
+    return JSON.stringify({ profil: r.profil, tarz_ozeti: r.ozet, oneriler: r.oneriler.map(({ kapak, olKey, ...o }) => o), bilgi: 'Öneriler Kitaplığım → Öneriler sekmesinde kapaklarıyla duruyor; oradan okunacaklara eklenebilir.' });
   }
   if (name === 'yasam_izi_tara') {
     const out = yasamIziTara(args);

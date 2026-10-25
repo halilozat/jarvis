@@ -118,6 +118,8 @@ export class Sfx {
   /** Yazı çözülürken çok kısa tık */
   typeTick() { this.tone(3200 + Math.random() * 800, 0.012, 0.015, 'square'); }
   /** Damga çakılması */
+  /** Kalem ucu kâğıtta: kısa hışırtı */
+  kalem() { this.burst(0.035, 5200 + Math.random() * 1800, 3000, 0.05, 'highpass', 1.4); }
   stamp() { this.tone(90, 0.18, 0.2, 'sine', 50); this.burst(0.08, 2000, 600, 0.12, 'lowpass', 1); }
   /** ESI göstergesi dolarken yükselen ton (k: 0..1 değer) */
   esiRise(dur: number, k: number) { this.tone(260, dur, 0.06, 'sine', 260 + 900 * Math.max(0.05, k)); }

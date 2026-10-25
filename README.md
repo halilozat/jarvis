@@ -171,18 +171,100 @@ Arkanızdaki kitaplığa elinizi uzatın: görüntüde elinizin değdiği kitap 
 
 Kitaplık bölgesinde çimdik gezegen oluşturmaz, kitap seçer. Kitap dışarıdayken ateş, mühür, gezegen, şimşek ve diğer basılı tutma kontrolleri kapalıdır; kitap rafa dönünce her şey eski hâline gelir.
 
-**Kapaklar:** Sunucu Open Library'de ad ve yazarla arar, bulursa `server/data/kapaklar/` altına kaydeder (çoğu zaman İngilizce baskının kapağı gelir). Türkçe baskının kapağını isterseniz **Ayarlar → Kitaplık**'tan telefonla fotoğrafını yükleyin. Kapak hiç yoksa kırpılan sırt görüntüsü ve adla sade bir kapak üretilir.
+**Kapaklar:** Sunucu Open Library'de ad ve yazarla arar, bulursa `server/data/kapaklar/` altına kaydeder (çoğu zaman İngilizce baskının kapağı gelir). Türkçe baskının kapağını isterseniz **Kitaplığım**'da kitabın kapağına dokunup telefonla fotoğrafını yükleyin. Kapak hiç yoksa kırpılan sırt görüntüsü ve adla sade bir kapak üretilir.
 
-**Jarvis'in kitap defteri:** Adı bilinen bir kitap ilk açıldığında (ya da sesle eklendiğinde) Jarvis RouteLLM ile sayfalarını doldurur: 3 cümlelik özet, 4-6 ana fikir, yazar hakkında, temalar, neden okumalı, kime uygun ve **sizin kitaplığınızdan** en fazla 4 benzer kitap. Bir kez yazılır, saklanır. Kurallar: model kitabı tanımıyorsa sayfa uydurmaz ("Jarvis bu kitabı tanımıyor"); kitaptan birebir alıntı üretmez (alıntılar yalnızca sizin eklediklerinizdir). **Ayarlar → Kitaplık**'ta "Jarvis doldursun / yeniden yaz" düğmesi de var. Sesle: *"Davranış'ın sayfalarını doldur"*.
+**Jarvis'in kitap defteri:** Adı bilinen bir kitap ilk açıldığında (ya da sesle eklendiğinde) Jarvis RouteLLM ile sayfalarını doldurur: 3 cümlelik özet, 4-6 ana fikir, yazar hakkında, temalar, neden okumalı, kime uygun ve **sizin kitaplığınızdan** en fazla 4 benzer kitap. Bir kez yazılır, saklanır. Kurallar: model kitabı tanımıyorsa sayfa uydurmaz ("Jarvis bu kitabı tanımıyor"); kitaptan birebir alıntı üretmez (alıntılar yalnızca sizin eklediklerinizdir). **Kitaplığım**'daki kitap sayfasında "Jarvis doldursun / yeniden yaz" düğmesi de var. Sesle: *"Davranış'ın sayfalarını doldur"*.
 
 **"Bu kitabın adı …":** Adı okunamamış bir kitabı El Kontrolü'nde açıp *"Jarvis, bu kitabın adı Davranış"* deyin: Jarvis "Tamamdır efendim, ekliyorum" der, kitap adlandırılır, kapağı aranır ve sayfaları birkaç saniyede dolar. Kitap açık değilken *"kitaplığıma Davranış'ı ekle"* derseniz eklenir ve sayfaları arka planda dolar.
 
 **Kitapları kalıcı olarak tanıtmak:** Kamera uzaktaki sırtların çoğunu okuyamaz; Jarvis'in kitaplarınızı bilmesi için kamerayı beklemeyin:
-- **Ayarlar → Kitaplık → 📷 Raf fotoğrafından ekle:** telefonla raflara yakından çekin (bir fotoğrafta bir iki raf) ve yükleyin. Okunan kitaplar kalıcı olarak kaydedilir, zaten olanlar tekrar eklenmez. Birden çok fotoğraf aynı anda seçilebilir.
+- **Kitaplığım → Bölümler:** her bölümü telefonla yakından çekip yükleyin (aşağıda). Okunan kitaplar kalıcı olarak kaydedilir, zaten olanlar tekrar eklenmez.
 - **Elle:** aynı yerde ad ve yazar yazıp **Ekle**. Sesle: *"Jarvis, kitaplığıma Davranış'ı ekle"*.
 - Bu kitapların rafta yeri yoktur; El Kontrolü'nde **K** ile adsız (amber) bir kutuya tıklayıp adını yazmaya başlayın, kayıtlı kitaplar öneri olarak çıkar; seçince kitap o kutuya yerleşir (notları ve özeti korunur). **Kaydet**'e basın.
 
-**Notlar ve hafıza:** **Ayarlar → Kitaplık**'ta her kitabın durumu (okunacak / okunuyor / bitti), sayfası, notları, alıntıları, özeti ve kapağı düzenlenir. Sesle de olur (**boşluk** tuşuyla konuşun, El Kontrolü açıkken de çalışır): *"Jarvis, Mülksüzler'e not ekle: …"* (kitap kayıtlı değilse eklenir), *"Tahıla Karşı'yı bitirdim"*, *"Oblomov'da 120. sayfadayım"*. Kitap El Kontrolü'nde açıkken adını söylemeden *"not al: …"* ya da *"alıntı ekle: …"* deyin; not o kitaba eklenir ve sayfada hemen görünür. Kaydedilen kitaplar Jarvis'in talimatına kendiliğinden girer: *"kitaplığımda ne var"*, *"raftan bir kitap öner"* sorularını yalnızca kendi kitaplarınızdan cevaplar.
+**Notlar ve hafıza:** **Kitaplığım**'da her kitabın durumu (okunacak / okunuyor / okundu), sayfası, bölümü, notları, alıntıları, özeti ve kapağı düzenlenir. Sesle de olur (**boşluk** tuşuyla konuşun, El Kontrolü açıkken de çalışır): *"Jarvis, Mülksüzler'e not ekle: …"* (kitap kayıtlı değilse eklenir), *"Tahıla Karşı'yı bitirdim"*, *"Oblomov'da 120. sayfadayım"*. Kitap açıkken adını söylemeden konuşabilirsiniz (aşağıda, "Açık kitapta sesli komutlar"). Kaydedilen kitaplar Jarvis'in talimatına kendiliğinden girer: *"kitaplığımda ne var"*, *"raftan bir kitap öner"* sorularını yalnızca kendi kitaplarınızdan cevaplar.
+
+**Kitaplığım 📚:** Bütün kayıtlarınız tek ekranda. Açmak için:
+- alt şeritteki kitap düğmesi (Mark 2'de **Kitaplık**),
+- **K** tuşu,
+- *"Jarvis, kitaplığımı aç"*.
+
+İçinde:
+- kapak ızgarası, arama, okunacak / okunuyor / okundu ve bölüm filtreleri;
+- sayılar: kitap, okunuyor, okundu, bu yıl okunan, not ve alıntı;
+- kitap ekleme;
+- **Bölümler** sekmesi;
+- **📷 Kitaplık kamerası**.
+
+Bir kitaba dokununca sayfası açılır:
+- kapak (dokunup fotoğraf yükleyin), ad ve yazar;
+- durum, sayfa, bölüm;
+- Jarvis'in özeti ve ana fikirleri;
+- notlar ve alıntılar;
+- **kayıtlar**: ne zaman not aldığınız, ne zaman okuduğunuz.
+
+Telefonda tam ekran çalışır. Ayarlar'da yalnızca buraya giden bir bağlantı vardır.
+
+**Bölümler (6) ve taramayı tamamlama:** Uzaktaki sabit kamera ince sırtların çoğunu okuyamaz. Kitaplığınızın 6 bölümünü telefonla yakından çekin:
+1. **Kitaplığım → Bölümler**'de her bölümün kartından fotoğraf ekleyin. Bir bölüm tek karede okunmuyorsa 2-3 fotoğraf eklenebilir; aynı kitap iki kez yazılmaz.
+2. Altı fotoğrafı birden yüklemek için **⇪ Toplu yükle**. Dosya adındaki rakama göre ("bolum3.jpg" → Bölüm 3), rakam yoksa sıraya göre dağılır. Yüklemeden önce atamayı değiştirebilirsiniz.
+3. Jarvis her fotoğraftan kitapları raf raf, soldan sağa sırayla okur. Okuyamadığı sırt da sırası korunsun diye listede "okunamadı" olarak kalır. Bölümlere ad verebilirsiniz ("Roman", "Bilim" …).
+4. El Kontrolü'nde **K** ayar modunda **B1-B6** düğmeleriyle her bölümün kameradaki alanını bir kez çizip **Kaydet**'e basın.
+5. Bundan sonra her kamera taramasında, okunamayan sırtlar bölümün kamera kırpıntısına numaralanarak çizilir ve o bölümün listesiyle görüntü modeline sorulur:
+   - Model yalnızca listedeki adlardan birini seçebilir; emin değilse boş bırakır.
+   - Kod, adın listede olduğunu ve kitabın başka bir sırta yerleşmediğini denetler.
+   - Kitabın kaydı zaten varsa (notları, özeti) o sırta taşınır.
+6. Ekranda tamamlanan sırtlar yeşil parlar ve adları yazılır; üstlerinde bölüm numarası çıkar. Sonunda "65 KİTAP TANINDI · 24 BÖLÜM LİSTESİNDEN · 3 BELİRSİZ" gibi bir özet görünür.
+
+Fotoğraflar `server/data/kitaplik-bolumler/` altında durur (repoya girmez).
+
+**Açık kitapta sesli komutlar ve kalem:** Kitap El Kontrolü'nde ya da Kitaplığım'da açıkken adını söylemeden konuşun. Bu komutlar modele gitmez:
+
+| Komut | Ne olur |
+|---|---|
+| *"Bu kitaba şu alıntıyı ekle: …"*, *"alıntı ekle: …"* | Kitap notlar sayfasına gider, holografik bir dolma kalem alıntıyı harf harf yazar (mürekkep parıltısı, kalem sesi) |
+| *"Bu kitaba şu notu ekle: …"*, *"not al: …"*, *"şunu not al …"* | Aynı şekilde not |
+| *"Okundu listesine ekle"*, *"bitirdim"*, *"okudum"* | Kalem künyedeki duruma onay işareti çizer, **OKUNDU ✓** damgası basılır |
+| *"Okuyorum"*, *"okumaya başladım"* · *"okunacaklara ekle"* | Durum değişir |
+| *"120. sayfadayım"*, *"toplam 724 sayfa"* | Sayfa ve ilerleme |
+| *"Bu kitabın adı …"* · *"bunu özetle"* | Adlandırır · özeti seçili sesle okur |
+
+Jarvis kısa bir onay söyler. Kitaplığım'da yeni kayıt satırı harf harf yazılır. Kalem yazarken sayfa çevirme ve kapatma jestleri bekler.
+
+**Telefonda kitaplık kamerası:** **Kitaplığım → 📷 Kitaplık kamerası**. Telefonun arka kamerasıyla rafa bakın:
+- Telefon kısa süre sabit durunca kare taranır.
+- Karede görünen **kayıtlı** kitaplarınız holografik çerçeveyle işaretlenir. Renk duruma göredir: okunuyor amber, okundu yeşil.
+- Kitaba dokununca sayfası açılır; durum, not ve alıntı sesle de eklenir.
+- Telefon oynayınca çerçeveler soluklaşır ve yeniden taranır. **⟳ Tara** elle tarar.
+
+Tanıma görüntü modeliyle yapılır, gerçek zamanlı değildir: bir tarama birkaç saniye sürer (rafın bir bölümünde 16 kitap ≈8 sn). Kamera telefonda yalnızca HTTPS adresinde açılır. Kare diske yazılmaz.
+
+**Kitap önerisi ve tarz analizi:**
+
+| Komut | Ne olur |
+|---|---|
+| *"Jarvis, bugün yorgunum, bana bir kitap öner"* (ruh halinizi nasıl isterseniz söyleyin) | Jarvis **rafınızdaki okunmamış** kitaplardan ruh halinize uyanı seçer ve nedenini tek cümleyle söyler. Model yalnızca kitaplığınızdaki listeden seçebilir. El Kontrolü açıksa önerilen kitabın sırtı altın ışıkla "JARVIS ÖNERİYOR" diye parlar, sonra raftan kendiliğinden çıkıp açılır. Rafta yeri olmayan kitap ekranın altından gelir |
+| *"Jarvis, tarzımı analiz et ve bana 5 güzel kitap öner"* | Okuma profiliniz çıkarılır: türler, temalar, yazarlar, en çok not aldığınız kitaplar. Jarvis tarzınızı 2-3 cümleyle anlatır ve kitaplığınızda **olmayan** 5 kitap önerir; her birinde rafınızdaki hangi kitaplara benzediği yazar. Uydurma kitap çıkmasın diye her öneri Open Library'de ad ve yazarla aranır, bulunamayan atılır. ≈10-30 sn sürer |
+
+Sonuçlar **Kitaplığım → ✨ Öneriler**'de kapaklarıyla durur. Oradan ruh halinizi yazarak öneri isteyebilir, tarz analizini yenileyebilir, önerilen kitabı **+ Okunacaklara ekle** ile kitaplığa ekleyebilirsiniz.
+
+**Kitap sohbeti:** Okuduğunuz kitap hakkında Jarvis'le samimi bir sohbet. Başlatmak için:
+- *"Tutunamayanlar hakkında sohbet edelim"*,
+- *"okuduğum kitap hakkında konuşalım"* (açık kitap, yoksa en son üzerinde çalıştığınız "okunuyor" kitap),
+- *"kitap sohbetini başlat"*.
+
+Üstte "📖 KİTAP SOHBETİ · kitabın adı" şeridi görünür. Jarvis her mesajda şunları bilir:
+- kitabın künyesi,
+- kaldığınız sayfa,
+- notlarınız ve alıntılarınız.
+
+Konuşma kuralları:
+- İki kitapsever arkadaş gibi konuşur: kısa cevaplar, her seferinde en fazla bir soru.
+- **Spoiler yok:** kaldığınız yerden sonrasını anlatmaz; yeriniz bilinmiyorsa önce "nerelerdesin?" diye sorar. Kitap bittiyse sonu konuşulabilir.
+- Kitabı iyi tanımıyorsa uydurmaz; notlarınıza dayanır.
+- İlginç bir düşünce söylerseniz "bunu notlarına ekleyeyim mi?" diye sorar.
+
+Bitirmek için *"sohbeti bitir"* deyin ya da şeritteki ✕'e basın; 20 dakika sessizlikte kendiliğinden biter.
 
 **Kamera kıpırdarsa:** Kurulumda rafın küçük gri bir resmi saklanır. El Kontrolü açıkken 3 saniyede bir karşılaştırılır; kamera kaymış, dönmüş ya da yakınlaşmışsa üstte "KAMERA KIPIRDAMIŞ · KİTAPLIĞI YENİDEN TARA" uyarısı çıkar (efekt çalışmaya devam eder). Önden geçen biri, ışık değişimi ya da görüntü gürültüsü uyarı tetiklemez.
 
@@ -192,9 +274,11 @@ Kitaplık bölgesinde çimdik gezegen oluşturmaz, kitap seçer. Kitap dışarı
 - Nişangâhı izleyin: seçim parmak ucunun gördüğü yere göre yapılır, elinizin geri kalanına göre değil. **D** el iskeletini gösterir.
 - Kitaba uzanırken ateş araya giriyorsa **⚙ efektler**'den "Raf bölgesinde ateş/iz yok"u açık tutun ya da ateşi tamamen kapatın.
 
-**Kamerasız deneme:** `?el=demo&kitaplik=1` arka plana raflarınızdaki kitaplardan oluşan prosedürel bir kitaplık çizer (sahte kamera akışı olarak, yani kırpma ve tarama gerçek yoldan geçer). Demo döngüsü: tarama → seç → tut → çek → kapak → aç → sayfa çevir → 👍 özet → ✊ rafa koy. Demoda **J** kamerayı "kıpırdatır" (uyarıyı denemek için). Demo değişiklikleri sunucuya kaydedilmez.
+**Kamerasız deneme:** `?el=demo&kitaplik=1` arka plana raflarınızdaki kitaplardan oluşan prosedürel bir kitaplık çizer (sahte kamera akışı olarak, yani kırpma ve tarama gerçek yoldan geçer). Demo döngüsü (43 sn): tarama → okunamayan sırtlar (amber) → bölüm listeleriyle tamamlama (yeşil) → seç → tut → çek → kapak → aç → sayfa çevir → sesle not (kalem yazar) → "okundu listesine ekle" (kalem işaretler, damga) → 👍 özet → ✊ rafa koy. Demo rafı 6 bölüme ayrılmıştır (üç sütun, üst ve alt yarı). Kitaplığım: `?kitapligim=1`. Öneri çağırma: `?el=demo&kitaplik=1&oneri=` (taramadan sonra hedef kitap "JARVIS ÖNERİYOR" diye raftan çıkar; `&oneri=Körlük` gibi bir ad da verilebilir). Sentetik elsiz kitaplık demosu: `&eller=yok`. Demoda **J** kamerayı "kıpırdatır" (uyarıyı denemek için). Demo değişiklikleri sunucuya kaydedilmez.
 
-**Test:** `npm --prefix server run test:kitaplik` tarama uç noktasını sahte model cevaplarıyla dener (geçersiz JSON, taşan kutu, boş sonuç, parçaların birleştirilmesi, notlar). Gerçek kitaplığa dokunmaz.
+**Test:** `npm run test:kitap`. İnternet ve model gerekmez, gerçek kitaplığa dokunmaz. İki parça çalışır:
+- 46 sesli komut yazımı (açık kitap komutları ve kitap sohbeti);
+- `test:kitaplik` (21 test), sahte model cevaplarıyla: tarama (geçersiz JSON, taşan kutu, boş sonuç, parçaların birleştirilmesi, notlar), bölüm fotoğrafı (raf ve sıra, okunamayanın sırası, aynı kitap iki kez girmez), tamamlama (yalnızca listedeki adlar, emin olunmayan atlanır, başka sırttaki kitap taşınmaz, kayıt notlarıyla taşınır), telefon kamerası (yalnızca kayıtlı kitaplar), kayıt geçmişi, ruh hali önerisi (yalnızca okunmamış kitaplardan, "Ad · Yazar" biçimi de eşleşir), tarz analizi (kitaplıkta olan ve Open Library'de bulunamayan öneri atılır) ve kitap sohbeti notu (kaldığı yer, notlar, spoiler kuralı).
 
 #### Uzay Modu 🪐
 

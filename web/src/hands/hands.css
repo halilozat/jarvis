@@ -244,3 +244,28 @@
 }
 .el-root.uzay .el-shelf, .el-root.uzay .lb-stage, .el-root.uzay .el-face { display: none; }
 .el-root.uzay .el-legend b { color: #ffd38a; }
+
+/* Kitaplık · kalem animasyonu (sesle not, alıntı, durum) */
+.lb-kalem { position: absolute; left: 0; top: 0; width: 64px; height: 64px; z-index: 5; pointer-events: none; filter: drop-shadow(0 0 8px rgba(95, 242, 255, 0.9)); transition: opacity 0.4s, transform 0.08s linear; }
+.lb-kalem.kalk { opacity: 0; transition: opacity 0.45s, transform 0.45s ease-out; }
+.lb-uc { display: inline-block; width: 1px; height: 1em; vertical-align: -0.1em; }
+.lb-murekkep { animation: lb-murekkep 0.9s ease-out; }
+@keyframes lb-murekkep { from { color: #fff; text-shadow: 0 0 10px #5ff2ff, 0 0 18px #5ff2ff; } to { text-shadow: none; } }
+.lb-note.lb-yeni { border-color: rgba(255, 211, 107, 0.7); box-shadow: 0 0 18px rgba(255, 211, 107, 0.25); }
+.lb-note.lb-yazildi { animation: lb-yazildi 1.2s ease-out; }
+@keyframes lb-yazildi { 0% { box-shadow: 0 0 30px rgba(95, 242, 255, 0.8); } 100% { box-shadow: none; } }
+.lb-tik { position: absolute; width: 34px; height: 34px; z-index: 4; overflow: visible; }
+.lb-tik path { fill: none; stroke: #7dffb0; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 48; stroke-dashoffset: 48; filter: drop-shadow(0 0 6px #7dffb0); }
+.lb-damga { position: absolute; right: 7%; bottom: 14%; z-index: 4; padding: 0.3em 0.8em; border: 3px solid #7dffb0; color: #7dffb0; font-weight: 800; letter-spacing: 0.16em; font-size: 1.3em; transform: rotate(-12deg) scale(2.2); opacity: 0; border-radius: 6px; text-shadow: 0 0 10px rgba(125, 255, 176, 0.8); animation: lb-damga 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) forwards; }
+@keyframes lb-damga { to { transform: rotate(-12deg) scale(1); opacity: 0.95; } }
+.lb-spread.lb-riffle .lb-pg.left, .lb-spread.lb-riffle .lb-pg.right { animation: lb-riffle 0.45s ease-out; }
+@keyframes lb-riffle { 0% { opacity: 0.2; filter: blur(2px); } 100% { opacity: 1; filter: none; } }
+.lb-tamam { color: #7dffb0; }
+/* Kitaplık ayarı · bölüm alanları */
+.lbe-bolum rect { fill: rgba(181, 140, 255, 0.06); stroke: #b58cff; stroke-width: 2; stroke-dasharray: 10 6; pointer-events: none; }
+.lbe-bolum text { fill: #d9c6ff; font: 700 14px Rajdhani, sans-serif; letter-spacing: 0.06em; paint-order: stroke; stroke: rgba(0, 0, 0, 0.7); stroke-width: 3px; pointer-events: none; }
+.lbe.bolum-ciz { cursor: crosshair; }
+.lbe.bolum-ciz .lbe-box rect { pointer-events: none; }
+.lbe-bolumler label { display: block; font-size: 12px; letter-spacing: 0.1em; opacity: 0.8; margin: 10px 0 6px; }
+.lbe-bolumler label em { font-style: normal; opacity: 0.7; letter-spacing: 0; }
+.lbe-bolumler .el-btn.var { border-color: #b58cff; }

@@ -21,8 +21,10 @@ import { markBlocked } from './youtube.js';
 import { CAMERA_ENABLED, VISION_MODEL, cameraRouter, initCameras, onClientClosed } from './camera.js';
 import { control, homeState, initHome, type DeviceId, type HomeAction } from './home.js';
 import { initLibrary, libraryRouter } from './library.js';
+import { libraryPartsRouter } from './libraryParts.js';
 import { initLab, labNote, setLabRequest } from './lab.js';
 import { initNewsCenter, newsCenterRouter } from './newsCenter.js';
+import { advisorRouter, initAdvisor, kitapSohbetiNotu } from './bookAdvisor.js';
 import { ELEVEN_MODEL, ELEVEN_MODEL_LABEL, elevenReady, elevenUsage, elevenVoices, isEleven } from './eleven.js';
 import type { Device, StoredMessage } from './types.js';
 
@@ -112,6 +114,7 @@ initCameras({ broadcast, sendTo });
 initHome(broadcast);
 initLab(broadcast);
 initNewsCenter();
+initAdvisor(broadcast);
 initLibrary(broadcast);
 
 const app = express();
@@ -250,6 +253,8 @@ app.post('/api/settings', (req, res) => {
 app.use(cameraRouter());
 
 // ---------- Kitaplık (El Kontrolü: raf haritası, kapak, özet, notlar) ----------
+app.use(advisorRouter());
+app.use(libraryPartsRouter());
 app.use(libraryRouter());
 app.use(newsCenterRouter(() => state.photoMode));
 
@@ -372,11 +377,15 @@ app.post('/api/chat', async (req, res) => {
   let firstTts = false;
   setLabRequest(labOk ? { ctx: req.body.lab, client } : null);
   const lab = labOk ? labNote() : undefined;
+  // Kitap sohbeti: { id, ilk } (istemci sohbet modundayken gönderir)
+  const ks = req.body.kitapSohbeti;
+  const kitapNotu = ks && typeof ks.id === 'string' ? kitapSohbetiNotu(ks.id, ks.ilk === true) ?? undefined : undefined;
   try {
     const reply = await runJarvis({
       text,
       image,
       lab,
+      kitapNotu,
       device,
       prevDevice,
       history,

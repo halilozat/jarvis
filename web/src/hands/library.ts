@@ -6,6 +6,7 @@ import { coverUrl, shortLabel, type Kitap, type Referans } from '../lib/library'
 import type { Fx, HoldState } from './fx';
 import type { P, TrackedHand } from './gestures';
 import type { Sfx } from './sfx';
+import { kalemleIsaretle, kalemleYaz } from './pen';
 import { makeMapper } from './tracker';
 
 export type Faz = 'bos' | 'secili' | 'tutuldu' | 'ucuyor' | 'kapak' | 'aciliyor' | 'acik' | 'kapaniyor' | 'donuyor';
@@ -215,7 +216,14 @@ interface ScanAnim {
   bulunan: number;
   belirsiz: number;
   error: string | null;
+  /** Bölüm listeleriyle tamamlama: bekliyorken tarama sonucu ekranda kalır; bitince tamamlanan sırtlar yeşil parlar */
+  tamam?: { at: number; bekliyor: boolean; list: { id: string; ad: string; bolum: number }[] };
 }
+
+const YESIL = '125,255,176';
+
+/** Sesle eklenen kayıt: kalemle yazılır */
+export type KalemKaydi = { tip: 'not'; metin: string } | { tip: 'alinti'; metin: string } | { tip: 'durum'; durum: Kitap['durum'] } | { tip: 'sayfa'; sayfa: number; toplam?: number };
 
 export class Library {
   books: Kitap[] = [];
@@ -249,6 +257,10 @@ export class Library {
   private flashes: Flash[] = [];
   private scan: ScanAnim | null = null;
   private cooldownUntil = 0;
+  /** Kalem yazıyor: bu sırada gelen harita güncellemesi bitince uygulanır (sayfa yazılırken ezilmesin) */
+  private yazim: { bekleyen: { list: Kitap[]; ref: Referans | null } | null } | null = null;
+  /** Jarvis'in önerdiği kitap: sırtı parlar, sonra raftan kendiliğinden çıkar */
+  private oneri: { id: string; at: number } | null = null;
   private lastMotion = 0;
   private movedN = 0;
 
@@ -274,6 +286,7 @@ export class Library {
 
   /** Harita yüklendi/değişti. Dışarıdaki kitap kimliğiyle korunur (notu yeni eklendiyse sayfaları yenilenir). */
   setBooks(list: Kitap[], ref: Referans | null) {
+    if (this.yazim) { this.yazim.bekleyen = { list, ref }; return; }
     this.books = list;
     this.ref = ref;
     this.booksVer++;
@@ -331,6 +344,20 @@ export class Library {
       }
     }
     this.motionCheck(now);
+
+    // Jarvis öneriyor: 1,7 sn sırt altın ışıkla parlar (eller seçimi bozmaz), sonra kitap kendiliğinden raftan çıkar
+    if (this.oneri) {
+      if (this.out || !this.books.some(b => b.id === this.oneri!.id)) this.oneri = null;
+      else {
+        this.sel = this.oneri.id;
+        this.faz = 'secili';
+        if (now - this.oneri.at > 1700) {
+          this.oneri = null;
+          this.detachVia({ x: this.W / 2, y: this.H * 0.62 }, now);
+        }
+        return { capture: true, zone, holds, mode: 'kitap · Jarvis öneriyor' };
+      }
+    }
 
     switch (this.faz) {
       case 'bos':
@@ -476,8 +503,23 @@ export class Library {
   // ---------------------------------------------------------------- Kopma ve uçuş
 
   private detach(h: TrackedHand, now: number) {
+    this.detachVia({ x: lerp(h.shape.pinchPt.x, this.W / 2, 0.3), y: Math.min(h.shape.pinchPt.y, this.H * 0.6) }, now);
+  }
+
+  /** Jarvis'in önerdiği kitabı çağır (El Kontrolü açıkken): sırtı parlar, ardından raftan çıkıp açılır */
+  cagir(id: string): boolean {
+    if (this.out || this.paused || !this.books.some(b => b.id === id)) return false;
+    this.oneri = { id, at: performance.now() };
+    this.held = null;
+    this.sfx.lockOn();
+    return true;
+  }
+
+  private detachVia(via: P, now: number) {
     const k = this.books.find(b => b.id === this.sel)!;
-    const r = this.rects.get(k.id)!;
+    // Rafta yeri olmayan kitap (önerilen): ekranın altından gelir, rafta boşluk açılmaz
+    const rafta = this.rects.get(k.id);
+    const r = rafta ?? { x: this.W / 2 - 16, y: this.H + 20, w: 32, h: Math.min(this.H * 0.3, 240) };
     const spine = this.grabSpine ?? this.crop(k, r);
     const Hb = Math.min(this.H * 0.64, this.W * 0.42);
     const C = Hb * 0.66;
@@ -486,14 +528,14 @@ export class Library {
     const out: OutBook = {
       k, rect: r, spine, cover, coverSrc: cover.toDataURL('image/jpeg', 0.85), T, Hb, C, s0: r.h / Hb, t0: now,
       from: { x: r.x + r.w / 2, y: r.y + r.h / 2 },
-      via: { x: lerp(h.shape.pinchPt.x, this.W / 2, 0.3), y: Math.min(h.shape.pinchPt.y, this.H * 0.6) },
+      via,
       at: now, spread: 0, pages: [], fillLoading: false, flip: null, lastFlip: 0, pushRef: new Map(), holdFired: new Map(), twoApart: null,
       el: this.buildDom(),
     };
     out.pages = this.buildPages(out);
     this.out = out;
     this.held = null;
-    this.gaps.set(k.id, { rect: r, a: 1, closing: false });
+    if (rafta) this.gaps.set(k.id, { rect: r, a: 1, closing: false });
     this.faz = 'ucuyor';
     this.sfx.whoosh();
     this.paintBook();
@@ -628,6 +670,7 @@ export class Library {
   /** AÇIK: sayfa çevir (açık avucu savur), 👍 basılı = özeti oku, ✊ basılı ya da eli ileri it = rafa koy */
   private openPhase(hands: TrackedHand[], now: number, dt: number, holds: HoldState[]) {
     const o = this.out!;
+    if (this.yazim) return; // kalem yazarken sayfa çevrilmez, kitap kapanmaz
     if (o.flip) {
       const t = clamp((now - o.flip.at) / 700, 0, 1);
       const p = easeInOut(t);
@@ -804,8 +847,10 @@ export class Library {
   }
 
   /** Sayfalar: (sol) kapak + künye, (sağ) Jarvis özeti, sonra notlar ve alıntılar (sayfa başına 1-2) */
-  private buildPages(o: OutBook): string[] {
+  private buildPages(o: OutBook, yeni?: KalemKaydi): string[] {
     const k = o.k;
+    const yeniChip = yeni?.tip === 'durum' ? ' lb-yeni' : '';
+    const yeniBar = yeni?.tip === 'sayfa' ? ' lb-yeni' : '';
     const prog = k.sayfa && k.toplamSayfa ? Math.round((k.sayfa / k.toplamSayfa) * 100) : k.durum === 'bitti' ? 100 : null;
     const foot = (i: number, n: number) => `<div class="lb-foot">${String(i).padStart(2, '0')} / ${String(n).padStart(2, '0')}</div>`;
     const J = k.jarvis && !k.jarvis.bilinmiyor ? k.jarvis : null;
@@ -815,8 +860,8 @@ export class Library {
       <h2>${esc(k.ad || 'Okunamayan kitap')}</h2>
       ${k.yazar ? `<p class="lb-au">${esc(k.yazar)}</p>` : ''}
       ${meta ? `<p class="lb-small">${esc(meta.toLocaleUpperCase('tr'))}</p>` : ''}
-      <span class="lb-chip ${k.durum}">${k.durum.toLocaleUpperCase('tr')}</span>
-      ${prog !== null ? `<div class="lb-bar"><i style="width:${prog}%"></i></div><p class="lb-small">${k.sayfa ? `s. ${k.sayfa}${k.toplamSayfa ? ` / ${k.toplamSayfa}` : ''} · ` : ''}%${prog}</p>` : ''}
+      <span class="lb-chip ${k.durum}${yeniChip}">${k.durum === 'bitti' ? 'OKUNDU' : k.durum.toLocaleUpperCase('tr')}</span>
+      ${prog !== null ? `<div class="lb-bar${yeniBar}"><i style="width:${prog}%"></i></div><p class="lb-small">${k.sayfa ? `s. ${k.sayfa}${k.toplamSayfa ? ` / ${k.toplamSayfa}` : ''} · ` : ''}%${prog}</p>` : ''}
       __FOOT0__</div>`;
     const ozet = k.ozet
       ? `<p class="lb-text">${esc(k.ozet)}</p>`
@@ -842,18 +887,64 @@ export class Library {
       jp.push('<div class="lb-in"><div class="lb-h">JARVIS · KİTAP DEFTERİ</div><p class="lb-text dim"><span class="lb-spin"></span> Ana fikirler, yazar ve rafınızdan benzer kitaplar yazılıyor…</p>__FOOT__</div>');
     }
     const items = [...k.notlar.map(t => ({ t: 'NOT', x: t })), ...k.alintilar.map(t => ({ t: 'ALINTI', x: t }))];
+    // Kalemle yazılacak kayıt: son eklenen (metni kalem yazar)
+    const yeniI = yeni?.tip === 'not' ? k.notlar.length - 1 : yeni?.tip === 'alinti' ? k.notlar.length + k.alintilar.length - 1 : -1;
     const rest: string[] = [];
     if (!items.length) rest.push('<div class="lb-in"><div class="lb-h">NOTLARIM</div><p class="lb-text dim">Henüz not yok.</p><p class="lb-hint">Kitap açıkken: "Jarvis, not al: …" ya da "alıntı ekle: …"</p>__FOOT__</div>');
     for (let i = 0; i < items.length; i += 2) {
       const chunk = items.slice(i, i + 2);
       rest.push(`<div class="lb-in"><div class="lb-h">${chunk.every(c => c.t === 'ALINTI') ? 'ALINTILAR' : 'NOTLARIM'}</div>${chunk
-        .map(c => `<div class="lb-note ${c.t === 'ALINTI' ? 'q' : ''}"><em>${c.t}</em><p>${c.t === 'ALINTI' ? `“${esc(c.x)}”` : esc(c.x)}</p></div>`)
+        .map((c, j) => i + j === yeniI
+          ? `<div class="lb-note ${c.t === 'ALINTI' ? 'q' : ''} lb-yeni"><em>${c.t}</em><p></p></div>`
+          : `<div class="lb-note ${c.t === 'ALINTI' ? 'q' : ''}"><em>${c.t}</em><p>${c.t === 'ALINTI' ? `“${esc(c.x)}”` : esc(c.x)}</p></div>`)
         .join('')}__FOOT__</div>`);
     }
     const pages = [p0, p1, ...jp, ...rest];
     if (pages.length % 2) pages.push('<div class="lb-in"><div class="lb-h">&nbsp;</div><div class="lb-end">◈</div>__FOOT__</div>');
     const n = pages.length;
     return pages.map((p, i) => p.replace(/__FOOT\d?__/, foot(i + 1, n)));
+  }
+
+  // ---------------------------------------------------------------- Kalemle yazma (sesli komut)
+
+  /**
+   * Açık kitaba sesle eklenen kayıt: kitap ilgili sayfaya gider, kalem not ya da alıntıyı harf harf yazar; durum ve
+   * sayfada kalem künyedeki kutuyu işaretler, damga basılır. Kitap açık değilse false (kayıt yine sunucuya gider).
+   */
+  async kitabaYaz(k: KalemKaydi): Promise<boolean> {
+    const o = this.out;
+    if (!o || this.faz !== 'acik' || this.yazim) return false;
+    this.yazim = { bekleyen: null };
+    try {
+      const b: Kitap = { ...o.k, notlar: [...o.k.notlar], alintilar: [...o.k.alintilar] };
+      if (k.tip === 'not') b.notlar.push(k.metin);
+      else if (k.tip === 'alinti') b.alintilar.push(k.metin);
+      else if (k.tip === 'durum') b.durum = k.durum;
+      else if (k.tip === 'sayfa') { b.sayfa = k.sayfa; if (k.toplam) b.toplamSayfa = k.toplam; if (b.durum === 'okunacak') b.durum = 'okunuyor'; }
+      o.k = b;
+      o.pages = this.buildPages(o, k);
+      const idx = Math.max(0, o.pages.findIndex(p => p.includes('lb-yeni')));
+      // Doğru sayfaya hızlı geçiş (sayfalar savrulur)
+      o.flip = null;
+      o.el.leaf.style.visibility = 'hidden';
+      o.spread = Math.floor(idx / 2);
+      o.el.left.innerHTML = o.pages[o.spread * 2] ?? '';
+      o.el.right.innerHTML = o.pages[o.spread * 2 + 1] ?? '';
+      o.el.spread.classList.remove('lb-riffle'); void o.el.spread.offsetWidth; o.el.spread.classList.add('lb-riffle');
+      this.sfx.page();
+      await new Promise(r => setTimeout(r, 380));
+      const hedef = o.el.spread.querySelector<HTMLElement>('.lb-yeni');
+      if (hedef && this.out === o) {
+        if (k.tip === 'not' || k.tip === 'alinti') await kalemleYaz(hedef.querySelector('p') ?? hedef, k.metin, this.sfx, k.tip === 'alinti');
+        else if (k.tip === 'durum') await kalemleIsaretle(hedef, k.durum === 'bitti' ? 'OKUNDU ✓' : k.durum === 'okunuyor' ? 'OKUNUYOR' : 'OKUNACAK', this.sfx);
+        else if (k.tip === 'sayfa') await kalemleIsaretle(hedef, `S. ${k.sayfa}`, this.sfx);
+      }
+      return true;
+    } finally {
+      const p = this.yazim?.bekleyen;
+      this.yazim = null;
+      if (p) this.setBooks(p.list, p.ref);
+    }
   }
 
   // ---------------------------------------------------------------- Tarama sahnesi
@@ -864,6 +955,17 @@ export class Library {
     this.scan = { ...s, doneAt: performance.now(), books, bulunan, belirsiz };
   }
   scanFail(msg: string) { if (this.scan) { this.scan.error = msg; this.scan.doneAt = performance.now(); } }
+  /** Bölüm listeleriyle tamamlama başladı: tarama sonucu ekranda kalır */
+  scanCompleting() { if (this.scan && !this.scan.error) this.scan.tamam = { at: performance.now(), bekliyor: true, list: [] }; }
+  /** Tamamlama bitti: tamamlanan sırtlar yeşil parlar, adları yazılır */
+  scanCompleted(list: { id: string; ad: string; bolum: number }[], books: Kitap[]) {
+    const s = this.scan;
+    if (!s) return;
+    s.tamam = { at: performance.now(), bekliyor: false, list };
+    s.books = books;
+    s.belirsiz = books.filter(b => b.kutu && !b.ad).length;
+    if (list.length) this.sfx.scanBeam?.(1.2);
+  }
   get scanning() { return !!this.scan && this.scan.doneAt === null; }
 
   // ---------------------------------------------------------------- Kamera kıpırdadı mı
@@ -918,8 +1020,26 @@ export class Library {
       this.outline(g, { x: r.x + jx - (lift - 1) * r.w / 2, y: r.y + jy + dy - (lift - 1) * r.h / 2, w: r.w * lift, h: r.h * lift }, CYAN, 0.9 + 0.1 * Math.sin(now / 40));
     }
 
+    // Jarvis öneriyor: sırtın üstünden inen altın ışık huzmesi ve etiket
+    if (this.oneri) {
+      const r = this.rects.get(this.oneri.id), k = this.books.find(b => b.id === this.oneri!.id);
+      const t = (now - this.oneri.at) / 1700;
+      if (r && k) {
+        const beam = g.createLinearGradient(0, 0, 0, r.y + r.h);
+        beam.addColorStop(0, 'rgba(255,211,107,0)'); beam.addColorStop(1, `rgba(255,211,107,${0.35 * Math.min(1, t * 3)})`);
+        g.fillStyle = beam;
+        g.fillRect(r.x - r.w * 0.6, 0, r.w * 2.2, r.y + r.h);
+        const pulse = 0.7 + 0.3 * Math.sin(now / 90);
+        g.fillStyle = `rgba(255,211,107,${0.18 * pulse})`;
+        g.fillRect(r.x, r.y, r.w, r.h);
+        this.outline(g, r, '255,211,107', pulse);
+        this.label(g, r, `JARVIS ÖNERİYOR · ${shortLabel(k)}`, '255,211,107');
+      } else if (k) {
+        this.banner(g, `JARVIS ÖNERİYOR · ${shortLabel(k)} · rafta yeri yok, getiriyorum`, '255,211,107', this.H - 120);
+      }
+    }
     // Seçili kitap: kenar parıltısı + üstünde HUD etiketi
-    if (this.faz === 'secili' && this.sel) {
+    if (this.faz === 'secili' && this.sel && !this.oneri) {
       const r = this.rects.get(this.sel), k = this.books.find(b => b.id === this.sel);
       if (r && k) {
         const pulse = 0.75 + 0.25 * Math.sin(now / 160);
@@ -1046,6 +1166,8 @@ export class Library {
       this.banner(g, `KİTAPLIK TARANIYOR · ${((now - s.at) / 1000).toFixed(1)} sn`, CYAN, 70);
     } else if (!s.error) {
       const t = (now - s.doneAt) / SWEEP;
+      // Sonucun ekrandan çekilme zamanı: tamamlama sürüyorsa bekler, bitince tamamlananlar görünecek kadar uzar
+      const bitis = s.tamam ? (s.tamam.bekliyor ? now : s.tamam.at + s.tamam.list.length * 120 + 2600) : s.doneAt + SWEEP;
       if (t < 1) lineX = zone.x + zone.w * t;
       const vw = this.video.videoWidth || 1920, vh = this.video.videoHeight || 1080;
       const map = makeMapper(vw, vh, W, H);
@@ -1059,9 +1181,37 @@ export class Library {
         const since = lineX === null ? 9 : (lx - (r.x + r.w / 2)) / (zone.w / (SWEEP / 1000));
         const fresh = clamp(1 - since / 0.5, 0, 1);
         const col = b.ad ? CYAN : AMBER;
-        // Sonuç kısa süre kalır; bir kitap seçilince hemen çekilir (etiketle çakışmasın)
-        const fade = this.faz !== 'bos' ? 0 : lineX === null ? clamp(1 - (now - s.doneAt - SWEEP) / 1800, 0, 1) : 1;
+        // Sonuç kısa süre kalır (tamamlama sürerken kalır); bir kitap seçilince hemen çekilir (etiketle çakışmasın)
+        const fade = this.faz !== 'bos' ? 0 : lineX === null ? clamp(1 - (now - bitis) / 1800, 0, 1) : 1;
         if (fade <= 0) continue;
+        // Bölüm listesinden tamamlanan: yeşil parıltı, adı sırayla yazılır, üstünde bölüm numarası
+        const ti = s.tamam && !s.tamam.bekliyor ? s.tamam.list.findIndex(x => x.id === b.id) : -1;
+        if (ti >= 0) {
+          const tt = clamp((now - s.tamam!.at - ti * 120) / 800, 0, 1);
+          if (tt > 0) {
+            g.save();
+            g.globalAlpha = fade;
+            g.fillStyle = `rgba(${YESIL},${0.12 + (1 - tt) * 0.45})`;
+            g.fillRect(r.x, r.y, r.w, r.h);
+            this.outline(g, r, YESIL, 0.6 + 0.4 * (1 - tt));
+            const ad = b.ad!.toLocaleUpperCase('tr');
+            const yazilan = ad.slice(0, Math.ceil(ad.length * tt));
+            g.translate(r.x + r.w / 2, r.y + 4);
+            g.rotate(Math.PI / 2);
+            g.font = `700 ${clamp(r.w * 0.55, 9, 15)}px Rajdhani, sans-serif`;
+            g.textBaseline = 'middle';
+            g.fillStyle = 'rgba(0,0,0,0.7)';
+            g.fillRect(-2, -clamp(r.w * 0.35, 6, 10), Math.min(g.measureText(yazilan).width, r.h - 8) + 4, clamp(r.w * 0.7, 12, 20));
+            g.fillStyle = `rgb(${YESIL})`;
+            g.fillText(yazilan, 0, 1, r.h - 8);
+            g.restore();
+            g.save(); g.globalAlpha = fade * tt;
+            g.font = `700 11px Rajdhani, sans-serif`; g.textAlign = 'center';
+            g.fillStyle = `rgb(${YESIL})`; g.fillText(`B${s.tamam!.list[ti].bolum}`, r.x + r.w / 2, r.y - 6);
+            g.restore();
+            continue;
+          }
+        }
         g.save();
         g.globalAlpha = fade;
         g.fillStyle = `rgba(${col},${0.08 + fresh * 0.35})`;
@@ -1086,10 +1236,11 @@ export class Library {
         g.restore();
       }
       if (lineX === null) {
-        const a = clamp(1 - (now - s.doneAt - SWEEP - 2500) / 1500, 0, 1);
+        const a = clamp(1 - (now - bitis - 2500) / 1500, 0, 1);
         if (a <= 0) { this.scan = null; return; }
         g.save(); g.globalAlpha = a;
-        this.banner(g, `${s.bulunan} KİTAP TANINDI${s.belirsiz ? ` · ${s.belirsiz} BELİRSİZ` : ''}`, CYAN, 70);
+        if (s.tamam?.bekliyor) this.banner(g, `${s.bulunan} KİTAP TANINDI · BELİRSİZLER BÖLÜM LİSTELERİYLE TAMAMLANIYOR ${'·'.repeat(1 + Math.floor(now / 400) % 3)}`, YESIL, 70);
+        else this.banner(g, `${s.bulunan} KİTAP TANINDI${s.tamam?.list.length ? ` · ${s.tamam.list.length} BÖLÜM LİSTESİNDEN` : ''}${s.belirsiz ? ` · ${s.belirsiz} BELİRSİZ` : ''}`, s.tamam?.list.length ? YESIL : CYAN, 70);
         g.restore();
       }
     } else {

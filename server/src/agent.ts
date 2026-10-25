@@ -211,6 +211,8 @@ export interface RunOptions {
   image?: string;
   /** Uzay Laboratuvarı açıksa ekrandaki simülasyonun durumu (JSON) */
   lab?: string;
+  /** Kitap sohbeti: kullanıcı mesajına eklenen not (bookAdvisor.ts) */
+  kitapNotu?: string;
   /** Her sahne hazır olur olmaz (sırayla) */
   onScene?: (index: number, sahne: Sahne) => void;
   /** Yapay zeka görseli sonradan hazır olunca */
@@ -326,7 +328,7 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
       ? `${text}\n\n${FAL_NOTE}`
       : isBrief
       ? `${text}\n\n[Sistem notu: Bu, gündem brifingi komutu. Gündem özeti protokolünü uygula.]`
-      : text + LAB_NOTE;
+      : text + LAB_NOTE + (opts.kitapNotu ?? '');
   const messages: ChatMessage[] = [
     { role: 'system', content: buildSystemPrompt(contextVars(device, prevDevice)) },
     ...history.slice(-12).map(m => ({ role: m.role, content: m.text }) as ChatMessage),

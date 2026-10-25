@@ -293,7 +293,7 @@ function shade(hex: string, k: number): string {
  * Demo kitaplığı: okunur (ekranda görünen) yönde çizer, sonra kareyi aynalar (kamera gibi).
  * Döner: kare canvas'ı ve kitaplar (kutular aynalanmamış kare koordinatında, gerçek taramayla aynı biçim).
  */
-export function buildDemoShelf(): { frame: HTMLCanvasElement; books: Kitap[] } {
+export function buildDemoShelf(): { frame: HTMLCanvasElement; books: Kitap[]; gizli: Map<string, { ad: string; yazar: string }> } {
   const view = document.createElement('canvas');
   view.width = DEMO_W; view.height = DEMO_H;
   const g = view.getContext('2d')!;
@@ -356,7 +356,33 @@ export function buildDemoShelf(): { frame: HTMLCanvasElement; books: Kitap[] } {
       emin: p.b.belirsiz ? 0.2 : 0.9,
     };
   });
-  return { frame, books };
+  // Okunamayan sırtların gerçek adları: demoda bölüm listesiyle tamamlamayı göstermek için
+  const gizli = new Map(placed.map((p, i) => [`demo-${i}`, { ad: p.b.ad, yazar: p.b.yazar }]));
+  return { frame, books, gizli };
+}
+
+/**
+ * Demo rafının 6 bölümü (ekranda soldan sağa üç sütun, üst ve alt yarı): B1 sol üst … B6 sağ alt.
+ * Kutular video normalize ve aynalanmamış: ekrandaki x = 1 - kutunun x'i.
+ */
+export function demoBolumu(k: Kutu): number {
+  const cx = 1 - (k[1] + k[3]) / 2, cy = (k[0] + k[2]) / 2;
+  return (cy < 0.5 ? 0 : 3) + Math.min(2, Math.floor(cx * 3)) + 1;
+}
+export const DEMO_BOLUM_ALANLARI: Kutu[] = [0, 1, 2, 3, 4, 5].map(i => {
+  const col = i % 3, row = Math.floor(i / 3);
+  return [row * 0.5 + 0.04, 1 - (col + 1) / 3 + 0.01, row * 0.5 + 0.5, 1 - col / 3 - 0.01];
+});
+
+/**
+ * Demo taraması: kamera uzaktan okuyamamış gibi her 4. sırt belirsiz gelir; tamamlama adımı bunları (ve gerçekten
+ * belirsiz olanları) bölüm listelerinden doldurur.
+ */
+export function demoTarama(books: Kitap[], gizli: Map<string, { ad: string; yazar: string }>) {
+  const maskeli = books.map((b, i) => (b.kutu && i % 4 === 2 ? { ...b, ad: null, yazar: null } : b));
+  const tamamlanan = maskeli.filter(b => b.kutu && !b.ad && gizli.has(b.id)).map(b => ({ id: b.id, ad: gizli.get(b.id)!.ad, bolum: demoBolumu(b.kutu!) }));
+  const tam = maskeli.map(b => { const t = tamamlanan.find(x => x.id === b.id); return t ? { ...b, ad: t.ad, yazar: gizli.get(b.id)!.yazar, tamamlandi: true } : b; });
+  return { maskeli, tamamlanan, tam };
 }
 
 /** Sahte kamera akışı: kare canvas'ı <video>'ya bağlanır (videoWidth/Height, kırpma ve küçük resim gerçek gibi çalışır) */

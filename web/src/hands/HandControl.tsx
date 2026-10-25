@@ -13,12 +13,12 @@ import { demoBookHands, demoHands } from './synthetic';
 import { detect, listCameras, loadLandmarker, openCamera, type CameraInfo, type RawHand } from './tracker';
 import { FaceHud, demoFace, detectFaces, loadFaceDetector, type FaceBox } from './face';
 import type { FaceDetector } from '@mediapipe/tasks-vision';
-import { Library, loadCover, thumbOf } from './library';
+import { Library, loadCover, thumbOf, type KalemKaydi } from './library';
 import LibraryEditor from './LibraryEditor';
-import { DEMO_TARGET, buildDemoShelf, demoStream } from './shelfDemo';
+import { DEMO_BOLUM_ALANLARI, DEMO_TARGET, buildDemoShelf, demoStream, demoTarama } from './shelfDemo';
 import { AYAR_LISTESI, loadAyar, saveAyar, type ElAyar } from './settings';
 import { GEZEGENLER, type GezegenTur } from './fx';
-import { fillBook, getLibrary, saveLibrary, scanLibrary, shelfRegion, tileFrame, type Kitap } from '../lib/library';
+import { completeSection, fillBook, getLibrary, saveLibrary, scanLibrary, shelfRegion, tileFrame, type Bolum, type Kitap, type Kitaplik, type Kutu } from '../lib/library';
 import { SpaceBrain } from './space/brain';
 import type { SpaceCmd } from './space/commands';
 import { demoSpaceHands } from './space/demo';
@@ -54,7 +54,11 @@ export interface HandControlProps {
   libraryKey?: number;
   /** "Jarvis, kitaplığımı tara": her artışta bir tarama */
   scanSignal?: number;
-  onScanDone?(r: { bulunan: number; belirsiz: number; hata?: string }): void;
+  onScanDone?(r: { bulunan: number; belirsiz: number; tamamlanan?: number; hata?: string }): void;
+  /** Açık kitaba sesle eklenen kayıt: kalemle yazılır (n her istekte artar) */
+  kalemKaydi?: { kayit: KalemKaydi; n: number } | null;
+  /** Jarvis'in önerdiği kitap: raftan kendiliğinden çıkar (n her öneride artar) */
+  oneriCmd?: { id: string; ad: string | null; n: number } | null;
   /** Kitap açıkken 👍 basılı: özeti seçili sesle oku */
   onBookRead?(k: Kitap): void;
   /** Açık kitap değişti ("Jarvis, bunu özetle" için) */
@@ -92,6 +96,10 @@ const DEMO_TARA = new URLSearchParams(location.search).get('tara');
 const DEMO_ODA = new URLSearchParams(location.search).get('oda') === '1';
 /** Haber demosu sentetik ellersiz (klavyeyle denemek için): ?el=demo&mod=haber&haber=elle */
 const DEMO_HABER_ELLE = new URLSearchParams(location.search).get('haber') === 'elle';
+/** Kitaplık demosunda sentetik el yok (sesli komut ve öneri denemesi için): ?el=demo&kitaplik=1&eller=yok */
+const DEMO_ELSIZ = new URLSearchParams(location.search).get('eller') === 'yok';
+/** Kitaplık demosu: taramadan sonra Jarvis bu kitabı önerir (raftan kendiliğinden çıkar): &oneri=Kitap Adı (boşsa hedef kitap) */
+const DEMO_ONERI = new URLSearchParams(location.search).get('oneri');
 
 /** Uzay Laboratuvarı jestleri */
 const LEGEND_LAB: [string, string][] = [
@@ -164,6 +172,8 @@ export default function HandControl(p: HandControlProps) {
   // Kitaplık demosu: prosedürel raf ve kitapları bir kez üret
   const [demoShelf] = useState(() => (shelfDemo ? buildDemoShelf() : null));
   const [libBooks, setLibBooks] = useState<Kitap[]>(() => demoShelf?.books ?? []);
+  /** Kitaplığın bölümleri (K ayarında alanları çizilir); demoda sabit 6 bölüm */
+  const [libBolumler, setLibBolumler] = useState<Bolum[]>(() => (shelfDemo ? DEMO_BOLUM_ALANLARI.map((alan, i) => ({ id: i + 1, ad: `Bölüm ${i + 1}`, alan, fotograflar: [], liste: [] })) : []));
   const [scanning, setScanning] = useState(false);
   const [moved, setMoved] = useState(false);
   const [dims, setDims] = useState({ W: window.innerWidth, H: window.innerHeight, vw: 1920, vh: 1080 });
@@ -383,13 +393,27 @@ export default function HandControl(p: HandControlProps) {
         if (d.cmd && !demoFired.has(key)) { demoFired.add(key); scene.command(d.cmd.cmd, now); }
       } else if (demoShelf) {
         const t = (now - demoStart) / 1000;
-        const d = demoBookHands(t, fx.W, fx.H, lib.rectOf(demoTarget));
+        const d = DEMO_ELSIZ || DEMO_ONERI !== null ? { hands: [], step: DEMO_ONERI !== null && t > 10 ? '🗣 "Jarvis, bugün yorgunum, bana bir kitap öner"' : '', loop: 0, kalem: undefined } : demoBookHands(t, fx.W, fx.H, lib.rectOf(demoTarget));
+        if (DEMO_ONERI !== null && t > 11 && !demoFired.has('oneri')) {
+          demoFired.add('oneri');
+          const k = demoBooks.find(b => b.ad && (DEMO_ONERI ? b.ad.toLocaleLowerCase('tr') === DEMO_ONERI.toLocaleLowerCase('tr') : b.id === demoTarget));
+          if (k) lib.cagir(k.id);
+        }
         if (d.loop !== demoLoop) {
           demoLoop = d.loop;
           lib.scanStart();
-          setTimeout(() => { if (alive) lib.scanResult(demoBooks, demoBooks.filter(b => b.ad).length, demoBooks.filter(b => !b.ad).length); }, 1300);
+          // Uzaktan okunamayan sırtlar, ardından bölüm listeleriyle tamamlama (yeşil)
+          const dt = demoTarama(demoBooks, demoShelf!.gizli);
+          setTimeout(() => {
+            if (!alive) return;
+            lib.scanResult(dt.maskeli, dt.maskeli.filter(b => b.ad).length, dt.maskeli.filter(b => b.kutu && !b.ad).length);
+            setTimeout(() => { if (!alive) return; lib.scanCompleting(); setTimeout(() => { if (alive) { lib.setBooks(dt.tam, null); lib.scanCompleted(dt.tamamlanan, dt.tam); } }, 2000); }, 2800);
+          }, 1300);
         }
         hands = d.hands; step = d.step;
+        // Sesli kayıt (demo): kalem açık kitaba yazar
+        const kk = d.kalem ? `kalem:${d.loop}:${d.kalem}` : '';
+        if (kk && !demoFired.has(kk)) { demoFired.add(kk); void lib.kitabaYaz(d.kalem === 'not' ? { tip: 'not', metin: 'Yeni videoda bu kitabın ana fikrini anlat.' } : { tip: 'durum', durum: 'bitti' }); }
       } else if (p.demo) {
         const d = demoHands((now - demoStart) / 1000, fx.W, fx.H);
         hands = d.hands; step = d.step;
@@ -470,7 +494,7 @@ export default function HandControl(p: HandControlProps) {
         listCameras().then(setCams);
         size();
         // Kitaplık haritası (kurulumda bir kez taranır; sunucuda durur)
-        getLibrary().then(k => { if (!alive) return; lib.setBooks(k.kitaplar, k.referans); setLibBooks(k.kitaplar); }).catch(() => {});
+        getLibrary().then(k => { if (!alive) return; lib.setBooks(k.kitaplar, k.referans); setLibBooks(k.kitaplar); setLibBolumler(k.bolumler ?? []); }).catch(() => {});
       } catch (e: any) {
         if (!alive) return; // eski başlatmanın hatası ekrana gelmesin
         setErr(e?.name === 'NotAllowedError' ? 'Kamera izni verilmedi. Adres çubuğundaki kamera simgesinden izin verin.' : `Kamera açılamadı: ${e?.message || e}`);
@@ -525,12 +549,17 @@ export default function HandControl(p: HandControlProps) {
     scanBusy.current = true;
     setScanning(true);
     lib.scanStart();
-    const done = (r: { bulunan: number; belirsiz: number; hata?: string }) => { scanBusy.current = false; setScanning(false); propsRef.current.onScanDone?.(r); };
-    if (shelfDemo) {
+    const done = (r: { bulunan: number; belirsiz: number; tamamlanan?: number; hata?: string }) => { scanBusy.current = false; setScanning(false); propsRef.current.onScanDone?.(r); };
+    if (shelfDemo && demoShelf) {
+      const dt = demoTarama(demoShelf.books, demoShelf.gizli);
       setTimeout(() => {
-        const books = lib.books;
-        lib.scanResult(books, books.filter(b => b.ad).length, books.filter(b => !b.ad).length);
-        done({ bulunan: books.filter(b => b.ad).length, belirsiz: books.filter(b => !b.ad).length });
+        lib.scanResult(dt.maskeli, dt.maskeli.filter(b => b.ad).length, dt.maskeli.filter(b => b.kutu && !b.ad).length);
+        lib.scanCompleting();
+        setTimeout(() => {
+          lib.setBooks(dt.tam, null); setLibBooks(dt.tam);
+          lib.scanCompleted(dt.tamamlanan, dt.tam);
+          done({ bulunan: dt.maskeli.filter(b => b.ad).length, belirsiz: dt.tam.filter(b => b.kutu && !b.ad).length, tamamlanan: dt.tamamlanan.length });
+        }, 2400);
       }, 1300);
       return;
     }
@@ -546,15 +575,61 @@ export default function HandControl(p: HandControlProps) {
       const r = await scanLibrary({ parcalar: tileFrame(c, region), genislik: c.width, yukseklik: c.height, kucukResim: thumbOf(video) });
       lib.setBooks(r.kitaplik.kitaplar, r.kitaplik.referans);
       setLibBooks(r.kitaplik.kitaplar);
-      if (r.hata) lib.scanFail(r.hata);
-      else lib.scanResult(r.kitaplik.kitaplar.filter(b => b.kutu), r.bulunan, r.belirsiz);
-      done({ bulunan: r.bulunan, belirsiz: r.belirsiz, hata: r.hata });
+      if (r.hata) { lib.scanFail(r.hata); done({ bulunan: r.bulunan, belirsiz: r.belirsiz, hata: r.hata }); return; }
+      lib.scanResult(r.kitaplik.kitaplar.filter(b => b.kutu), r.bulunan, r.belirsiz);
+      // Belirsiz sırtlar bölüm listeleriyle tamamlanır (bölümün yakın çekim fotoğrafları varsa)
+      const t = await bolumlerleTamamla(c, r.kitaplik).catch(e => { console.warn('[kitaplık] tamamlama', e); return null; });
+      done({ bulunan: r.bulunan, belirsiz: t?.belirsiz ?? r.belirsiz, tamamlanan: t?.sayi ?? 0 });
     } catch (e) {
       const msg = (e as Error).message;
       lib.scanFail(msg);
       done({ bulunan: 0, belirsiz: 0, hata: msg });
     }
   };
+  /**
+   * Taramadan sonra: alanı çizilmiş ve yakın çekim listesi olan her bölüm için, belirsiz sırtlar numaralanarak bölümün
+   * kırpıntısına çizilir ve görüntü modeline listeyle sorulur. Bölümler aynı anda; sonunda harita yeniden alınır.
+   */
+  const bolumlerleTamamla = async (c: HTMLCanvasElement, k: Kitaplik): Promise<{ sayi: number; belirsiz: number } | null> => {
+    const lib = libRef.current;
+    if (!lib) return null;
+    const icinde = (kt: Kutu, a: Kutu) => { const cy = (kt[0] + kt[2]) / 2, cx = (kt[1] + kt[3]) / 2; return cy >= a[0] && cy <= a[2] && cx >= a[1] && cx <= a[3]; };
+    const isler = (k.bolumler ?? []).filter(b => b.alan && b.liste.some(x => x.ad)).map(b => {
+      const a = b.alan!;
+      const belirsiz = k.kitaplar.filter(x => x.kutu && !x.ad && icinde(x.kutu, a)).slice(0, 60);
+      if (!belirsiz.length) return null;
+      const sx = a[1] * c.width, sy = a[0] * c.height, sw = (a[3] - a[1]) * c.width, sh = (a[2] - a[0]) * c.height;
+      const s = Math.min(1.6, 1600 / sw);
+      const crop = document.createElement('canvas');
+      crop.width = Math.round(sw * s); crop.height = Math.round(sh * s);
+      const g = crop.getContext('2d')!;
+      g.drawImage(c, sx, sy, sw, sh, 0, 0, crop.width, crop.height);
+      // Numaralı kutular: modelin hangi sırttan söz ettiği belli olsun
+      belirsiz.forEach((x, i) => {
+        const [y0, x0, y1, x1] = x.kutu!;
+        const rx = (x0 * c.width - sx) * s, ry = (y0 * c.height - sy) * s, rw = (x1 - x0) * c.width * s, rh = (y1 - y0) * c.height * s;
+        g.strokeStyle = '#00e5ff'; g.lineWidth = 3; g.strokeRect(rx, ry, rw, rh);
+        const fs = Math.max(18, Math.min(30, rw * 0.9));
+        g.font = `700 ${fs}px sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+        const ly = Math.max(fs * 0.6, ry - fs * 0.6);
+        g.fillStyle = '#000'; g.fillRect(rx + rw / 2 - fs * 0.7, ly - fs * 0.6, fs * 1.4, fs * 1.2);
+        g.fillStyle = '#ffeb3b'; g.fillText(String(i + 1), rx + rw / 2, ly);
+      });
+      return completeSection(b.id, crop.toDataURL('image/jpeg', 0.88), belirsiz.map((x, i) => ({ n: i + 1, id: x.id })))
+        .then(r => r.tamamlanan.map(t => ({ ...t, bolum: b.id })))
+        .catch(e => { console.warn(`[kitaplık] ${b.ad} tamamlanamadı`, e); return []; });
+    }).filter((x): x is Promise<{ id: string; ad: string; bolum: number }[]> => !!x);
+    if (!isler.length) return null;
+    lib.scanCompleting();
+    const list = (await Promise.all(isler)).flat();
+    const yeni = await getLibrary();
+    lib.setBooks(yeni.kitaplar, yeni.referans);
+    setLibBooks(yeni.kitaplar);
+    setLibBolumler(yeni.bolumler ?? []);
+    lib.scanCompleted(list, yeni.kitaplar);
+    return { sayi: list.length, belirsiz: yeni.kitaplar.filter(x => x.kutu && !x.ad).length };
+  };
+
   // "Jarvis, kitaplığımı tara"
   const lastSignal = useRef(p.scanSignal ?? 0);
   useEffect(() => {
@@ -662,17 +737,40 @@ export default function HandControl(p: HandControlProps) {
     });
   }, [p.newsCmd]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Jarvis kitap önerdi: El Kontrolü büyü modundaysa kitap raftan çıkar
+  const lastOneri = useRef(0);
+  useEffect(() => {
+    const c = p.oneriCmd;
+    if (!c || c.n === lastOneri.current) return;
+    lastOneri.current = c.n;
+    const lib = libRef.current;
+    if (modRef.current !== 'buyu' || !lib) return;
+    // Kimlik bulunamazsa adla (demo rafı gerçek kitaplığın adlarını taşır)
+    const k = lib.books.find(b => b.id === c.id) ?? (c.ad ? lib.books.find(b => b.ad?.toLocaleLowerCase('tr') === c.ad!.toLocaleLowerCase('tr')) : undefined);
+    if (k) lib.cagir(k.id);
+  }, [p.oneriCmd]);
+
+  // Açık kitaba sesle eklenen kayıt: kalemle yazılır
+  const lastKalem = useRef(0);
+  useEffect(() => {
+    const c = p.kalemKaydi;
+    if (!c || c.n === lastKalem.current) return;
+    lastKalem.current = c.n;
+    void libRef.current?.kitabaYaz(c.kayit);
+  }, [p.kalemKaydi]);
+
   // Sunucuda kitaplık değişti (not eklendi, Ayarlar'dan düzenlendi): haritayı yenile
   useEffect(() => {
     if (!p.libraryKey || shelfDemo) return;
-    getLibrary().then(k => { libRef.current?.setBooks(k.kitaplar, k.referans); setLibBooks(k.kitaplar); }).catch(() => {});
+    getLibrary().then(k => { libRef.current?.setBooks(k.kitaplar, k.referans); setLibBooks(k.kitaplar); setLibBolumler(k.bolumler ?? []); }).catch(() => {});
   }, [p.libraryKey, shelfDemo]);
   useEffect(() => { if (libRef.current) libRef.current.paused = editing; }, [editing]);
-  const saveBooks = async (list: Kitap[]) => {
+  const saveBooks = async (list: Kitap[], alanlar?: { id: number; alan: Kutu | null }[]) => {
     const lib = libRef.current;
+    if (alanlar) setLibBolumler(b => b.map(x => ({ ...x, alan: alanlar.find(y => y.id === x.id)?.alan ?? x.alan })));
     if (shelfDemo) { lib?.setBooks(list, null); setLibBooks(list); setToast('demo · kaydedilmedi'); setTimeout(() => setToast(null), 1800); return; }
     try {
-      const k = await saveLibrary({ kitaplar: list });
+      const k = await saveLibrary({ kitaplar: list, bolumler: alanlar });
       lib?.setBooks(k.kitaplar, k.referans);
       setLibBooks(k.kitaplar);
       setToast(`kitaplık kaydedildi · ${k.kitaplar.filter(b => b.ad).length} kitap`);
@@ -798,7 +896,7 @@ export default function HandControl(p: HandControlProps) {
       {moved && !editing && <div className="el-warn">⚠ KAMERA KIPIRDAMIŞ · KİTAPLIĞI YENİDEN TARA (K)</div>}
       {editing && (
         <LibraryEditor
-          books={libBooks} W={dims.W} H={dims.H} vw={dims.vw} vh={dims.vh}
+          books={libBooks} bolumler={libBolumler} W={dims.W} H={dims.H} vw={dims.vw} vh={dims.vh}
           scanning={scanning} moved={moved} demo={shelfDemo}
           onScan={runScan} onSave={saveBooks} onClose={() => setEditing(false)}
         />

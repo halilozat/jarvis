@@ -750,3 +750,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .lib-add { display: flex; flex-direction: column; gap: 6px; }
 .lib-noplace { font-style: normal; font-size: 11px; color: var(--muted); }
 .lib-jarvis ol { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.45; display: flex; flex-direction: column; gap: 4px; }
+
+/* Kitap sohbeti şeridi */
+.kitap-sohbeti { position: fixed; top: calc(env(safe-area-inset-top) + 12px); left: 50%; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 14px; border-radius: 99px; background: rgba(8, 18, 28, 0.88); border: 1px solid var(--accent-2); color: var(--text); box-shadow: 0 0 22px rgba(255, 181, 71, 0.25); animation: ks-gir 0.4s ease; }
+.kitap-sohbeti span { font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; color: var(--accent-2); }
+.kitap-sohbeti b { font-weight: 600; font-size: 14px; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kitap-sohbeti button { background: none; border: 1px solid var(--line); color: var(--muted); width: 26px; height: 26px; border-radius: 50%; cursor: pointer; }
+@keyframes ks-gir { from { opacity: 0; transform: translate(-50%, -10px); } }

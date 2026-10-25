@@ -109,12 +109,21 @@ function offsetOf(pose: Omit<Pose, 'x' | 'y'>, pinch: boolean): P {
 export interface DemoRect { x: number; y: number; w: number; h: number }
 
 /**
- * Kitap sahnesi (döngü 24 sn): tarama → işaretle seç → çimdikle tut → çek → kapak → aç → sayfa çevir (iki kez ileri,
- * bir kez geri) → 👍 özeti oku → ✊ rafa koy. `r`: hedef kitabın ekrandaki sırtı.
+ * Kitap sahnesi (döngü 43 sn): tarama ve bölüm listeleriyle tamamlama (≈10 sn) → işaretle seç → çimdikle tut → çek →
+ * kapak → aç → sayfa çevir (iki kez ileri, bir kez geri) → sesle not (kalem yazar) → "okundu listesine ekle" (kalem
+ * işaretler) → 👍 özeti oku → ✊ rafa koy. `r`: hedef kitabın ekrandaki sırtı. kalem: sesli kaydın yazılma anı.
  */
-export function demoBookHands(t: number, W: number, H: number, r: DemoRect | null): { hands: DemoHand[]; step: string; loop: number } {
-  const loop = Math.floor(t / 24);
-  t = t % 24;
+export const BOOK_DEMO_SURE = 43;
+export function demoBookHands(t0: number, W: number, H: number, r: DemoRect | null): { hands: DemoHand[]; step: string; loop: number; kalem?: 'not' | 'durum' } {
+  const loop = Math.floor(t0 / BOOK_DEMO_SURE);
+  let t = t0 % BOOK_DEMO_SURE;
+  if (t < 10) return { step: t < 1.3 ? '🔎 kitaplık taranıyor' : t < 4.1 ? '🔎 uzaktan okunamayan sırtlar (amber)' : t < 6.1 ? '📚 bölüm listeleriyle tamamlanıyor' : '📚 bölüm listesinden tamamlandı (yeşil)', hands: [], loop };
+  t -= 5.5;
+  // Kitap açıkken sesli kayıtlar (kalem): 14,4 → 23,4
+  if (t >= 14.4 && t < 23.4) {
+    return t < 19 ? { step: '🗣 "Jarvis, not al: …" · kalem yazar', hands: [], loop, kalem: 'not' } : { step: '🗣 "okundu listesine ekle" · kalem işaretler', hands: [], loop, kalem: 'durum' };
+  }
+  if (t >= 23.4) t -= 9;
   const s = Math.min(W, H) * 0.16;
   const hand = (x: number, y: number, extra: Partial<Pose> & { curl: Pose['curl'] }, id = 'Left'): DemoHand => ({ id, score: 1, pts: synthHand({ x, y, size: s, ...extra }) });
   const sway = Math.sin(t * 1.7) * 0.008;

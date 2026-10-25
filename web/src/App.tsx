@@ -13,8 +13,7 @@ import { SystemPanel } from './components/dashboard/SystemPanel';
 import { WeatherPanel } from './components/dashboard/WeatherPanel';
 import { SleepLayer, WakeChecks, WakeSettings, calibBus } from './components/Wake';
 import { ProfileSettings } from './components/Profile';
-import { LibrarySettings } from './components/LibrarySettings';
-import { addNote, patchBook, type Kitap } from './lib/library';
+import { addNote, getLibrary, kitapBul, patchBook, type Kitap } from './lib/library';
 import { VideoPanel, type VideoInfo } from './components/VideoPanel';
 import { CameraPanel } from './camera/CameraPanel';
 import { HomePanel, HomeToast, getHome, homeAct, type HomeState } from './components/HomePanel';
@@ -22,6 +21,7 @@ import type { Kontrol } from './hands/controller';
 import type { GezegenTur } from './hands/fx';
 import { matchSpaceChain, matchSpaceCommand, type SpaceCmd } from './hands/space/commands';
 import { matchNewsCommand, type HaberCmd } from './hands/news/commands';
+import { matchBookChat, matchBookCommand, onayCumlesi, type KitapKomut } from './lib/bookCommands';
 import { tumCumleler } from './hands/space/facts';
 import { labContext } from './hands/space/labContext';
 import { emitCamera, getCameras, getRole, isCameraEvent, onCamera, setRole, toggleCameraPanel } from './lib/camera';
@@ -63,6 +63,7 @@ const voiceTone = (f0: number | null) => (f0 === null ? '' : f0 < 110 ? 'derin' 
 const Mark2 = lazy(() => import('./mark2/Mark2'));
 // El Kontrolü (kamera + el takibi) ayrı parça: yalnızca açılınca indirilir.
 const HandControl = lazy(() => import('./hands/HandControl'));
+const Kitapligim = lazy(() => import('./library/Kitapligim'));
 /** ?el=1 açılışta el kontrolünü açar, ?el=demo kamerasız sentetik ellerle gösterir */
 const EL_PARAM = ((q: string | null) => (q === 'demo' ? 'demo' : q === '1' || q === 'kamera' ? 'kamera' : null))(new URLSearchParams(location.search).get('el'));
 /** "Jarvis, el kontrolünü aç / kapat" — sunucuya gitmeden arayüzde karşılanır */
@@ -75,19 +76,20 @@ const MOD_PARAM = new URLSearchParams(location.search).get('mod');
 const EL_UZAY = MOD_PARAM === 'uzay' || MOD_PARAM === 'lab' || MOD_PARAM === 'gosteri' || MOD_PARAM === 'ekstra';
 /** ?el=1&mod=haber: El Kontrolü Haber Modu'nda açılır */
 const EL_HABER = MOD_PARAM === 'haber';
+/** "Jarvis, kitaplığımı aç" / "kitaplığımı göster": Kitaplığım ekranı */
+const KITAPLIGIM_AC = /kitapl[ıi][gğ][ıi]m[ıi]?\s+(aç|göster|getir)/i;
+/** ?kitapligim=1: Kitaplığım açık başlar (deneme) */
+const KITAPLIGIM_PARAM = new URLSearchParams(location.search).get('kitapligim') === '1';
 /** "Jarvis, kitaplığımı tara" / "kitaplığı tarar mısın" / "rafları tara" (El Kontrolü kamerasıyla) */
 const KITAPLIK_TARA = /(kitapl[ıi]k|kitapl[ıi][gğ][ıi](m[ıi])?|raflar[ıi](m[ıi])?)\s.*?\btar(a|ar|at)/i;
-/** Kitap açıkken: "Jarvis, bunu özetle", "kitabı özetle", "özetini oku" */
-/** Kitap açıkken: "Jarvis, not al: …", "buna not ekle …", "alıntı ekle: …" → o kitaba eklenir (modele gitmez) */
-const KITABA_NOT = /^\s*(jarvis[,\s]+)?(bunu\s+|buna\s+|bu kitaba\s+|kitaba\s+)?(not al|not ekle|notlara ekle|alıntı ekle|alıntı al|alıntılara ekle)\s*[:,.\-–]?\s*(.+)$/i;
-/** Kitap açıkken: "Jarvis, bu kitabın adı Davranış" → açık kitap adlandırılır, Jarvis sayfaları dolar */
-const KITABIN_ADI = /(^|\s)(bu\s+)?kitab[ıi]n\s+ad[ıi](?:\s*[:,]\s*|\s+)["“']?(?!(?:ne|nedir|neydi)\s*\??\s*$)([^?]+?)["”']?[.!]?\s*$/i;
 /** El Kontrolü açıkken: "Jarvis, Mars yap", "Jüpiter'e çevir", "gezegeni Dünya yap", "Güneş olsun" */
 const GEZEGEN_KOMUT = /(?:^|\s)(dünya|mars|jüpiter|jupiter|satürn|saturn|ay|güneş)(?:['’]?(?:y?[aeıiuü]|[dt][ae]|n[ıiuü]n))?\s+(yap|çevir|olsun|getir|dönüştür|oluştur)/i;
 const GEZEGEN_ADI: Record<string, GezegenTur> = { dünya: 'dunya', mars: 'mars', jüpiter: 'jupiter', jupiter: 'jupiter', satürn: 'saturn', saturn: 'saturn', ay: 'ay', güneş: 'gunes' };
-const BUNU_OZETLE = /(^|\s)(bunu|kitab[ıi]|bu kitab[ıi])\s+(özetle|özetler misin|anlat|oku)(?=$|[\s,.!?])|(^|\s)özetini\s+(oku|söyle)/i;
 /** ?ui=mark2 ya da ?ui=mark1: ortak ayarı değiştirmeden yalnızca bu sekmede dene */
 const UI_OVERRIDE = ((q: string | null) => (q === 'mark1' || q === 'mark2' ? q : null))(new URLSearchParams(location.search).get('ui'));
+
+/** Şimdiki zaman (olay işleyicilerinde; bileşen dışında tanımlı) */
+const simdi = () => Date.now();
 
 /** Çekirdeğe sabit bir fonksiyon: her render'da yeni `bind` çekirdeğin çizim döngüsünü baştan kuruyordu. */
 const coreLevel = () => voice.level();
@@ -166,6 +168,16 @@ export default function App() {
   const [libKey, setLibKey] = useState(0);
   const [scanSig, setScanSig] = useState(0);
   const openBook = useRef<Kitap | null>(null);
+  /** Kitaplığım ekranı */
+  const [kitapligim, setKitapligim] = useState(KITAPLIGIM_PARAM);
+  /** Kitap sohbeti: açıkken her mesaja kitabın notu eklenir (sunucu); 20 dk sessizlikte kendiliğinden biter */
+  const [kitapSohbeti, setKitapSohbeti] = useState<{ id: string; ad: string } | null>(null);
+  const sohbetRef = useRef<{ id: string; ad: string; at: number } | null>(null);
+  /** Jarvis'in önerdiği kitap (El Kontrolü'nde raftan çıkar) ve öneri listesinin sürümü (Kitaplığım) */
+  const [oneriCmd, setOneriCmd] = useState<{ id: string; ad: string | null; n: number } | null>(null);
+  const [oneriKey, setOneriKey] = useState(0);
+  /** Açık kitaba sesle eklenen kayıt: El Kontrolü'nde ve Kitaplığım'da kalemle yazılır */
+  const [kalemKaydi, setKalemKaydi] = useState<{ kayit: Exclude<KitapKomut, { tip: 'ad' } | { tip: 'ozetle' }>; n: number; id: string } | null>(null);
   const [planetCmd, setPlanetCmd] = useState<{ tur: GezegenTur; n: number } | null>(null);
   // Uzay modu: sesli komut (sunucuya gitmez), El Kontrolü'nün o anki modu
   const [spaceCmd, setSpaceCmd] = useState<{ cmd: SpaceCmd; n: number; zincir?: SpaceCmd[] } | null>(null);
@@ -473,6 +485,8 @@ export default function App() {
     return subscribe(device, (e: ServerEvent) => {
       if (isCameraEvent(e)) { emitCamera(e); return; } // kamera paneli dinler
       if (e.type === 'kitaplik') { setLibKey(k => k + 1); return; }
+      if (e.type === 'kitap_oner') { setOneriKey(k => k + 1); const id = e.id, ad = e.ad; if (id) setOneriCmd(c => ({ id, ad, n: (c?.n ?? 0) + 1 })); return; }
+      if (e.type === 'kitap_tarzi') { setOneriKey(k => k + 1); return; }
       if (e.type === 'home') {
         setHome(e);
         if (e.last) {
@@ -626,6 +640,28 @@ export default function App() {
     if (!t && !image) return;
     if (!image && EL_CLOSE.test(t)) { setInput(''); setInterim(''); setCore('idle'); closeHands(); return; }
     if (!image && EL_OPEN.test(t)) { voice.unlock(); setInput(''); setInterim(''); setCore('idle'); setHands(h => h ?? 'kamera'); return; }
+    // Kitap sohbeti: "Tutunamayanlar hakkında sohbet edelim", "okuduğum kitap hakkında konuşalım", "sohbeti bitir"
+    const sk = !image ? matchBookChat(t) : null;
+    let sohbetIlk = false;
+    if (sk?.tip === 'bitir' && sohbetRef.current) {
+      setInput(''); setInterim(''); sohbetRef.current = null; setKitapSohbeti(null);
+      speakLine('Güzel sohbetti efendim. Kitabın tadını çıkarın.');
+      return;
+    }
+    if (sk?.tip === 'basla') {
+      voice.unlock(); setInput(''); setInterim('');
+      const list = (await getLibrary().catch(() => null))?.kitaplar ?? [];
+      // Adı söylendiyse o kitap; yoksa açık kitap; yoksa en son üzerinde çalışılan "okunuyor" kitap
+      const sonAt = (b: Kitap) => b.kayitlar?.at(-1)?.at ?? '';
+      const b = sk.kitap ? kitapBul(list, sk.kitap) : openBook.current ?? [...list].filter(x => x.ad && x.durum === 'okunuyor').sort((x, y) => sonAt(y).localeCompare(sonAt(x)))[0] ?? null;
+      if (!b?.ad) { speakLine(sk.kitap ? `${sk.kitap} kitaplığınızda yok efendim. Önce ekleyeyim mi?` : 'Hangi kitap hakkında konuşalım efendim?'); return; }
+      sohbetRef.current = { id: b.id, ad: b.ad, at: simdi() };
+      setKitapSohbeti({ id: b.id, ad: b.ad });
+      sohbetIlk = true;
+    }
+    // 20 dakika sessizlik: kitap sohbeti kendiliğinden biter
+    if (sohbetRef.current && !sohbetIlk && simdi() - sohbetRef.current.at > 20 * 60_000) { sohbetRef.current = null; setKitapSohbeti(null); }
+    if (!image && KITAPLIGIM_AC.test(t)) { voice.unlock(); setInput(''); setInterim(''); setKitapligim(true); return; }
     // Kitaplık taraması El Kontrolü'nün kamerasıyla yapılır (kapalıysa açılır)
     if (!image && KITAPLIK_TARA.test(t)) {
       voice.unlock(); setInput(''); setInterim('');
@@ -662,31 +698,23 @@ export default function App() {
       setPlanetCmd(c => ({ tur: GEZEGEN_ADI[gm[1].toLocaleLowerCase('tr')], n: (c?.n ?? 0) + 1 }));
       return;
     }
-    // Açık kitabı adlandır (adı okunamamış sırtlar için): ad yazılır, sunucu kapağı ve Jarvis sayfalarını doldurur
-    const an = !image && openBook.current ? KITABIN_ADI.exec(t) : null;
-    if (an && openBook.current) {
+    // Açık kitap (El Kontrolü ya da Kitaplığım): "okundu listesine ekle", "120. sayfadayım", "şu alıntıyı ekle: …",
+    // "not al: …", "bu kitabın adı …", "bunu özetle". Modele gitmez; El Kontrolü'nde kalem yazar, Jarvis kısa onay verir.
+    const kk = !image && openBook.current ? matchBookCommand(t) : null;
+    if (kk && openBook.current) {
       voice.unlock(); setInput(''); setInterim('');
-      const ad = an[3].trim();
-      patchBook(openBook.current.id, { ad })
-        .then(() => speakLine('Tamamdır efendim, ekliyorum.'))
-        .catch(e => flash(`Kitap adlandırılamadı: ${e.message}`));
-      return;
-    }
-    // Açık kitaba not/alıntı
-    const nm = !image && openBook.current ? KITABA_NOT.exec(t) : null;
-    if (nm && openBook.current) {
-      voice.unlock(); setInput(''); setInterim('');
-      const alinti = /alıntı/i.test(nm[3]);
-      const metin = nm[4].trim().replace(/[.。]+$/, '');
-      addNote(openBook.current.id, metin, alinti ? 'alinti' : 'not')
-        .then(() => speakLine(alinti ? 'Alıntıyı ekledim efendim.' : 'Not aldım efendim.'))
-        .catch(e => flash(`Not eklenemedi: ${e.message}`));
-      return;
-    }
-    // Açık kitabın özeti: modele gitmeden, hazır özeti seçili sesle oku
-    if (!image && openBook.current && BUNU_OZETLE.test(t)) {
-      voice.unlock(); setInput(''); setInterim('');
-      readBook(openBook.current);
+      const b = openBook.current;
+      if (kk.tip === 'ozetle') { readBook(b); return; }
+      if (kk.tip === 'ad') {
+        patchBook(b.id, { ad: kk.ad }).then(() => speakLine(onayCumlesi(kk, null))).catch(e => flash(`Kitap adlandırılamadı: ${e.message}`));
+        return;
+      }
+      setKalemKaydi(c => ({ kayit: kk, n: (c?.n ?? 0) + 1, id: b.id }));
+      const istek = kk.tip === 'not' || kk.tip === 'alinti' ? addNote(b.id, kk.metin, kk.tip)
+        : kk.tip === 'durum' ? patchBook(b.id, { durum: kk.durum })
+          : patchBook(b.id, { sayfa: kk.sayfa, ...(kk.toplam ? { toplamSayfa: kk.toplam } : {}), ...(b.durum === 'okunacak' ? { durum: 'okunuyor' as const } : {}) });
+      istek.then(r => { if (openBook.current?.id === r.kitap.id) openBook.current = r.kitap; speakLine(onayCumlesi(kk, b.ad)); })
+        .catch(e => flash(`Kaydedilemedi: ${e.message}`));
       return;
     }
     voice.unlock(); // kullanıcı hareketi içinde sesi aç
@@ -700,7 +728,9 @@ export default function App() {
     t0Ref.current = performance.now();
     try {
       // Uzay Laboratuvarı açıksa ekrandaki durum da gider ("neden dondu?" gibi sorular için)
-      await sendChat(t, device, image, handsRef.current && elMod.current === 'uzay' ? labContext() : null);
+      const ks = sohbetRef.current;
+      if (ks) ks.at = simdi();
+      await sendChat(t, device, image, handsRef.current && elMod.current === 'uzay' ? labContext() : null, ks ? { id: ks.id, ilk: sohbetIlk } : null);
     } catch (e: any) {
       setCore('idle');
       setTelemetry(['hata: ' + e.message]);
@@ -947,6 +977,7 @@ export default function App() {
       if (e.code === 'KeyW' && !e.repeat) { postWake('test (W)'); return; }
       if (e.code === 'KeyS' && !e.repeat) { voice.unlock(); postSleep(); return; }
       if (e.code === 'KeyH' && !e.repeat) { toggleHands(); return; }
+      if (e.code === 'KeyK' && !e.repeat && !handsRef.current) { setKitapligim(v => !v); return; }
       if (wstate !== 'awake') return;
       if (e.code === 'Space') { e.preventDefault(); toggleMic(); }
     };
@@ -1138,6 +1169,7 @@ export default function App() {
             home={home}
             onHome={() => setHomeOpen(o => !o)}
             onHands={toggleHands}
+            onLibrary={() => setKitapligim(true)}
             onStop={stopPlayback}
             onDrawer={d => setDrawer(drawer === d ? null : d)}
             onSleep={() => { voice.unlock(); postSleep(); }}
@@ -1236,6 +1268,9 @@ export default function App() {
           <form className="ask" onSubmit={e => { e.preventDefault(); submit(input); }}>
             <input value={input} onChange={e => setInput(e.target.value)} placeholder="Jarvis'e sor…" enterKeyHint="send" />
           </form>
+          <button className="icon-btn cam" onClick={() => setKitapligim(true)} aria-label="Kitaplığım" title="Kitaplığım (K)">
+            <svg viewBox="0 0 24 24"><path d="M4 4h3v16H4zM9 4h3v16H9z" /><path d="M14.5 5.2l2.9-.8 3.6 15-2.9.8z" /></svg>
+          </button>
           <button className="icon-btn cam" onClick={() => setHomeOpen(o => !o)} aria-label="Akıllı ev" title="Akıllı ev">
             <svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7M5 10v10h14V10" /><path d="M10 20v-5h4v5" /></svg>
           </button>
@@ -1288,7 +1323,9 @@ export default function App() {
                   </div>
                   <p className="muted small">Mark 2 geniş ekran için tasarlandı; telefonda sade bir düzene geçer.</p>
                   <ProfileSettings flash={flash} />
-                  <LibrarySettings flash={flash} version={libKey} />
+                  <label>Kitaplık</label>
+                  <button className="lib-btn" onClick={() => { setDrawer(null); setKitapligim(true); }}>📚 Kitaplığım'ı aç</button>
+                  <p className="muted small">Kitaplar, 6 bölümün fotoğrafları, notlar, alıntılar ve telefonda kitaplık kamerası. Kısayol: <b>K</b> · sesle: "Jarvis, kitaplığımı aç".</p>
                   <label>Bu cihazın rolü</label>
                   <div className="seg">
                     <button className={getRole() === 'ekran' ? 'on' : ''} onClick={() => setRole('ekran')}>Ekran</button>
@@ -1401,7 +1438,20 @@ export default function App() {
             sahneIlerleme={{ i: sceneIdx, bitti: done }}
             onPreload={lines => { if (voiceSel) for (const l of lines) voice.preload(l, voiceSel, undefined, undefined, true); }} listening={core === 'listening'}
             onSay={t => speakLine(t)} onMic={toggleMic} onModeChange={onElMod}
-            haber={startHaber} newsCmd={newsCmd} onSus={stopPlayback} />
+            haber={startHaber} newsCmd={newsCmd} onSus={stopPlayback} kalemKaydi={kalemKaydi} oneriCmd={oneriCmd} />
+        </Suspense>
+      )}
+
+      {kitapSohbeti && (
+        <div className="kitap-sohbeti" role="status">
+          <span>📖 KİTAP SOHBETİ</span><b>{kitapSohbeti.ad}</b>
+          <button onClick={() => { sohbetRef.current = null; setKitapSohbeti(null); }} aria-label="Kitap sohbetini bitir">✕</button>
+        </div>
+      )}
+      {kitapligim && (
+        <Suspense fallback={null}>
+          <Kitapligim version={libKey} oneriVersion={oneriKey} flash={flash} onClose={() => setKitapligim(false)} kalemKaydi={kalemKaydi}
+            onOpenBook={k => { openBook.current = k; }} />
         </Suspense>
       )}
 

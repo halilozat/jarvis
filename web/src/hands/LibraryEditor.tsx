@@ -1,18 +1,21 @@
 // Kitaplık ayar modu (El Kontrolü'nde K): taranan kutuları gör, belirsiz/kaçırılan kitabın sırtına fareyle dikdörtgen çiz,
-// adını yaz; var olan kutuyu taşı, köşesinden boyutlandır, sil. Kaydet → server/data/kitaplik.json
+// adını yaz; var olan kutuyu taşı, köşesinden boyutlandır, sil. Bölüm düğmesiyle (B1-B6) bölümün kameradaki alanını
+// çiz: tarama, alanın içindeki belirsiz sırtları o bölümün yakın çekim listesiyle tamamlar. Kaydet → server/data/kitaplik.json
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Kitap, Kutu } from '../lib/library';
+import type { Bolum, Kitap, Kutu } from '../lib/library';
 import { makeMapper } from './tracker';
 
 interface Props {
   books: Kitap[];
+  /** Kitaplığın bölümleri: alanları burada çizilir */
+  bolumler: Bolum[];
   /** Ekran ve video boyutu (kutular video normalize, aynalanmamış) */
   W: number; H: number; vw: number; vh: number;
   scanning: boolean;
   moved: boolean;
   demo: boolean;
   onScan(): void;
-  onSave(list: Kitap[]): Promise<void>;
+  onSave(list: Kitap[], alanlar?: { id: number; alan: Kutu | null }[]): Promise<void>;
   onClose(): void;
 }
 
@@ -28,7 +31,11 @@ export default function LibraryEditor(p: Props) {
   // Kaydedilmemiş değişiklik yoksa liste doğrudan haritadır (tarama bitince ya da sunucudan yeni harita gelince yenilenir)
   const [edits, setEdits] = useState<Kitap[] | null>(null);
   const list = edits ?? p.books;
-  const dirty = edits !== null;
+  /** Bölüm alanı düzenlemeleri (kaydedilmemiş) ve çizilen bölüm */
+  const [alanlar, setAlanlar] = useState<Map<number, Kutu | null>>(new Map());
+  const [bolumCiz, setBolumCiz] = useState<number | null>(null);
+  const alanOf = (b: Bolum) => (alanlar.has(b.id) ? alanlar.get(b.id)! : b.alan);
+  const dirty = edits !== null || alanlar.size > 0;
   const setList = (fn: (l: Kitap[]) => Kitap[]) => setEdits(e => fn(e ?? p.books));
   const [sel, setSel] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -109,6 +116,13 @@ export default function LibraryEditor(p: Props) {
     }
   };
   const onUp = () => {
+    // Bölüm çizimi: sürüklenen dikdörtgen o bölümün alanı olur
+    if (bolumCiz !== null && drag?.tip === 'yeni') {
+      if (drag.r.w > 20 && drag.r.h > 20) setAlanlar(m => new Map(m).set(bolumCiz, toKutu(drag.r)));
+      setBolumCiz(null);
+      setDrag(null);
+      return;
+    }
     if (drag?.tip === 'yeni' && drag.r.w > 5 && drag.r.h > 12) {
       const id = newId();
       setList(l => [...l, { id, ad: null, yazar: null, kutu: toKutu(drag.r), kapak: null, ozet: null, notlar: [], alintilar: [], durum: 'okunacak', elle: true }]);
@@ -129,7 +143,10 @@ export default function LibraryEditor(p: Props) {
 
   const save = async () => {
     setSaving(true);
-    try { await p.onSave(list); setEdits(null); } finally { setSaving(false); }
+    try {
+      await p.onSave(list, alanlar.size ? [...alanlar].map(([id, alan]) => ({ id, alan })) : undefined);
+      setEdits(null); setAlanlar(new Map());
+    } finally { setSaving(false); }
   };
 
   const placed = list.filter(b => b.kutu);
@@ -138,8 +155,19 @@ export default function LibraryEditor(p: Props) {
   const cur = list.find(b => b.id === sel) ?? null;
 
   return (
-    <div className="lbe" onPointerMove={onMove} onPointerUp={onUp}>
+    <div className={'lbe' + (bolumCiz !== null ? ' bolum-ciz' : '')} onPointerMove={onMove} onPointerUp={onUp}>
       <svg className="lbe-svg" width={p.W} height={p.H} onPointerDown={e => onDown(e)}>
+        {p.bolumler.map(b => {
+          const a = alanOf(b);
+          if (!a) return null;
+          const r = toRect(a);
+          return (
+            <g key={`b${b.id}`} className="lbe-bolum">
+              <rect x={r.x} y={r.y} width={r.w} height={r.h} />
+              <text x={r.x + 8} y={r.y + 18}>B{b.id} · {b.ad}{b.liste.length ? ` · ${b.liste.filter(x => x.ad).length} kitap listede` : ' · fotoğraf yok'}</text>
+            </g>
+          );
+        })}
         {placed.map(b => {
           const r = toRect(b.kutu!);
           const on = b.id === sel;
@@ -197,6 +225,16 @@ export default function LibraryEditor(p: Props) {
             {belirsiz > 24 && <span className="lbe-hint">+{belirsiz - 24} belirsiz daha (kutusuna tıklayın)</span>}
           </div>
         )}
+        <div className="lbe-bolumler">
+          <label>Bölüm alanları <em>(tarama, belirsizleri bölüm listesiyle tamamlar)</em></label>
+          <div className="lbe-row">
+            {p.bolumler.map(b => (
+              <button key={b.id} className={'el-btn' + (bolumCiz === b.id ? ' on' : '') + (alanOf(b) ? ' var' : '')} title={`${b.ad}: ${alanOf(b) ? 'alanı yeniden çiz' : 'alanını çiz'}`}
+                onClick={() => { setSel(null); setBolumCiz(v => (v === b.id ? null : b.id)); }}>B{b.id}{alanOf(b) ? ' ✓' : ''}</button>
+            ))}
+          </div>
+          {bolumCiz !== null && <p className="lbe-hint">Bölüm {bolumCiz}: rafın o bölümünü saran dikdörtgeni sürükleyerek çizin.</p>}
+        </div>
         {p.demo && <p className="lbe-hint">Demo: değişiklikler sunucuya kaydedilmez.</p>}
       </aside>
     </div>
