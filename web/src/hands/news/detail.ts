@@ -41,11 +41,14 @@ export function detayHtml(o: KumeOzet, temel: TemelKume | null, a: Analiz | null
       <div class="hb-sag">${harita(d?.sehirler ?? [])}${zamanHtml}${onceki}</div>
     </div>
     <footer>
-      <span><b>🤏🤏 ↔</b> kaynakları yan yana aç</span>
+      <span><b>🤏 ↕</b> kaydır</span>
+      <span><b>🤏 ↔</b> sonraki haber</span>
+      <span><b>🤏🤏 ⟷</b> yakınlaş: kaynakları yan yana aç</span>
+      <span><b>🗣</b> “dünya basını nasıl verdi?”</span>
       <span><b>🤏🤏 ↕</b> terazi: iddia kontrolü</span>
       <span class="hb-soru-ipucu"><b>☝️ ?</b> sorulmamış sorular</span>
       <span><b>👍</b> özetle</span>
-      <span><b>✋ ⤴</b> geri</span>
+      <span><b>✊ tut</b> geri</span>
     </footer>
   </div>`;
 }

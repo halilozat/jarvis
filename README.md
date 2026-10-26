@@ -502,33 +502,47 @@ Bu modda büyü ve uzay efektleri çalışmaz.
 
 **Kart karuseli:** Gündemdeki olaylar önünüzde yarım daire şeklinde holografik kartlar olarak durur. Aynı olayı veren haberler tek kartta birleşir. Kartta kategori, başlık (en fazla 2 satır), "11 kaynak", saat, ilk veren kaynak ve alan adı yazar. Kamerayla kişi ayırma maskesi kullanılır: arkada kalan kartlar başınızın arkasına geçer, siz öndekilerle arkadakilerin arasında durursunuz.
 
-**El hareketleri:**
+**El kilidi:** Kamera bir eli görür görmez iş yapmaz. Avucunuzu kameraya açık ve sabit **0,6 sn** tutun: elin çevresinde halka dolar, "KONTROL" kilitlenir (kilit sesi). Yalnızca kilitli el iş yapar; kadraja giren, sallanan ya da yarı kapalı gelen el hiçbir şey tetiklemez. Kilitli elin çevresinde soluk bir halka durur. El 0,4 sn'den uzun kaybolursa ya da kol kadrajın altına inerse kilit açılır (kısa takip kopmaları kilidi bozmaz). İki elle hareketlerde iki el de kilitli olmalı. Kilitsiz el görünürken üstte "✋ avucunu göster: kontrol" ipucu çıkar. Kamerasız demoda kilit adımı yoktur.
+
+**El hareketleri** (kilitli elle):
 
 | Jest | Ne yapar |
 |---|---|
-| ✋ sağa / sola savur | Karusel döner (ivmeli, yumuşak duruş). Detayda sonraki haber, iddia kontrolünde sonraki iddia |
-| ✋ yukarı / aşağı savur | Karuselde kategori değiştirir. Detayda ve diğer görünümlerde yukarı savurmak geri döndürür. Sabah özetinde kartları kaydırır |
-| ☝️ işaret | Üstüne geldiğiniz kart öne doğru büyür. Karşılaştırmada bir kaynağa 0,4 sn tutarsanız o kaynağın metninde ilgili alıntılar renkleriyle vurgulanır. Detaydaki "? sorulmamış sorular" düğmesine 0,7 sn tutmak soruları açar |
+| 🤏 tut ve sağa / sola sürükle | Karusel elinizi birebir izler; bırakınca elin hızıyla kayar ve en yakın karta oturur. Detayda bir haber, iddia kontrolünde bir iddia ilerler |
+| 🤏 tut ve yukarı / aşağı sürükle | Karuselde kategori değiştirir. Detayda ve diğer panellerde elin altındaki sütunu kaydırır (kesilen sayılar, "kim ne zaman verdi" listesi) |
 | 🤏 tut ve kendine çek | Haber detayı: özet, önemli sayılar, harita (yalnızca metinde geçen iller), kim ne zaman verdi, arşivde "daha önce" |
-| 🤏🤏 iki elle tut, yana aç | Kaynak karşılaştırması |
+| ✊→🖐 kısa yumruk ve aç (0,2–0,8 sn) | Kartı açar (işaret ettiğiniz ya da öndeki). Detayda kaynak karşılaştırmasına, karşılaştırmada dünya basınına iner |
+| 🤏🤏 iki elle tut, elleri aç | Yakınlaş: öndeki kart elleriniz açıldıkça büyür, eşikte (×1,45) detaya iner; detayda kaynak karşılaştırmasına. Bir tutuşta bir seviye: daha derine inmek için bırakıp yeniden tutun |
+| 🤏🤏 iki elle tut, elleri yaklaştır | Uzaklaş: bir seviye geri (×0,7) |
 | 🤏🤏 iki elle tut, elleri ters yönde yukarı-aşağı oynat (terazi) | İddia kontrolü |
+| ☝️ işaret | Üstüne geldiğiniz kart öne doğru büyür. Karşılaştırmada bir kaynağa 0,4 sn tutarsanız o kaynağın metninde ilgili alıntılar renkleriyle vurgulanır. Detaydaki "? sorulmamış sorular" düğmesine 0,7 sn tutmak soruları açar |
 | 👍 1 sn | Jarvis haberi özetler |
-| ✊ 1 sn | Kartı kapatır, Jarvis'in sesini keser |
+| ✊ yumruğu 0,8 sn tut | Bir seviye geri (dünya basını → karşılaştırma → detay → karusel), Jarvis'in sesini keser; süren yayını, manşet sayımını ya da dünya turunu durdurur. Halka 0,3 sn'den sonra dolar. Yumruk yapmak tek başına bir şey tetiklemez: karar el açılınca (aç) ya da halka dolunca (geri) verilir |
 | ✌️ | Mikrofon |
 
 **Klavye:**
 - **←/→** haber, **↑/↓** kategori,
-- **Enter** detay, **K** karşılaştır, **I** iddia, **S** sorular, **O** sabah özeti,
+- **Enter** detay, **K** karşılaştır, **W** dünya basını, **/** ara (anahtar kelime), **I** iddia, **S** sorular, **O** sabah özeti,
+- **Y** canlı yayın, **H** son dakika, **R** manşetler, **A** dünyada bugün, **P** basın özeti, **X** takibe al, **V** haber duvarı, **1-9** duvardaki numara,
 - **⌫** geri, **T** temiz çekim.
 
 **Sesli komutlar** (yerelde eşleşir, modele gitmez):
 
 | Komut | |
 |---|---|
-| *"haber modunu aç / kapat"* | Her yerden |
+| *"haber modunu aç / kapat"*, *"haber ajansını aç / kapat"* | Her yerden |
 | *"günümü özetle"* | Her yerden. Sabah özeti açılır |
 | *"ekonomi haberlerini göster"* | gündem, ekonomi, dünya, spor, teknoloji, bilim |
-| *"deprem hakkında ne var?"* | Olaylar konuya göre süzülür |
+| *"Gazze hakkında haber getir"*, *"bana İran haberlerini bul"*, *"internette deprem haberlerini tara"* | Her yerden (haber modu kapalıysa açılır). İnternet taraması, sonuçlar karusele gelir |
+| *"deprem hakkında ne var?"* | Haber modundayken aynı arama |
+| *"dünya basını bunu nasıl verdi?"*, *"yabancı basın ne diyor?"*, *"dış basında ne yazıyor?"* | Her yerden. Açık olayın (yoksa gündemin öndeki olayının) dünya basını karşılaştırması |
+| *"canlı yayına geç"*, *"ana haber bülteni"* · *"yayını bitir"* | Her yerden. Ana haber bülteni: CANLI rozeti, jenerik; Jarvis spiker gibi ilk 5 olayı sunar (her olayda detay açılır, analiz özetinden; analiz yoksa başlık ve kaynak sayısı). Sonda bültende taranan kaynakların kapanış jeneriği |
+| *"son dakika!"* | Her yerden. Kırmızı SON DAKİKA ekranı; ilk haberi en yeni olan, en az 3 kaynaklı olay. 45 dakikadan eskiyse "son 45 dakikada yeni gelişme yok, en son gelişme …" der |
+| *"manşetleri ver"*, *"günün manşetleri"* | Her yerden. İlk 10 olay, onuncudan birinciye geri sayım (dev numara, fotoğraf, kaynak sayısı) |
+| *"dünyada bugün ne oldu?"* | Her yerden. Küre: dünya kategorisindeki çok kaynaklı olaylar başlıkta geçen yerlerinde (yeri bulunamayan konmaz); küre sırayla her birine döner, Jarvis anlatır; sonunda dünya kategorisi açılır |
+| *"basın özeti"*, *"gazeteler ne yazıyor?"* | Her yerden. Kaynakların şu anki baş haberi (ilk beslemesinin ilk haberi); aynı olayı öne çıkaranlar aynı renkte; çok kaynağın verdiği ama hiçbirinin baş habere koymadığı olay "MANŞETLERDE YOK" |
+| *"bunu takibe al"* · *"takibi bırak"* | Açık olay takipte: yeni bir kaynak o olayı verince ya da olayın yeni bir gelişmesi (benzer kökleri olan yeni küme) çıkınca, haber modu kapalıyken bile üstte "★ SON GELİŞME" bandı çıkar ve Jarvis söyler. Takip 7 gün sürer; `server/data/haber-takip.json` |
+| *"ekranı böl"*, *"haber duvarı"* · *"3 numarayı aç"*, *"üçüncüyü aç"* | 3×3 haber duvarı (arama sonucu varsa onlar): ☝️ seç, 🤏 tut ya da numarasını söyle: açılır |
 | *"sonraki"* / *"önceki"* | |
 | *"bu haberi özetle"* / *"detayını aç"* | |
 | *"bu haberi karşılaştır"* / *"bu haberi kimler nasıl verdi?"* | Kaynak karşılaştırması |
@@ -543,6 +557,26 @@ Bu modda büyü ve uzay efektleri çalışmaz.
 - 🟥 **farklı sayılar:** çelişen rakamlar, her biri alıntıyla.
 
 Jarvis bunu 2-3 cümleyle, yorum katmadan anlatır. Kart açılınca haber sayfalarının tam metni çekilir: önce sayfadaki yapılandırılmış veri (JSON-LD), olmazsa paragraflar. Çekilemezse RSS özeti kullanılır. Ekranda yalnızca kısa alıntılar görünür.
+
+**Dünya basını:** Kaynak karşılaştırmasından bir kat daha yakınlaşınca (🤏🤏 elleri aç ya da ✊→🖐), **W** ya da *"dünya basını nasıl verdi?"* ile açılır. Solda Türk basınının özeti, sağda olayı veren dünya yayınlarının kartları durur. Her kartta özgün başlık, Türkçe çevirisi, yayının öne çıkardığı olgu ve birebir alıntı (çevirisiyle) bulunur. Altta renkli şerit: **iki tarafta da** · **farklı çerçeve** · **yalnızca dünya basınında** · **yalnızca Türk basınında**.
+- Sabit beslemeler (anahtarsız RSS, İngilizce servisler): BBC, The Guardian (İngiltere) · The New York Times, NPR (ABD) · DW, Der Spiegel (Almanya) · France 24, Le Monde (Fransa) · Euronews (AB) · Al Jazeera (Katar). Diğer yayınlar (Reuters, AP …) Bing News aramasından gelir.
+- Adaylar: önce olay için İngilizce bir arama sorgusu hazırlanır. Sorguyla **Bing News**'te aranır (anahtarsız; gerçek makale adresleri: Reuters, AP, CNN, CBS, NYT, WSJ … yüzlerce yayın) ve 10 yayının son 4 günlük başlıklarıyla birleştirilir. Model aynı olayı anlatanları seçer (numaralar kodla denetlenir). Metni okunabilen yayınlar öne alınır (en çok 6); MSN'de yayımlanan haberlerin (WSJ, USA Today …) metni MSN'in içerik servisinden okunur. Ödeme duvarı ya da bot engeli olan yayınlarda (NYT, Reuters'ın bir kısmı) yalnızca özet kullanılır ve kartta "yalnızca özet okundu" yazar. Google News İngilizce'de bulunan diğer yayınlar başlık düzeyinde listelenir.
+- Örnek (canlı): Brezilya seçimi 6 yayın (CNN, CNBC, CBS, AP, NYT …; 4 tam metin), Mekke İttifakı'nın Tahran ziyareti 6 yayın (Reuters, Iran International, IRNA …; 5 tam metin), Türkiye gündeminden bir istifa haberi 2 yayın.
+- Tarafsızlık: her alıntı kendi metninde, kendi dilinde **birebir** geçmeli (kodla denetlenir; geçmeyen madde atılır). Çeviriler **ÇEVİRİ** diye işaretlenir. Değerlendirici dil ("propaganda", "taraflı" …) atılır. Olay dünya basınında yoksa "bulunamadı" denir ve taranan yayın, başlık sayısı gösterilir; model yoksa karşılaştırma yapılmaz.
+- Kodu: `server/src/worldNews.ts`, ekran: `web/src/hands/news/world.ts`. Sonuç 3 saat bellekte tutulur.
+
+**Haber arama (internet taraması):** *"Jarvis, Gazze hakkında haber getir"*. Ekranda önce tarama animasyonu oynar, ardından sonuçlar karusele gelir; alt bantta "ARAMA · Gazze" yazar. "Geri" ya da kategori seçimi gündeme döndürür. Tarama sırası:
+1. Türk basını: 25 kaynağın son haberleri (Türkçe ekler: "deprem" → "depremde").
+2. Dünya basını: 10 yayın; sorgu modelle İngilizceye çevrilir.
+3. Arşiv: son 90 günün olayları.
+4. Google News Türkçe ve İngilizce: yalnızca başlık ve yayın adı; bulunanlar metni okunmadan, başlık düzeyinde.
+Bulunanlar olaylara kümelenir (Türkçe, dünya, arşiv sırayla karışık; en çok 40). Bir sonuç kartı açılınca detay, karşılaştırma ve dünya basını aynı şekilde çalışır.
+- **Animasyon** (`web/src/hands/news/search.ts`) yalnızca sunucudan gelen gerçek olaylarla ilerler (`/api/haber/ara`, satır satır akış):
+  - Ortada dönen küre: bir yayına ulaşılınca Türkiye'den o şehre ışık yayı çıkar; bulduğu haber sayısı kadar büyür. Google News yayınlarının yeri bilinmediği için küreye konmaz, yalnızca yayın listesinde görünür.
+  - Yanlarda bulunan başlıklar akar: haber foto modunda gerçek fotoğraflar, video modunda başlık kartları (telif). Türkçe camgöbeği, İngilizce turuncu.
+  - Üstte sorgu harf harf yazılır, İngilizcesi yanında belirir; altta adımlar ✓ alır ve sayaçlar (yayın · haber · olay · arşiv · saniye) canlı ilerler.
+  - Sunucu önbellekten anında cevap verse de olaylar tempolu oynatılır; hiçbir olay uydurulmaz ya da atlanmaz.
+- Örnek ("İran", canlı): 12 saniyede 71 yayın, 138 haber, 40 olay; Reuters, AP, BBC, CNN, WSJ, Financial Times başlık düzeyinde.
 
 **Söylenen ve gerçek (iddia kontrolü):** Solda iddia kartı (kaynak + alıntı), sağda veri kartı (resmî veri + grafik), ortada ikisini birleştiren ışık çizgisi vardır. Sonuç etiketi damga gibi yerine oturur. Etiketi model değil, `server/src/factcheck.ts` içindeki açık kurallar verir:
 
@@ -575,7 +609,7 @@ TÜİK'in açık API'si olmadığı için aylık TÜİK rakamları (aylık enfla
 
 Her sorunun yanında hangi boşluktan çıktığı yazar ("hiçbir kaynakta maliyet bilgisi yok"). Model yalnızca soruyu cümleye döker. İma, komplo ve yönlendirme içeren sorular atılır.
 
-**Sabah özeti:** *"Jarvis, günümü özetle"* ya da günün ilk, öğleden önceki uyanışında açılır (Ayarlar → İki alkışla uyanma → "Sabah ilk uyanışta sabah özeti"). Dikey kartlar ✋ yukarı savurarak kaydırılır, Jarvis her kartı tek cümleyle okur. Kartlar:
+**Sabah özeti:** *"Jarvis, günümü özetle"* ya da günün ilk, öğleden önceki uyanışında açılır (Ayarlar → İki alkışla uyanma → "Sabah ilk uyanışta sabah özeti"). Dikey kartlar 🤏 tutup yukarı sürükleyerek kaydırılır, Jarvis her kartı tek cümleyle okur. Kartlar:
 - **hava:** bugün ve saatlik;
 - **döviz:** TCMB, panodaki veri;
 - **trafik:** İBB Trafik İndeksi. İstanbul geneli, Anadolu ve Avrupa yakası, son 2 saat. Anahtarsız, İBB Açık Veri Lisansı; güzergâh süresi vermez;
@@ -614,13 +648,16 @@ Gruplar yalnızca dengeyi görmek içindir; ekranda gösterilmez. Listede olmaya
 90 günden eskisi silinir. Haber modu açıkken karuselin ilk 5 kartı arka planda önceden analiz edilir.
 
 **Kamerasız deneme:**
-- `?el=demo&mod=haber`: sentetik ellerle motto → karusel → ☝️ → 🤏 çek → detay → yelpaze → terazi → sorular → ✊ → sabah özeti. Veriler sunucudan gelen gerçek haberlerdir. Analiz gelmeden demo bir sonraki adıma geçmez.
+- `?el=demo&mod=haber`: sentetik ellerle motto → 🤏 karuseli sürükle → ☝️ → ✊→🖐 aç → detay (🤏 kaydır) → 🤏🤏 karşılaştırma → terazi → sorular → ✊ tut: geri → sabah özeti → 🤏🤏 yakınlaş / uzaklaş. Veriler sunucudan gelen gerçek haberlerdir. Analiz gelmeden demo bir sonraki adıma geçmez. Demoda el kilidi adımı yoktur.
+- `?el=demo&mod=haber&haber=elle` ile klavye: **Y** canlı yayın, **H** son dakika, **R** manşetler, **A** dünyada bugün, **P** basın özeti, **V** haber duvarı (çekim için).
 - `?el=demo&mod=haber&haber=elle`: sentetik el yok, klavyeyle gezilir.
+- `?el=demo&mod=haber&ara=Gazze`: açılıştan sonra arama (tarama animasyonu, gerçek sonuçlar); `&dunya=1` ardından öndeki olayın dünya basını. Çekim için.
 
 **Testler:**
 - `npm run test:haber`:
-  - 48 sesli komut yazımı;
-  - sunucu testleri (32): karşılaştırmadaki her "farklı vurgu" ve "farklı sayı" alıntısının kaynak metinde birebir bulunması, her etiketin bağlantı ve tarih taşıması, veri yoksa "doğrulanamadı", her sorunun gerçek bir boşluğa dayanması, değerlendirici dil filtresi, kümeleme, tam metin çıkarma.
+  - 92 sesli komut yazımı (arama, dünya basını ve haber merkezi komutları; "son haberleri getir" gibi genel cümlelerin arama sayılmaması dahil);
+  - 15 el hareketi senaryosu (sahte el kareleriyle): el kilidi (kilitsiz el hiçbir şey tetiklemez, hareket eden avuç kilitlenmez, kısa kopma kilidi bozmaz, kol inince kilit açılır, iki elle hareket için iki el de kilitli), sürükleme ve bırakış hızı, titremenin sürükleme sayılmaması, çekme, iki elle yakınlaş / uzaklaş (bir tutuşta bir seviye), terazi, kısa yumruk ve aç, yumruğu tutunca geri (yumruk yapmak tek başına bir şey yapmaz);
+  - sunucu testleri (56): Bing News (gerçek adres, "on MSN" eki; metni okunan yayının öne alınması), takip (yeni kaynak ve yeni gelişme bir kez bildirilir, alakasız olay bildirilmez, diskte kalıcı), yer bulma (Türkçe ek, kişi adından ülke, ilk geçen yer, bulunamazsa yok), dünya basını (Google News başlık ayrıştırma, kapalı yayının atlanması, geçersiz eşleşme numaraları, birebir olmayan alıntının ve değerlendirici dilin atılması, model yoksa "model-yok", önbellek), arama eşleştirici (Türkçe ekler, kısa kelime); karşılaştırmadaki her "farklı vurgu" ve "farklı sayı" alıntısının kaynak metinde birebir bulunması, her etiketin bağlantı ve tarih taşıması, veri yoksa "doğrulanamadı", her sorunun gerçek bir boşluğa dayanması, değerlendirici dil filtresi, kümeleme, tam metin çıkarma.
 - İnternet ve model gerekmez.
 
 ### Kamera cihazı (Jarvis'in gözü)

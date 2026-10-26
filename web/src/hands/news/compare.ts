@@ -31,7 +31,7 @@ export function karsilastirmaHtml(a: Analiz): string {
   const maddeler = SIRA.flatMap(t => a.karsilastirma.maddeler.filter(m => m.tur === t).slice(0, 2));
   return `
   <div class="hb-karsilastir">
-    <h2>KAYNAK KARŞILAŞTIRMASI <span>${ks.length} kaynak · ${esc(a.detay.baslik)}</span></h2>
+    <h2>KAYNAK KARŞILAŞTIRMASI <span>${ks.length} kaynak · ${esc(a.detay.baslik)}</span><span class="hb-ipucu">🤏🤏 bir kat daha yakınlaş · ✊→🖐 aç: dünya basını</span></h2>
     <div class="hb-duvar">${kartlar}</div>
     <div class="hb-serit-alt">${maddeler.map(madde).join('') || '<div class="hb-madde"><h5>Karşılaştırılabilir ayrıntı bulunamadı.</h5></div>'}</div>
   </div>`;

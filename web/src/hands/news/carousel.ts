@@ -1,7 +1,8 @@
 // Haber Modu · holografik kart karuseli. Olaylar önünüzde yarım daire şeklinde dizilir; öndeki kart ortada.
 // Derinlik: geride kalan kartlar (z < -R·0,3) kişinin ARKASINDAKİ katmana taşınır; kişi ayırma maskesi olan
 // tuval iki katmanın arasındadır, böylece arkadaki kartlar başınızın arkasında kalır.
-// Dönüş: savurma bir hız verir, sürtünmeyle yavaşlar, en yakın karta yaylanarak oturur.
+// Dönüş: 🤏 tutulunca karusel eli birebir izler (yakala/surukle); bırakınca elin hızıyla kayar, sürtünmeyle
+// yavaşlar, en yakın karta yaylanarak oturur. Savurma da hız verir. İki elle yakınlaştırmada öndeki kart büyür (zoom).
 import { alanAdi, esc, saatYaz } from './channel';
 import { imgUrl } from './api';
 import { KATEGORI_AD, KATEGORI_RENK, type KumeOzet } from './types';
@@ -24,6 +25,14 @@ export class Karusel {
   /** Karusel geri çekildi (detay açıkken) */
   geri = 0;
   private geriHedef = 0;
+  /** Elde: karusel ele bağlı (fizik durur) */
+  private elde = false;
+  private pos0 = 0;
+  /** İki elle yakınlaştırma: öndeki kartın büyüklüğü (1 = normal); bırakınca 1'e döner */
+  zoom = 1;
+  zoomHedef = 1;
+  /** Bir kartlık dönüşün ekrandaki karşılığı (px): el bu kadar kayınca karusel bir kart döner */
+  private kartPx = 300;
 
   constructor(arka: HTMLElement, on: HTMLElement) { this.arka = arka; this.on = on; }
 
@@ -60,6 +69,14 @@ export class Karusel {
   adim(yon: number) { this.vel = 0; this.pos = Math.round(this.pos) + yon; }
   geriCekil(on: boolean) { this.geriHedef = on ? 1 : 0; }
 
+  /** 🤏 tutuş başladı: karusel ele bağlanır */
+  yakala() { this.elde = true; this.pos0 = this.pos; this.vel = 0; }
+  /** Elin tutuştan beri yatay yer değiştirmesi (px): kart ele birebir eşlik eder (sağa çekince önceki kart gelir) */
+  surukle(dx: number) { if (this.elde) this.pos = this.pos0 - dx / this.kartPx; }
+  /** Bırakış: elin hızı (px/sn) karusele hız olarak geçer */
+  birak(vx = 0) { if (!this.elde) return; this.elde = false; this.vel = Math.max(-7, Math.min(7, -vx / this.kartPx)); }
+  get tutuluyor() { return this.elde; }
+
   /** Ekrandaki noktanın üstündeki kart (önceki karenin konumlarıyla) */
   kartAt(x: number, y: number): number {
     let best = -1, bz = -Infinity;
@@ -79,16 +96,19 @@ export class Karusel {
   update(dt: number, W: number, H: number) {
     const n = this.kartlar.length;
     if (!n) return;
-    // Fizik: sürtünme, durunca en yakın karta yay
-    this.pos += this.vel * dt;
+    // Fizik: sürtünme, durunca en yakın karta yay (elde değilken)
+    if (!this.elde) this.pos += this.vel * dt;
     this.vel *= Math.exp(-dt * 2.4);
     if (Math.abs(this.vel) < 1.2) {
       const hedef = Math.round(this.pos);
       this.vel += (hedef - this.pos) * 22 * dt;
       this.vel *= Math.exp(-dt * 6);
     }
+    if (this.elde) this.vel = 0;
     this.geri += (this.geriHedef - this.geri) * Math.min(1, dt * 6);
+    this.zoom += (this.zoomHedef - this.zoom) * Math.min(1, dt * 14);
     const R = Math.min(W * 0.42, H * 0.8);
+    this.kartPx = R * ARALIK;
     const kartW = Math.min(420, W * 0.27);
     const cy = H * (0.47 - this.geri * 0.08);
     for (let i = 0; i < n; i++) {
@@ -100,12 +120,16 @@ export class Karusel {
       const gizli = Math.abs(th) > GORUNUR;
       const x = Math.sin(th) * R, z = (Math.cos(th) - 1) * R - this.geri * R * 0.9;
       const vurgu = i === this.hover ? 1 : 0, tut = i === this.tutulan ? 1 : 0;
-      const sc = 1 + vurgu * 0.1 + tut * 0.16 + (Math.abs(d) < 0.5 ? 0.06 : 0);
+      const one = Math.abs(d) < 0.5;
+      const zm = one ? this.zoom : 1;
+      const sc = (1 + vurgu * 0.1 + tut * 0.16 + (one ? 0.06 : 0)) * zm;
       const katman: 'arka' | 'on' = z < -R * 0.3 ? 'arka' : 'on';
       if (k.katman !== katman) { (katman === 'arka' ? this.arka : this.on).appendChild(k.el); k.katman = katman; }
-      const opak = gizli ? 0 : Math.max(0, 1 - Math.max(0, Math.abs(th) - 1.4) / 0.7) * (1 - this.geri * 0.75);
+      // Yakınlaşırken yandaki kartlar solar (öndeki kart ekranı doldurur)
+      const sol = one ? 1 : Math.max(0.15, 1 - Math.max(0, this.zoom - 1) * 1.6);
+      const opak = (gizli ? 0 : Math.max(0, 1 - Math.max(0, Math.abs(th) - 1.4) / 0.7) * (1 - this.geri * 0.75)) * sol;
       k.el.style.width = `${kartW}px`;
-      k.el.style.transform = `translate(-50%, -50%) translate3d(${W / 2 + x}px, ${cy}px, ${z + tut * 120}px) rotateY(${-th}rad) scale(${sc})`;
+      k.el.style.transform = `translate(-50%, -50%) translate3d(${W / 2 + x}px, ${cy}px, ${z + tut * 120 + (zm - 1) * 160}px) rotateY(${-th}rad) scale(${sc})`;
       k.el.style.opacity = String(opak);
       k.el.style.zIndex = String(Math.round(1000 + z));
       k.el.dataset.z = String(z);

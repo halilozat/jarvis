@@ -113,7 +113,7 @@ function presence() {
 initCameras({ broadcast, sendTo });
 initHome(broadcast);
 initLab(broadcast);
-initNewsCenter();
+initNewsCenter(broadcast);
 initAdvisor(broadcast);
 initLibrary(broadcast);
 

@@ -12,7 +12,7 @@
     "voices": "npm --prefix server run voices",
     "el-modeli": "node scripts/el-modeli.mjs",
     "test:kitap": "server/node_modules/.bin/tsx web/src/lib/bookCommands.test.ts && npm --prefix server run -s test:kitaplik",
-    "test:haber": "npm --prefix server run -s test:haber && server/node_modules/.bin/tsx web/src/hands/news/commands.test.ts",
+    "test:haber": "npm --prefix server run -s test:haber && server/node_modules/.bin/tsx web/src/hands/news/commands.test.ts && server/node_modules/.bin/tsx web/src/hands/news/gestures.test.ts",
     "test:uzay": "server/node_modules/.bin/tsx web/src/hands/space/commands.test.ts && npm run -s test:lab",
     "test:lab": "server/node_modules/.bin/tsx web/src/hands/space/physics.test.ts && server/node_modules/.bin/tsx web/src/hands/space/life.test.ts && server/node_modules/.bin/tsx web/src/hands/space/extra/moonHole.test.ts"
   }

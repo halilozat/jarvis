@@ -172,6 +172,8 @@ export default function App() {
   const [kitapligim, setKitapligim] = useState(KITAPLIGIM_PARAM);
   /** Kitap sohbeti: açıkken her mesaja kitabın notu eklenir (sunucu); 20 dk sessizlikte kendiliğinden biter */
   const [kitapSohbeti, setKitapSohbeti] = useState<{ id: string; ad: string } | null>(null);
+  /** Takipteki haberde gelişme: ekranın üstünde bant (haber modu kapalıyken de) */
+  const [gelisme, setGelisme] = useState<{ baslik: string; ek: string; soz: string; n: number } | null>(null);
   const sohbetRef = useRef<{ id: string; ad: string; at: number } | null>(null);
   /** Jarvis'in önerdiği kitap (El Kontrolü'nde raftan çıkar) ve öneri listesinin sürümü (Kitaplığım) */
   const [oneriCmd, setOneriCmd] = useState<{ id: string; ad: string | null; n: number } | null>(null);
@@ -487,6 +489,14 @@ export default function App() {
       if (e.type === 'kitaplik') { setLibKey(k => k + 1); return; }
       if (e.type === 'kitap_oner') { setOneriKey(k => k + 1); const id = e.id, ad = e.ad; if (id) setOneriCmd(c => ({ id, ad, n: (c?.n ?? 0) + 1 })); return; }
       if (e.type === 'kitap_tarzi') { setOneriKey(k => k + 1); return; }
+      if (e.type === 'haber_takip') {
+        const ek = e.yeniKume ? 'yeni gelişme' : `${e.yeniKaynaklar.length} yeni kaynak: ${e.yeniKaynaklar.slice(0, 3).join(', ')}`;
+        const soz = (e.yeniKume
+          ? `Efendim, takip ettiğiniz olayda yeni bir gelişme var: ${e.kume.baslik}.`
+          : `Efendim, takip ettiğiniz haberi artık ${e.yeniKaynaklar.length === 1 ? `${e.yeniKaynaklar[0]} de veriyor` : `${e.yeniKaynaklar.length} yeni kaynak daha veriyor`}. Toplam ${e.kume.kaynakSayisi} kaynak.`);
+        setGelisme(g => ({ baslik: e.kume.baslik, ek, soz, n: (g?.n ?? 0) + 1 }));
+        return;
+      }
       if (e.type === 'home') {
         setHome(e);
         if (e.last) {
@@ -670,9 +680,11 @@ export default function App() {
       speakLine('Kitaplığınızı tarıyorum efendim.');
       return;
     }
-    // Haber modu: "haber modunu aç" ve "günümü özetle" her yerden; diğerleri haber modundayken (modele gitmez)
+    // Haber modu: "haber modunu aç", "günümü özetle" ve "… hakkında haber getir" her yerden; diğerleri haber modundayken (modele gitmez)
     const nc = !image ? matchNewsCommand(t) : null;
-    if (nc && (nc.tip === 'haber' || nc.tip === 'sabah' || (handsRef.current && elMod.current === 'haber'))) {
+    // Haber merkezi komutları (yayın, son dakika, manşetler, dünyada bugün, basın özeti, dünya basını) da her yerden; haber modu açılır
+    const herYerden = ['haber', 'sabah', 'ara', 'yayin', 'sonDakika', 'mansetler', 'dunyaBugun', 'basin', 'dunya'];
+    if (nc && (herYerden.includes(nc.tip) || (handsRef.current && elMod.current === 'haber'))) {
       setInput(''); setInterim(''); setCore('idle');
       runNewsCmd(nc);
       return;
@@ -880,6 +892,10 @@ export default function App() {
       }, delay);
     });
   };
+
+  // Takipteki haberde gelişme: bant çıkınca Jarvis söyler
+  const gelismeN = gelisme?.n ?? 0;
+  useEffect(() => { if (gelisme) void speakLine(gelisme.soz); }, [gelismeN]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Yüz kilidi: seçili sesle tek cümle. Sesi sunucuda önceden hazır (server/src/scripted.ts YUZ_KILIDI ile aynı metin).
    *  En fazla dakikada bir; Jarvis başka bir şey anlatıyorsa araya girmez. */
@@ -1442,6 +1458,12 @@ export default function App() {
         </Suspense>
       )}
 
+      {gelisme && (
+        <div className="haber-gelisme" role="status" key={gelisme.n} onAnimationEnd={e => { if (e.animationName === 'hg-git') setGelisme(null); }}>
+          <span>★ SON GELİŞME · TAKİP</span><b>{gelisme.baslik}</b><em>{gelisme.ek}</em>
+          <button onClick={() => setGelisme(null)} aria-label="Kapat">✕</button>
+        </div>
+      )}
       {kitapSohbeti && (
         <div className="kitap-sohbeti" role="status">
           <span>📖 KİTAP SOHBETİ</span><b>{kitapSohbeti.ad}</b>

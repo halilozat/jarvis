@@ -9,6 +9,8 @@ export interface KumeOzet {
   id: string; baslik: string; kategori: Kategori; kaynakSayisi: number; kaynaklar: string[];
   ilk: string; son: string; foto: string | null; sonDakika: boolean; kokler: string[];
   url: string; kaynak: string;
+  /** Olay takipte */
+  takipte?: boolean;
 }
 export interface Merkez {
   kumeler: KumeOzet[];
@@ -51,3 +53,37 @@ export interface Sabah {
   ajanda: null;
   at: string;
 }
+
+// ———————————————— Arama (server/src/newsSearch.ts) ————————————————
+export type Dil = 'tr' | 'en';
+export type AramaOlay =
+  | { tip: 'basla'; q: string; yayinlar: { ad: string; dil: Dil; konum: [number, number] }[]; arsivGun: number }
+  | { tip: 'adim'; ad: string }
+  | { tip: 'sorguEn'; qEn: string | null }
+  | { tip: 'kaynak'; ad: string; dil: Dil; grup: 'kendi' | 'dunya' | 'arsiv' | 'google'; adet: number; konum: [number, number] | null }
+  | { tip: 'baslik'; baslik: string; kaynak: string; saat: string; dil: Dil; foto: string | null }
+  | { tip: 'bitti'; kumeler: KumeOzet[]; sayac: { yayin: number; haber: number; olay: number; arsiv: number }; sure: number }
+  | { tip: 'hata'; hata: string };
+
+// ———————————————— Dünya basını (server/src/worldNews.ts) ————————————————
+export interface DunyaAlinti { kaynak: string; metin: string; ceviri?: string }
+export interface DunyaYayin { kaynak: string; ulke: string; baslik: string; baslikTr: string | null; url: string; saat: string; vurgu: string | null; alinti: DunyaAlinti | null; tam: boolean }
+export interface DunyaMadde { baslik: string; tr: DunyaAlinti | null; en: DunyaAlinti | null }
+export interface DunyaBasini {
+  durum: 'bulundu' | 'yok' | 'model-yok';
+  taranan: { yayin: number; haber: number; google: number };
+  yayinlar: DunyaYayin[];
+  basliklar: { kaynak: string; baslik: string; url: string; saat: string }[];
+  ortak: DunyaMadde[]; cerceve: DunyaMadde[]; yalnizDunya: DunyaMadde[]; yalnizTurk: DunyaMadde[];
+  sorgu: string; at: string;
+}
+
+// ———————————————— Haber merkezi komutları (server/src/newsCenter.ts) ————————————————
+export interface SonDakika { kume: KumeOzet | null; dakika: number | null }
+export interface Basin {
+  kaynaklar: { kaynak: string; baslik: string; saat: string; url: string; kumeId: string | null }[];
+  ortak: { kume: KumeOzet; sayi: number }[];
+  mansetteYok: KumeOzet | null;
+  at: string;
+}
+export interface DunyaBugun { olaylar: { kume: KumeOzet; yer: string; konum: [number, number] }[]; at: string }

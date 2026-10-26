@@ -77,7 +77,9 @@ export type ServerEvent =
   | { type: 'lab_cmd'; cmd: unknown; origin: string }
   /** Jarvis kitap önerdi (raftaki kitap El Kontrolü'nde çıkar) · tarz analizi bitti */
   | { type: 'kitap_oner'; id: string | null; ad: string | null; ruhHali: string }
-  | { type: 'kitap_tarzi' };
+  | { type: 'kitap_tarzi' }
+  /** Takipteki haberde gelişme (server/src/newsFollow.ts): yeni kaynak ya da olayın yeni bir kümesi */
+  | { type: 'haber_takip'; takip: { id: string; baslik: string }; kume: { id: string; baslik: string; kaynakSayisi: number; kaynak: string }; yeniKaynaklar: string[]; yeniKume: boolean };
 
 /** Ekran: mark1 sade, mark2 yoğun HUD (tüm cihazlarda ortak) */
 export type UiMode = 'mark1' | 'mark2';

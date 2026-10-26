@@ -1,7 +1,7 @@
 // El Kontrolü: kamera görüntüsü üstünde el takibi, büyü efektleri ve jestle Jarvis kontrolü.
 // Tuşlar: Esc kapat · L arayüzü gizle/göster (temiz çekim) · D iskelet · M ses · C kamera değiştir · F yüz kilidi · K kitaplık ayarı
 // U uzay modu · N haber modu · B arka plan (tam uzay / oda) · G laboratuvar ↔ gösteri · T temiz çekim (yalnızca sonuçlar)
-// Haber modunda: ←/→ haber · ↑/↓ kategori · Enter detay · K karşılaştır · I iddia kontrolü · S sorular · O sabah özeti · ⌫ geri
+// Haber modunda: ←/→ haber · ↑/↓ kategori · Enter detay · K karşılaştır · W dünya basını · / ara · I iddia kontrolü · S sorular · O sabah özeti · ⌫ geri
 // Laboratuvarda: Z yakınlaş/uzaklaş · Y yaşanabilir bölge · Boşluk zamanı durdur
 import type { HandLandmarker } from '@mediapipe/tasks-vision';
 import { useEffect, useRef, useState } from 'react';
@@ -97,6 +97,9 @@ const DEMO_TARA = new URLSearchParams(location.search).get('tara');
 const DEMO_ODA = new URLSearchParams(location.search).get('oda') === '1';
 /** Haber demosu sentetik ellersiz (klavyeyle denemek için): ?el=demo&mod=haber&haber=elle */
 const DEMO_HABER_ELLE = new URLSearchParams(location.search).get('haber') === 'elle';
+/** Haber demosunda açılıştan sonra arama (çekim için): &ara=Gazze · &dunya=1 sonra öndeki olayın dünya basını */
+const DEMO_ARA = new URLSearchParams(location.search).get('ara')?.trim() || null;
+const DEMO_DUNYA = new URLSearchParams(location.search).get('dunya') === '1';
 /** Açık kitapta sesli komutlar (lib/bookCommands.ts ile aynı kalıplar): [vurgu anahtarı, söylenen, sonuç] */
 const KITAP_KOMUTLARI: [string, string, string][] = [
   ['durum-bitti', 'okudum', 'OKUNDU ✓'],
@@ -137,8 +140,8 @@ const LEGEND_UZAY: [string, string][] = [
 
 /** Haber modu jestleri */
 const LEGEND_HABER: [string, string][] = [
-  ['✋ ↔', 'haber'], ['✋ ↕', 'kategori · geri'], ['☝️', 'vurgula'], ['🤏 çek', 'detay'], ['🤏🤏 ↔', 'kaynakları karşılaştır'],
-  ['🤏🤏 ↕', 'terazi: iddia kontrolü'], ['👍 1 sn', 'özetle'], ['✊ 1 sn', 'kapat'], ['✌️', 'mikrofon'],
+  ['✋ 0,6 sn', 'kontrol: kilitle'], ['🤏 ↔', 'tut, sürükle'], ['🤏 ↕', 'kategori · içerik'], ['✊→🖐', 'aç'], ['✊ tut', 'geri'], ['🤏🤏 ⟷', 'yakınlaş · uzaklaş'],
+  ['🤏🤏 ↕', 'terazi: iddia'], ['☝️', 'vurgula'], ['👍 1 sn', 'özetle'], ['✌️', 'mikrofon'],
 ];
 
 const LEGEND: [string, string][] = [
@@ -320,6 +323,14 @@ export default function HandControl(p: HandControlProps) {
     window.addEventListener('resize', size);
 
     let alive = true, raf = 0, stream: MediaStream | null = null, lm: HandLandmarker | null = null, fd: FaceDetector | null = null, faceTick = 0;
+    // Yüz algılayıcı kurulumu ana iş parçacığını ~1 sn dondurur: haber açılışı sürerken ertelenir
+    let fdBasladi = false;
+    const yuzBaslat = () => {
+      if (fdBasladi || !lm) return;
+      fdBasladi = true;
+      // Yüklenemezse el kontrolü yine çalışır (yalnızca yüz HUD'u olmaz)
+      loadFaceDetector().then(d => { if (alive) fd = d; else d.close(); }).catch(e => console.warn('[el] yüz algılayıcı yüklenemedi', e));
+    };
     let last = performance.now(), lastVideoT = -1, frames = 0, fpsAt = last, hands: RawHand[] = [], delegate = '';
     const demoStart = performance.now() - (Number(new URLSearchParams(location.search).get('elt')) || 0) * 1000;
     let step = '';
@@ -360,6 +371,7 @@ export default function HandControl(p: HandControlProps) {
       }
       // Haber modu: haber merkezi açılır (motto), büyü ve uzay efektleri kapanır
       const hb = modRef.current === 'haber';
+      if (!hb) yuzBaslat();
       if (hb !== hbOn) {
         hbOn = hb;
         if (hb) { news.mottoSesli = ayarRef.current.haberMotto; news.open(now); lib.reset(); libOn = false; hudFace.clear(); }
@@ -395,8 +407,13 @@ export default function HandControl(p: HandControlProps) {
         if (extra.numara === 'asteroit' && t > 3 && (t - 3) % 14 < 0.3 && !demoFired.has(`ast:${k}`)) { demoFired.add(`ast:${k}`); extra.command({ tip: 'sifirla' }, now); setTimeout(() => extra.command({ tip: 'ekstra', numara: 'asteroit' }, performance.now()), 400); }
         const j = Math.floor(t / 13), jk = `akd:${j}`;
         if (extra.numara === 'aykaradelik' && j >= 1 && !demoFired.has(jk)) { demoFired.add(jk); extra.command(j % 6 === 0 ? { tip: 'sifirla' } : { tip: 'ekstra', numara: 'aykaradelik', kutle: 'buyut' }, now); }
-      } else if (hb && p.demo && DEMO_HABER_ELLE) {
+      } else if (hb && p.demo && (DEMO_HABER_ELLE || DEMO_ARA)) {
         hands = []; step = '';
+        // &ara=…: açılıştan 6 sn sonra arama; &dunya=1: sonuçlar gelince öndeki olayın dünya basını
+        if (DEMO_ARA && now - demoStart > 6000 && !demoFired.has('ara')) {
+          demoFired.add('ara');
+          void news.haber({ tip: 'ara', q: DEMO_ARA })?.then(() => { if (DEMO_DUNYA) void news.haber({ tip: 'dunya' }); });
+        }
       } else if (hb && p.demo) {
         // Haber demosu: motto → karusel → kart çek → detay → karşılaştırma → iddia → sorular → sabah özeti
         const d = demoNews((now - demoStart) / 1000, fx.W, fx.H, news);
@@ -481,8 +498,10 @@ export default function HandControl(p: HandControlProps) {
       }
       // Haber: kişi ayırma maskesi (arkadaki kartlar başınızın arkasında kalsın)
       if (hb) {
+        // Açılış bitince yüz algılayıcı ve kişi ayırma kurulur (ikisi de birkaç saniye donduruyor)
+        if (!news.acilisSurer) yuzBaslat();
         if (!p.demo) {
-          if (!cutout && !segLoading) {
+          if (!cutout && !segLoading && !news.acilisSurer) {
             segLoading = true;
             loadSegmenter().then(sg => { if (!alive) { sg.close(); return; } cutout = new PersonCutout(sg); }).catch(e => console.warn('[haber] segmentasyon yüklenemedi', e));
           }
@@ -534,8 +553,8 @@ export default function HandControl(p: HandControlProps) {
         if (!alive) { r.lm.close(); return; }
         lm = r.lm; delegate = r.delegate;
         setStatus('');
-        // Yüz algılayıcı: yüklenemezse el kontrolü yine çalışır (yalnızca yüz HUD'u olmaz)
-        loadFaceDetector().then(d => { if (alive) fd = d; else d.close(); }).catch(e => console.warn('[el] yüz algılayıcı yüklenemedi', e));
+        // Haber modunda açılış bitince (döngü başlatır), diğer modlarda hemen
+        if (modRef.current !== 'haber') yuzBaslat();
       } catch (e: any) {
         setErr(`El takip modeli yüklenemedi: ${e?.message || e}. İnternet bağlantısını kontrol edin ya da "npm run el-modeli" ile modeli indirin.`);
         return;
@@ -779,10 +798,14 @@ export default function HandControl(p: HandControlProps) {
     const cmd = c.cmd;
     void Promise.resolve().then(() => {
       if (cmd.tip === 'haber' && !cmd.ac) { setMod('buyu'); say('Haber merkezini kapattım efendim.'); return; }
-      // Haber modu henüz açılmadıysa: önce aç (motto başlar), komut açılıştan sonra çalışsın
+      // Haber modu henüz açılmadıysa: önce aç; komutla açılışta motto seslendirilmez (komutun sözünü kesmesin),
+      // komut açılış bitince çalışır
       if (modRef.current !== 'haber' || !newsRef.current?.acik) {
+        if (cmd.tip !== 'haber') {
+          if (newsRef.current) newsRef.current.bekleyenKomut = cmd;
+          else setTimeout(() => void newsRef.current?.haber(cmd), 1300);
+        }
         setMod('haber');
-        if (cmd.tip !== 'haber') setTimeout(() => void newsRef.current?.haber(cmd), 1300);
         return;
       }
       void newsRef.current.haber(cmd);
@@ -854,11 +877,15 @@ export default function HandControl(p: HandControlProps) {
       else if (e.code === 'KeyK' && modRef.current === 'buyu') setEditing(v => !v);
       else if (e.code === 'KeyU') { setEditing(false); setMod(m => (m === 'uzay' ? 'buyu' : 'uzay')); }
       else if (e.code === 'KeyN') { setEditing(false); setMod(m => (m === 'haber' ? 'buyu' : 'haber')); }
-      else if (modRef.current === 'haber' && newsRef.current && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', 'Backspace', 'KeyK', 'KeyI', 'KeyS', 'KeyO'].includes(e.code)) {
+      else if (modRef.current === 'haber' && newsRef.current && (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter', 'Backspace', 'KeyK', 'KeyI', 'KeyS', 'KeyO', 'KeyW', 'Slash', 'KeyY', 'KeyH', 'KeyR', 'KeyA', 'KeyP', 'KeyX', 'KeyV'].includes(e.code) || /^Digit[1-9]$/.test(e.code))) {
         e.preventDefault();
         const n = newsRef.current;
+        // "/": anahtar kelimeyle haber getir (klavyeden deneme)
+        if (e.code === 'Slash') { const q = window.prompt('Haber ara (anahtar kelime)')?.trim(); if (q) void n.haber({ tip: 'ara', q }); return; }
         const cmd: HaberCmd | null = e.code === 'ArrowLeft' ? { tip: 'onceki' } : e.code === 'ArrowRight' ? { tip: 'sonraki' } : e.code === 'Enter' ? { tip: 'detay' } : e.code === 'Backspace' ? { tip: 'geri' }
-          : e.code === 'KeyK' ? { tip: 'karsilastir' } : e.code === 'KeyI' ? { tip: 'kontrol' } : e.code === 'KeyS' ? { tip: 'sorular' } : e.code === 'KeyO' ? { tip: 'sabah' } : null;
+          : e.code === 'KeyK' ? { tip: 'karsilastir' } : e.code === 'KeyI' ? { tip: 'kontrol' } : e.code === 'KeyS' ? { tip: 'sorular' } : e.code === 'KeyO' ? { tip: 'sabah' } : e.code === 'KeyW' ? { tip: 'dunya' }
+          : e.code === 'KeyY' ? { tip: 'yayin', ac: true } : e.code === 'KeyH' ? { tip: 'sonDakika' } : e.code === 'KeyR' ? { tip: 'mansetler' } : e.code === 'KeyA' ? { tip: 'dunyaBugun' }
+          : e.code === 'KeyP' ? { tip: 'basin' } : e.code === 'KeyX' ? { tip: 'takip', ac: true } : e.code === 'KeyV' ? { tip: 'duvar' } : /^Digit/.test(e.code) ? { tip: 'numara', n: Number(e.code.slice(5)) } : null;
         if (cmd) void n.haber(cmd);
         else n.kategoriAdim(e.code === 'ArrowDown' ? 1 : -1);
       }
@@ -913,7 +940,7 @@ export default function HandControl(p: HandControlProps) {
           </div>
           {!st.mode.includes('taraması') && <div className="el-legend">
             {(mod === 'haber' ? LEGEND_HABER : mod === 'uzay' ? (sahne === 'lab' ? LEGEND_LAB : sahne === 'ekstra' ? LEGEND_EKSTRA : LEGEND_UZAY) : st.mode.startsWith('kitap') ? LEGEND_KITAP : LEGEND).map(([g, t]) => <span key={g + t}><b>{g}</b> {t}</span>)}
-            <span className="el-keys">{mod === 'haber' ? '←/→ haber · ↑/↓ kategori · Enter detay · K karşılaştır · I iddia · S sorular · O sabah · ⌫ geri · T temiz çekim · N kapat · Esc çık' : mod === 'uzay' ? (sahne === 'ekstra' ? '1-5 numara · G sahne · T temiz çekim · L arayüz · B arka plan · U büyü · Esc çık' : sahne === 'lab' ? 'G gösteri · Z yakınlaş · Y yaşanabilir bölge · Boşluk durdur · T temiz çekim · L arayüz · B arka plan · U büyü · Esc çık' : 'G laboratuvar · U büyü modu · B arka plan · T temiz çekim · L arayüz · D iskelet · M ses · Esc çık') : 'U uzay · N haber · L arayüz · E efektler · F yüz kilidi · K kitaplık · D iskelet · M ses · Esc çık'}</span>
+            <span className="el-keys">{mod === 'haber' ? '←/→ haber · ↑/↓ kategori · Enter detay · K karşılaştır · W dünya basını · / ara · Y yayın · H son dakika · R manşetler · A dünya · P basın · X takip · V duvar · I iddia · S sorular · O sabah · ⌫ geri · T temiz çekim · N kapat · Esc çık' : mod === 'uzay' ? (sahne === 'ekstra' ? '1-5 numara · G sahne · T temiz çekim · L arayüz · B arka plan · U büyü · Esc çık' : sahne === 'lab' ? 'G gösteri · Z yakınlaş · Y yaşanabilir bölge · Boşluk durdur · T temiz çekim · L arayüz · B arka plan · U büyü · Esc çık' : 'G laboratuvar · U büyü modu · B arka plan · T temiz çekim · L arayüz · D iskelet · M ses · Esc çık') : 'U uzay · N haber · L arayüz · E efektler · F yüz kilidi · K kitaplık · D iskelet · M ses · Esc çık'}</span>
           </div>}
           {p.demo && stats.step && !st.mode.includes('taraması') && <div className="el-step">{stats.step}</div>}
           {mod !== 'haber' && mod !== 'uzay' && st.mode.startsWith('kitap · sayfa') && (

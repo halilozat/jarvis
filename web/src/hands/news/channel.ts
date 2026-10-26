@@ -5,7 +5,7 @@ import { KATEGORI_AD, KATEGORI_RENK, KATEGORI_SIRA, type Kategori, type KumeOzet
 
 export const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 export const saatYaz = (iso: string) => new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' });
-export const alanAdi = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+export const alanAdi = (u: string) => { try { const h = new URL(u).hostname.replace(/^www\./, ''); return h === 'news.google.com' ? 'Google News' : h; } catch { return ''; } };
 
 export const MOTTO = 'Gündemi takip eden, söylenenlerle gerçekleri karşılaştıran, farklı kaynakları analiz eden ve kimsenin bize anlatmadığı soruları soran bir yapay zekâ. Propagandayı değil, gerçeği arayan… Kendi haber merkezimizi kuruyoruz.';
 
@@ -121,14 +121,15 @@ export class Kanal {
     h1.textContent = 'HABER MERKEZİ';
     p.textContent = '';
     this.mottoEl.classList.add('acik');
-    let i = 0;
-    const adim = hizli ? 3 : 1;
+    // Daktilo saate bağlı: motto 2,2 sn'de (demoda 1,5 sn) yazılır; açılışta kamera ve el modeli yüklenirken kareler
+    // gecikse de süre uzamaz. Seslendirme beklenmez, karusel açılırken sürer.
+    const t0 = performance.now(), sure = hizli ? 1500 : 2200;
     return new Promise(res => {
       this.mottoTimer = window.setInterval(() => {
-        i = Math.min(MOTTO.length, i + adim);
+        const i = Math.min(MOTTO.length, Math.ceil(((performance.now() - t0) / sure) * MOTTO.length));
         p.innerHTML = `${esc(MOTTO.slice(0, i))}<i class="hb-imlec"></i>`;
         if (i >= MOTTO.length) { clearInterval(this.mottoTimer); res(); }
-      }, 38);
+      }, 30);
     });
   }
 

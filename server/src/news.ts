@@ -32,6 +32,10 @@ export function kategoriTahmin(url: string, besleme: Kategori): Kategori {
   return 'gundem';
 }
 
+/** Son taramada her kaynağın baş haberi (ilk beslemesinin ilk haberi; çoğu sitede ana sayfa manşeti) */
+let mansetler = new Map<string, NewsItem>();
+export const kaynakMansetleri = () => mansetler;
+
 /** Tazelenen tarama dinleyicileri (haber arşivi) */
 const dinleyiciler: ((items: NewsItem[]) => void)[] = [];
 export const onNewsRefresh = (f: (items: NewsItem[]) => void) => { dinleyiciler.push(f); };
@@ -63,14 +67,26 @@ function similar(a: string, b: string): boolean {
   return hit / Math.min(A.size, B.length) >= 0.6;
 }
 
+let tazeleniyor: Promise<{ items: NewsItem[]; scanned: number; sources: SourceStatus[] }> | null = null;
+
+/** Önbellek süresi dolduysa eskisi hemen verilir, tarama arka planda tazelenir (bekleyen ekran olmasın) */
 async function fetchAll(): Promise<{ items: NewsItem[]; scanned: number; sources: SourceStatus[] }> {
   if (cache && Date.now() - cache.at < CACHE_MS) return cache;
+  tazeleniyor ??= tara().finally(() => { tazeleniyor = null; });
+  // Çok eski (1 saatten fazla) önbellek verilmez: tazesi beklenir
+  if (cache && Date.now() - cache.at < 6 * CACHE_MS) return cache;
+  return tazeleniyor;
+}
+
+async function tara(): Promise<{ items: NewsItem[]; scanned: number; sources: SourceStatus[] }> {
   const results = await Promise.allSettled(FEEDS.map(f => parser.parseURL(f.url).then(feed => ({ f, feed }))));
   const items: NewsItem[] = [];
+  // Kaynağın baş haberi: listedeki ilk beslemesinin (gündem/manşet) ilk haberi (basın özeti)
+  const onde = new Map<string, NewsItem>();
   for (const r of results) {
     if (r.status !== 'fulfilled') continue;
     const { f, feed } = r.value;
-    for (const it of feed.items.slice(0, 25)) {
+    for (const [sira, it] of feed.items.slice(0, 25).entries()) {
       const title = stripHtml(it.title);
       if (!title) continue;
       // Aynı kaynağın iki beslemesinde (gündem + ekonomi) aynı haber: bir kez
@@ -86,6 +102,7 @@ async function fetchAll(): Promise<{ items: NewsItem[]; scanned: number; sources
         url: link,
         image_url: pickImage(it),
       });
+      if (sira === 0 && !onde.has(f.source) && FEEDS.find(x => x.source === f.source) === f) onde.set(f.source, items[items.length - 1]);
     }
   }
   items.sort((a, b) => b.published_at.localeCompare(a.published_at));
@@ -98,6 +115,7 @@ async function fetchAll(): Promise<{ items: NewsItem[]; scanned: number; sources
   }));
   // Hiçbir kaynak cevap vermediyse (internet yok) boş sonucu önbelleğe alma; bir sonraki istekte tekrar dene.
   if (scanned === 0) return { items, scanned, sources };
+  mansetler = onde;
   cache = { at: Date.now(), items, scanned, sources };
   for (const f of dinleyiciler) { try { f(items); } catch (e) { console.warn('Haber dinleyicisi:', e); } }
   return cache;

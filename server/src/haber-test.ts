@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 process.env.HABER_ARSIV = fs.mkdtempSync(path.join(os.tmpdir(), 'haber-arsiv-'));
+process.env.HABER_TAKIP = path.join(process.env.HABER_ARSIV, 'takip.json');
 const A = await import('./newsAnalysis.js');
 const F = await import('./factcheck.js');
 const V = await import('./verify.js');
@@ -135,6 +136,86 @@ ok('tam metin: JSON-LD articleBody, tanıtım cümlesi atıldı', !!m1 && m1.sta
 const p = '<article><p>Menü Ana Sayfa Gündem Ekonomi Spor Dünya Teknoloji Yaşam Sağlık Yazarlar</p><p>' + 'Valilik açıklamasına göre olay sabah saatlerinde yaşandı ve yetkililer bilgi verdi. '.repeat(3) + '</p></article>';
 const m2 = T.anaMetin(p);
 ok('tam metin: paragraflar, menü satırı atıldı', !!m2 && !/Menü/.test(m2));
+
+// ———————————————— Dünya basını ve arama ————————————————
+const W = await import('./worldNews.js');
+const S = await import('./newsSearch.js');
+const simdi = new Date().toISOString();
+const rssItem = (title: string, link: string, ek: object = {}) => ({ title, link, isoDate: simdi, contentSnippet: `${title} summary`, ...ek });
+W.worldDeps.rss = async (url: string) => {
+  if (url.includes('news.google.com')) return { items: [
+    rssItem('Iran talks in Tehran - Reuters', 'https://news.google.com/rss/articles/r1', { kaynakEtiketi: { _: 'Reuters', $: { url: 'https://reuters.com' } } }),
+    rssItem('Tehran meeting set - AP News', 'https://news.google.com/rss/articles/a1'),
+  ] } as any;
+  if (url.includes('bbc')) return { items: [rssItem('Officials meet in Tehran amid Yemen fighting', 'https://bbc.example/1'), rssItem('Football results', 'https://bbc.example/2')] } as any;
+  if (url.includes('aljazeera')) return { items: [rssItem('Iran security chief to host defence officials', 'https://aj.example/1')] } as any;
+  throw new Error('kapalı');
+};
+const g = await W.googleHaber('iran', 'en');
+ok('Google News: başlıktan " - Kaynak" ayrılır, kaynak etiketi okunur', g.length === 2 && g.some(x => x.kaynak === 'Reuters' && x.baslik === 'Iran talks in Tehran') && g.some(x => x.kaynak === 'AP News' && x.baslik === 'Tehran meeting set'));
+const dh = await W.dunyaHaberleri();
+ok('dünya beslemeleri: kapalı yayın atlanır, kimlik "w" ile', dh.calisan.length === 2 && dh.items.every(i => i.id.startsWith('w') && i.category === 'dunya'));
+ok('eşleşme ayıklama: geçersiz ve tekrar eden numaralar atılır', JSON.stringify(W.eslesmeleriAyikla('{"esler": [1, 1, 7, -2, "0"], "sorgu": "Tehran <b>talks</b>"}', 3)) === JSON.stringify({ esler: [1, 0], sorgu: 'Tehran b talks b' }));
+const trM = [{ kaynak: 'TRT Haber', baslik: 'Tahran ziyareti', ilkCumle: '', saat: simdi, url: 'https://trt.example/1', tam: true, metin: 'Tahran ziyareti. Üç ülkenin yetkilileri Tahran da görüşecek. Toplantı yarın yapılacak.' }];
+const enM = [{ kaynak: 'BBC', metin: 'Officials meet in Tehran amid Yemen fighting. Officials from three countries will meet in Tehran on Monday.' }];
+const suz = W.karsilastirmaSuz({
+  yayinlar: [{ kaynak: 'BBC', baslik_tr: 'Yetkililer Tahran da görüşüyor', vurgu: 'Yemen deki çatışmalar', alinti: 'will meet in Tehran on Monday', ceviri: 'Pazartesi Tahran da görüşecek' }, { kaynak: 'Uydurma Gazete', vurgu: 'x' }],
+  ortak: [{ bilgi: 'Tahran da görüşme', tr: { kaynak: 'TRT Haber', alinti: 'yetkilileri Tahran da görüşecek' }, en: { kaynak: 'BBC', alinti: 'Officials from three countries will meet', ceviri: 'Üç ülkenin yetkilileri görüşecek' } },
+          { bilgi: 'Uydurma alıntı', tr: { kaynak: 'TRT Haber', alinti: 'bu cümle metinde yok aslında' }, en: { kaynak: 'BBC', alinti: 'Officials meet in Tehran', ceviri: '' } }],
+  cerceve: [{ konu: 'BBC propaganda yapıyor', tr: { kaynak: 'TRT Haber', alinti: 'Toplantı yarın yapılacak' }, en: { kaynak: 'BBC', alinti: 'amid Yemen fighting' } }],
+  yalniz_dunya: [{ bilgi: 'Yemen bağlamı', en: { kaynak: 'BBC', alinti: 'amid Yemen fighting', ceviri: 'Yemen deki çatışmalar sürerken' } }],
+  yalniz_turk: [{ bilgi: 'Tarih', tr: { kaynak: 'TRT Haber', alinti: 'Toplantı yarın yapılacak' } }],
+}, trM, enM);
+ok('dünya karşılaştırması: birebir alıntılar kalır, metinde olmayan alıntı atılır', suz.ortak.length === 1 && suz.ortak[0].en?.ceviri === 'Üç ülkenin yetkilileri görüşecek');
+ok('dünya karşılaştırması: değerlendirici dil ("propaganda") atılır', suz.cerceve.length === 0);
+ok('dünya karşılaştırması: listede olmayan yayın atılır, alıntı ve çeviri kalır', suz.yayin.size === 1 && suz.yayin.get('BBC')?.alinti?.ceviri === 'Pazartesi Tahran da görüşecek');
+ok('dünya karşılaştırması: yalnızca bir tarafta geçenler', suz.yalnizDunya.length === 1 && suz.yalnizTurk.length === 1);
+const kumeT = { id: 'tk1', kategori: 'dunya' as const, baslik: 'Tahran ziyareti', ilk: simdi, son: simdi, kokler: [], foto: null, kaynaklar: ['TRT Haber'], haberler: [] as any[] };
+W.worldDeps.modelVar = () => false;
+ok('model yoksa dünya basını "model-yok" (uydurma yok)', (await W.dunyaBasini({ ...kumeT, id: 'tk0' }, trM as any)).durum === 'model-yok');
+W.worldDeps.modelVar = () => true;
+let cagri = 0;
+W.worldDeps.bing = async () => '';
+W.worldDeps.chat = async (pr: string) => { cagri++; return pr.includes('arama sorgusu') ? 'Tehran talks' : pr.includes('AYNI OLAYI') ? '{"esler": [0]}' : JSON.stringify({ yayinlar: [{ kaynak: 'BBC', baslik_tr: 'Tahran görüşmesi', vurgu: 'Yemen bağlamı', alinti: 'Officials meet in Tehran', ceviri: 'Yetkililer Tahran da' }] }); };
+W.worldDeps.metin = async () => null;
+const db = await W.dunyaBasini(kumeT, trM as any);
+ok('dünya basını: eşleşen yayın, Türkçe başlık, birebir alıntı; Google başlıkları kendi yayınlardan ayrı', db.durum === 'bulundu' && db.yayinlar.length === 1 && db.yayinlar[0].kaynak === 'BBC' && db.yayinlar[0].baslikTr === 'Tahran görüşmesi' && db.yayinlar[0].alinti?.metin === 'Officials meet in Tehran' && db.basliklar.some(b => b.kaynak === 'Reuters'));
+await W.dunyaBasini(kumeT, trM as any);
+ok('dünya basını önbellekte (ikinci açılışta model çağrılmaz)', cagri === 3);
+// Bing News: gerçek adres "url=" parametresinden, " on MSN" eki atılır; adaylara katılır ve metni okunan öne alınır
+W.worldDeps.bing = async () => `<rss><channel>
+  <item><title>Lula wins fourth term</title><link>http://www.bing.com/news/apiclick.aspx?ref=FexRss&amp;aid=&amp;url=https%3a%2f%2fwww.msn.com%2fen-us%2fnews%2fother%2flula-wins%2far-AA2g3FqT&amp;c=1</link><description>The president defeated his rival.</description><pubDate>Mon, 26 Oct 2026 03:10:00 GMT</pubDate><News:Source>The Wall Street Journal on MSN</News:Source></item>
+  <item><title>Brazil election result</title><link>http://www.bing.com/news/apiclick.aspx?ref=FexRss&amp;url=https%3a%2f%2fwww.cbsnews.com%2fnews%2fbrazil%2f&amp;c=2</link><description>CBS report.</description><pubDate>Mon, 26 Oct 2026 04:00:00 GMT</pubDate><News:Source>CBS News</News:Source></item>
+</channel></rss>`;
+const bh = await W.bingHaber('Lula');
+ok('Bing: gerçek adres ve yayın adı (" on MSN" atılır)', bh.length === 2 && bh[0].url === 'https://www.msn.com/en-us/news/other/lula-wins/ar-AA2g3FqT' && bh[0].source === 'The Wall Street Journal' && bh[1].source === 'CBS News');
+W.worldDeps.chat = async (pr: string) => pr.includes('arama sorgusu') ? 'Lula Brazil election' : pr.includes('AYNI OLAYI') ? '{"esler": [0, 1]}' : '{}';
+W.worldDeps.metin = async (u: string) => (u.includes('cbsnews') ? 'CBS full text about the Brazilian election and the result of the runoff. '.repeat(10) : null);
+const db2 = await W.dunyaBasini({ ...kumeT, id: 'tk-bing', baslik: 'Lula kazandı' }, trM as any);
+ok('dünya basını: Bing adayları eşleşir, metni okunan yayın öne alınır, ülkesi bulunur', db2.yayinlar.length === 2 && db2.yayinlar[0].kaynak === 'CBS News' && db2.yayinlar[0].tam && db2.yayinlar[0].ulke === 'ABD' && db2.sorgu === 'Lula Brazil election');
+const es = S.eslestirici('İran Tahran');
+ok('arama: her kelime bir kelimenin başında (Türkçe ek), sıra önemsiz', es("Tahran'da görüşme: İran'ın güvenlik şefi") && es('IRAN TAHRANDA') && !es('İran bombaladı'));
+ok('arama: kısa kelime tam eşleşir ("AB" "abone"yi bulmaz)', S.eslestirici('AB')('AB zirvesi') && !S.eslestirici('AB')('abone ol'));
+
+// ———————————————— Takip ve yer bulma ————————————————
+const TK = await import('./newsFollow.js');
+const PL = await import('./worldPlaces.js');
+const once = new Date(Date.now() - 3600_000).toISOString(), simdi2 = new Date().toISOString();
+const k1 = { id: 'tk-olay', kategori: 'gundem' as const, baslik: 'Belediyeye operasyon', ilk: once, son: once, kokler: ['beled', 'opera', 'gozal', 'baska'], foto: null, kaynaklar: ['A', 'B'], haberler: [] as any[] };
+TK.takibeAl(k1);
+ok('takip: eklenir, aynı olay ikinci kez eklenmez', TK.takipListesi().length === 1 && TK.takibeAl(k1).id === 'tk-olay' && TK.takipListesi().length === 1);
+ok('takip: değişiklik yoksa gelişme yok', TK.gelismeler([k1]).length === 0);
+const g1 = TK.gelismeler([{ ...k1, kaynaklar: ['A', 'B', 'C'] }]);
+ok('takip: yeni kaynak bildirilir (bir kez)', g1.length === 1 && g1[0].yeniKaynaklar.join() === 'C' && !g1[0].yeniKume && TK.gelismeler([{ ...k1, kaynaklar: ['A', 'B', 'C'] }]).length === 0);
+const yeni = { ...k1, id: 'tk-yeni', baslik: 'Belediye operasyonunda gözaltı sayısı arttı', ilk: simdi2, son: simdi2, kaynaklar: ['D', 'E'] };
+const g2 = TK.gelismeler([yeni]);
+ok('takip: olayın yeni kümesi "yeni gelişme" olarak bildirilir', g2.length === 1 && g2[0].yeniKume);
+ok('takip: alakasız olay bildirilmez', TK.gelismeler([{ ...yeni, id: 'tk-baska', kokler: ['futbo', 'derbi', 'galat', 'fener'], ilk: new Date(Date.now() + 1000).toISOString() }]).length === 0);
+ok('takip: diskte kalıcı', JSON.parse(fs.readFileSync(process.env.HABER_TAKIP!, 'utf8')).length === 1);
+ok('takip: bırakılır', TK.takiptenCik('tk-yeni') && TK.takipListesi().length === 0);
+ok("yer: Türkçe ekle ve kişi adından (Netanyahu'dan → İsrail)", PL.yerBul("Seçimlere bir gün kala Netanyahu'dan ilginç paylaşım")?.yer === 'İsrail');
+ok("yer: başlıkta ilk geçen yer (Mekke önce, Tahran sonra → Suudi Arabistan)", PL.yerBul("Mekke İttifakının tarafları Tahran'ı ziyaret edecek")?.yer === 'Suudi Arabistan');
+ok('yer: bulunamazsa null (uydurma yok)', PL.yerBul('Borsa güne yükselişle başladı') === null);
 
 console.log(`\n${n - fail}/${n} haber modu testi geçti`);
 fs.rmSync(process.env.HABER_ARSIV!, { recursive: true, force: true });

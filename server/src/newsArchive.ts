@@ -120,6 +120,23 @@ export function oncekiler(kokler: string[], haric: string, gun = 30, n = 3, esik
   return out.sort((a, b) => b.benzerlik - a.benzerlik || b.tarih.localeCompare(a.tarih)).slice(0, n);
 }
 
+/** Arşivde anahtar kelime: başlığında ya da kaynak başlıklarında bütün kelimeler geçen kümeler (son `gun` gün, yeniler önce) */
+export function arsivAra(eslesir: (metin: string) => boolean, gun = 90, n = 30): { kume: ArsivKume; gun: string }[] {
+  const out: { kume: ArsivKume; gun: string }[] = [];
+  for (let i = 0; i <= gun && out.length < n; i++) {
+    const g = gunAdi(Date.now() - i * 86400_000);
+    if (!gunler.has(g) && !fs.existsSync(dosya(g))) continue;
+    for (const k of yukle(g).values()) {
+      if (out.length >= n) break;
+      if (eslesir(`${k.baslik} ${k.kaynaklar.map(s => s.baslik).join(' ')}`)) out.push({ kume: k, gun: g });
+    }
+  }
+  return out;
+}
+
+/** Taranacak arşiv günü sayısı (dosyası olan) */
+export const arsivGunSayisi = () => { try { return fs.readdirSync(DIR).filter(f => /^\d{4}-\d{2}-\d{2}\.json$/.test(f)).length; } catch { return 0; } };
+
 /** 90 günden eski dosyaları sil (açılışta ve günde bir) */
 export function arsivTemizle() {
   try {
