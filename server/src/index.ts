@@ -8,17 +8,18 @@ import { runJarvis } from './agent.js';
 import { BRIEF_OPENING, BRIEF_TRIGGER } from './brief.js';
 import { buildDashboard } from './dashboard.js';
 import { IMG_DIR } from './imagegen.js';
-import { MOCK, CHAT_MODEL } from './routellm.js';
-import { hitapDuzelt, transcribe, STT_MODEL } from './stt.js';
+import { CHAT_MODEL, KAYNAK, MOCK, PROVIDER, VISION_MODEL } from './routellm.js';
+import { hitapDuzelt, sttVar, transcribe, STT_MODEL } from './stt.js';
+import { beyinRouter } from './beyin.js';
 import {
-  BROWSER, DEFAULT_RATE, clampRate, envVoice, isRoutedModel, loadCatalog, preview, synthesize, ttsEnabled, usableVoices, voiceId, warmOpening,
+  BROWSER, DEFAULT_RATE, clampRate, defaultVoice, isRoutedModel, loadCatalog, preview, providerVoices, synthesize, ttsEnabled, voiceId, warmOpening,
   type VoiceSel,
 } from './tts.js';
 import { knownImageUrls, type PhotoMode } from './photos.js';
 import { DEFAULT_WAKE, greetingPeriod, health, mergeWake, type WakeConfig } from './wake.js';
 import { addMemory, getMemory, getProfile, removeMemory, saveProfile } from './profile.js';
 import { markBlocked } from './youtube.js';
-import { CAMERA_ENABLED, VISION_MODEL, cameraRouter, initCameras, onClientClosed } from './camera.js';
+import { CAMERA_ENABLED, cameraRouter, initCameras, onClientClosed } from './camera.js';
 import { control, homeState, initHome, type DeviceId, type HomeAction } from './home.js';
 import { initLibrary, libraryRouter } from './library.js';
 import { libraryPartsRouter } from './libraryParts.js';
@@ -63,23 +64,24 @@ function saveState() {
 }
 
 // ---------- Ses seçimi ----------
-const env = envVoice();
-if (env.warning) console.warn(`[tts] UYARI: ${env.warning}`);
-/** Seçili ses kataloğda doğrulanmış mı (ya da tarayıcı sesi mi)? Değilse .env varsayılanına dönülür. */
+{ const w = defaultVoice().warning; if (w) console.warn(`[tts] UYARI: ${w}`); }
+/**
+ * Seçili ses şu anki beyinde çalışır mı? Tarayıcı sesi ve ElevenLabs her zaman; sağlayıcı sesi yalnızca o sağlayıcı
+ * seslendirme sunuyorsa ve ses onun listesindeyse (Gemini'ye geçince eski gpt-audio sesi cümleleri sessiz bırakmasın).
+ */
 function validVoice(v: VoiceSel | undefined): v is VoiceSel {
   if (!v || typeof v.model !== 'string' || typeof v.voice !== 'string') return false;
   if (v.model === BROWSER) return true;
   // ElevenLabs: anahtar varsa ve ses kimliği biçimi doğruysa (sesler hesaptan gelir, npm run voices'tan değil)
   if (isEleven(v.model)) return elevenReady() && /^[A-Za-z0-9]{8,40}$/.test(v.voice);
-  if (isRoutedModel(v.model)) return false;
-  const catalog = usableVoices();
-  return !catalog.length || catalog.some(c => c.model === v.model && c.voice === v.voice);
+  if (isRoutedModel(v.model) || MOCK || !PROVIDER.tts) return false;
+  const list = providerVoices();
+  // Abacus'ta katalog hiç ölçülmediyse (npm run voices) .env'deki ses kabul edilir
+  return (PROVIDER.tts === 'chat-audio' && !list.length) || list.some(c => c.model === v.model && c.voice === v.voice);
 }
-if (state.voice && !validVoice(state.voice)) {
-  console.warn(`[tts] Kayıtlı ses geçersiz (${voiceId(state.voice)}), .env varsayılanına dönülüyor.`);
-  delete state.voice;
-}
-const currentVoice = (): VoiceSel => state.voice ?? env.sel;
+if (state.voice && !validVoice(state.voice)) console.warn(`[tts] Kayıtlı ses bu beyinde yok (${voiceId(state.voice)}); varsayılan ses kullanılıyor.`);
+/** Kayıtlı ses silinmez: başka beyne geçip dönünce seçim geri gelir. */
+const currentVoice = (): VoiceSel => (validVoice(state.voice) ? state.voice : defaultVoice().sel);
 const sfx = () => state.sfx ?? true;
 const wakeCfg = (): WakeConfig => mergeWake(DEFAULT_WAKE, state.wake ?? {});
 
@@ -163,6 +165,9 @@ app.get('/api/state', (_req, res) => {
     wake: wakeCfg(),
     ui: uiMode(),
     camera: { enabled: CAMERA_ENABLED, vision: VISION_MODEL },
+    // Sunucuda ses tanıma yoksa istemci doğrudan tarayıcının ses tanımasını kullanır
+    stt: sttVar(),
+    beyin: { saglayici: PROVIDER.id, ad: PROVIDER.ad, kaynak: KAYNAK },
     // El Kontrolü yüz HUD etiketi ("AD · TANINDI"); ad repoda değil .env'de
     userName: process.env.USER_NAME || '',
     mock: MOCK,
@@ -194,7 +199,7 @@ setInterval(() => {
 
 // ---------- Seslendiren ----------
 app.get('/api/voices', async (_req, res) => {
-  const list = usableVoices().map(({ id, model, voice, label, provider, f0, wpm }) => ({
+  const list = providerVoices().map(({ id, model, voice, label, provider, f0, wpm }) => ({
     id, model, voice, label, provider, wpm,
     f0: f0?.length ? Math.round(f0.reduce((a, b) => a + b, 0) / f0.length) : null,
   }));
@@ -251,6 +256,18 @@ app.post('/api/settings', (req, res) => {
 
 // ---------- Kamera cihazları (WebRTC sinyali, aralıklı kare, kameraya_bak) ----------
 app.use(cameraRouter());
+
+// ---------- Beyin (sağlayıcı + anahtar; Ayarlar → Beyin) ----------
+app.use(beyinRouter({
+  korumali: !!ACCESS_TOKEN,
+  degisti: () => {
+    const v = currentVoice();
+    console.log(`[tts] seslendiren: ${voiceId(v)}`);
+    if (ttsEnabled(v)) { warmOpening(v).catch(() => {}); warmGreetings(v); }
+    broadcast({ type: 'beyin' });
+    broadcast(settingsEvent());
+  },
+}));
 
 // ---------- Kitaplık (El Kontrolü: raf haritası, kapak, özet, notlar) ----------
 app.use(advisorRouter());
@@ -446,6 +463,7 @@ app.get('/api/tts', async (req, res) => {
 // ---------- Ses tanıma: MediaRecorder kaydı → RouteLLM ----------
 app.post('/api/stt', express.raw({ type: ['audio/*', 'application/octet-stream'], limit: '10mb' }), async (req, res) => {
   const mime = String(req.headers['content-type'] || '');
+  if (!sttVar()) return res.status(501).json({ error: 'sunucuda ses tanıma yok', tarayici: true });
   if (!Buffer.isBuffer(req.body) || req.body.length < 1000) return res.status(400).json({ error: 'kayıt boş' });
   try {
     // Bağlam: son konuşma (belirsiz kelime doğru seçilsin, "ağır gelmesi" → "yağmur gelmesi" olmasın)
@@ -497,9 +515,9 @@ if (fs.existsSync(dist)) {
 
 app.listen(PORT, () => {
   const v = currentVoice();
-  console.log(`Jarvis sunucusu: http://localhost:${PORT}  ${MOCK ? '(DEMO MODU — API anahtarı yok)' : `(beyin: ${CHAT_MODEL})`}`);
-  console.log(`[tts] seslendiren: ${voiceId(v)} · STT: ${STT_MODEL}`);
-  if (!usableVoices().length) console.warn('[tts] Doğrulanmış ses kataloğu yok: `npm run voices` çalıştırın.');
+  console.log(`Jarvis sunucusu: http://localhost:${PORT}  ${MOCK ? '(DEMO MODU — beyin yok; Ayarlar → Beyin)' : `(beyin: ${PROVIDER.ad} · ${CHAT_MODEL})`}`);
+  console.log(`[tts] seslendiren: ${voiceId(v)} · STT: ${STT_MODEL || 'tarayıcı'}`);
+  if (PROVIDER.tts === 'chat-audio' && !MOCK && !providerVoices().length) console.warn('[tts] Doğrulanmış ses kataloğu yok: `npm run voices` çalıştırın.');
   warmOpening(v).catch(e => console.warn('Açılış sesi hazırlanamadı:', e));
   warmGreetings(v);
 });

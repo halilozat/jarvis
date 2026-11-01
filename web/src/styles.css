@@ -766,3 +766,45 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .haber-gelisme button { background: none; border: 1px solid var(--line); color: var(--muted); width: 26px; height: 26px; border-radius: 50%; cursor: pointer; flex: none; }
 @keyframes hg-gir { from { opacity: 0; transform: translate(-50%, -16px); } }
 @keyframes hg-git { to { opacity: 0; transform: translate(-50%, -16px); } }
+
+/* ---------- Beyin kurulumu (sağlayıcı + anahtar) ---------- */
+.bk { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgba(2, 5, 9, 0.82); backdrop-filter: blur(6px); overflow-y: auto; }
+.bk-box { width: min(760px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; border: 1px solid var(--line); background: rgba(6, 13, 21, 0.96); padding: 22px; display: flex; flex-direction: column; gap: 12px; border-radius: 10px; }
+.bk-head { display: flex; justify-content: space-between; align-items: center; }
+.bk-x { background: none; border: 0; color: var(--muted); font-size: 18px; }
+.bk-lead { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.bk-lead b, .bk-state b { color: var(--text); font-weight: 500; }
+.bk-state { margin: 0; font: 12px var(--mono); color: var(--muted); }
+.bk-group { font: 11px var(--mono); letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); margin-top: 4px; }
+.bk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.bk-card { text-align: left; display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 8px; border: 1px solid var(--line); background: rgba(10, 22, 34, 0.7); }
+.bk-card:hover { border-color: rgba(77, 225, 255, 0.5); }
+.bk-card.on { border-color: var(--accent); background: rgba(77, 225, 255, 0.1); box-shadow: 0 0 0 1px var(--accent) inset; }
+.bk-card-top { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bk-card-top b { font-weight: 500; font-size: 15px; }
+.bk-free, .bk-now { font: 9px var(--mono); letter-spacing: 0.12em; padding: 2px 5px; border-radius: 3px; }
+.bk-free { color: var(--ok); border: 1px solid var(--ok); }
+.bk-now { color: var(--accent-2); border: 1px solid var(--accent-2); }
+.bk-desc { font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.bk-caps { display: flex; gap: 10px; font: 10.5px var(--mono); color: rgba(138, 164, 181, 0.6); }
+.bk-caps .y { color: var(--ok); }
+.bk-form { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
+.bk-step { display: flex; gap: 10px; align-items: baseline; font-size: 14px; color: var(--text); line-height: 1.45; }
+.bk-step a { color: var(--accent); }
+.bk-n { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--accent); color: var(--accent); font: 11px/18px var(--mono); text-align: center; }
+.bk-form input, .bk-model select, .bk-model input { width: 100%; min-width: 0; height: 42px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: #070d14; color: var(--text); font-size: 15px; outline: none; }
+.bk-form input:focus, .bk-model select:focus { border-color: var(--accent); }
+.bk-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bk-actions button { height: 42px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--line); background: rgba(10, 22, 34, 0.8); }
+.bk-actions .bk-primary { border-color: var(--accent); background: rgba(77, 225, 255, 0.14); color: var(--accent); }
+.bk-actions button:disabled { opacity: 0.4; cursor: default; }
+.bk-ok { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 8px; border: 1px solid rgba(125, 255, 178, 0.35); background: rgba(125, 255, 178, 0.06); color: var(--ok); font-size: 14px; }
+.bk-model { display: grid; grid-template-columns: 170px 1fr; gap: 10px; align-items: center; color: var(--muted); font-size: 13px; }
+.bk-err { margin: 0; color: var(--danger); font-size: 14px; }
+.bk-foot { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.bk-link { background: none; border: 0; padding: 4px 0; color: var(--accent-2); font-size: 14px; }
+button.demo { cursor: pointer; background: none; }
+button.demo:hover { background: rgba(255, 181, 71, 0.12); }
+.beyin-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.beyin-row .lib-btn { flex: none; }
+@media (max-width: 560px) { .bk-model { grid-template-columns: 1fr; gap: 4px; } .bk-box { padding: 16px; } }

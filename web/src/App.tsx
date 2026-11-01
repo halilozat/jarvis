@@ -25,7 +25,8 @@ import { matchBookChat, matchBookCommand, onayCumlesi, type KitapKomut } from '.
 import { tumCumleler } from './hands/space/facts';
 import { labContext } from './hands/space/labContext';
 import { emitCamera, getCameras, getRole, isCameraEvent, onCamera, setRole, toggleCameraPanel } from './lib/camera';
-import { type ElevenUsage, clearConversation, detectDevice, getDashboard, getHealth, getState, getVoices, metric, postAttention, postSleep, postWake, previewUrl, saveDevice, saveSettings, sendChat, setPhotoMode, stt, subscribe, token, clientId } from './lib/api';
+import { BeyinKurulum, DEMO_ANAHTARI } from './components/BeyinKurulum';
+import { type AppState, type ElevenUsage, clearConversation, setServerStt, serverStt, detectDevice, getDashboard, getHealth, getState, getVoices, metric, postAttention, postSleep, postWake, previewUrl, saveDevice, saveSettings, sendChat, setPhotoMode, stt, subscribe, token, clientId } from './lib/api';
 import { startClapListener, type ClapListener } from './lib/clap';
 import { shrinkImage } from './lib/image';
 import { recorderSupported, startRecording } from './lib/recorder';
@@ -115,6 +116,9 @@ export default function App() {
   const [online, setOnline] = useState<Device[]>([]);
   const [connected, setConnected] = useState(false);
   const [mock, setMock] = useState(false);
+  // Beyin (yapay zekâ sağlayıcısı): ilk açılışta ayar yoksa kurulum ekranı; Ayarlar → Beyin'den de açılır
+  const [beyin, setBeyin] = useState<AppState['beyin']>();
+  const [kurulum, setKurulum] = useState<null | 'ilk' | 'ayar'>(null);
   const [photoMode, setMode] = useState<'haber' | 'video'>('haber');
   const [core, setCore] = useState<CoreState>('idle');
   const [telemetry, setTelemetry] = useState<string[]>([]);
@@ -467,6 +471,11 @@ export default function App() {
         setMessages(s.messages);
         setOnline(s.online);
         setMock(s.mock);
+        setBeyin(s.beyin);
+        setServerStt(s.stt ?? true);
+        let demoSecildi = false;
+        try { demoSecildi = !!localStorage.getItem(DEMO_ANAHTARI); } catch { /* yok say */ }
+        if (s.beyin?.kaynak === 'yok' && !demoSecildi) setKurulum('ilk');
         setMode(s.photoMode);
         voice.serverTts = s.tts;
         voice.sfx = s.sfx;
@@ -487,6 +496,16 @@ export default function App() {
     return subscribe(device, (e: ServerEvent) => {
       if (isCameraEvent(e)) { emitCamera(e); return; } // kamera paneli dinler
       if (e.type === 'kitaplik') { setLibKey(k => k + 1); return; }
+      // Beyin değişti (başka bir cihazdan da olabilir): demo rozeti, ses tanıma yolu ve sesler yeniden okunur
+      if (e.type === 'beyin') {
+        getState().then(s => {
+          setMock(s.mock); setBeyin(s.beyin); setServerStt(s.stt ?? true);
+          voice.serverTts = s.tts; setVoiceSel(s.voice);
+          setModel(null);
+        }).catch(() => {});
+        getDashboard().then(d => { setDash(d); setDashTried(true); }).catch(() => {});
+        return;
+      }
       if (e.type === 'kitap_oner') { setOneriKey(k => k + 1); const id = e.id, ad = e.ad; if (id) setOneriCmd(c => ({ id, ad, n: (c?.n ?? 0) + 1 })); return; }
       if (e.type === 'kitap_tarzi') { setOneriKey(k => k + 1); return; }
       if (e.type === 'haber_takip') {
@@ -764,7 +783,7 @@ export default function App() {
     rec.start();
   };
 
-  // Asıl yol: mikrofon kaydı → RouteLLM ile yazıya çevirme. Konuşma bitince (sessizlik) kendiliğinden durur.
+  // Asıl yol: mikrofon kaydı → beynin ses tanıma modeliyle yazıya çevirme. Konuşma bitince (sessizlik) kendiliğinden durur.
   /** Uzay komutunu çalıştır: El Kontrolü kapalıysa ve komut "uzay modunu aç" ise uzay modunda açılır */
   const runSpaceCmd = (cmd: SpaceCmd, zincir?: SpaceCmd[]) => {
     voice.unlock();
@@ -839,7 +858,8 @@ export default function App() {
     }
     stopPlayback();
     setVideo(null); // mikrofon videonun sesini duymasın
-    if (!recorderSupported()) return startWebSpeech();
+    // Beyin ses tanıma sunmuyorsa (Claude, OpenRouter, demo) kayıt sunucuya gitmez: tarayıcının ses tanıması
+    if (!recorderSupported() || !serverStt) return startWebSpeech();
     setInterim('');
     setCore('listening');
     try {
@@ -1158,6 +1178,7 @@ export default function App() {
             online={online}
             connected={connected}
             mock={mock}
+            onDemo={() => setKurulum('ayar')}
             model={model}
             dash={dash}
             core={core}
@@ -1207,7 +1228,7 @@ export default function App() {
           <div className="scanlines" />
         </div>
 
-        <TopBar me={device} online={online} model={model} connected={connected} mock={mock} />
+        <TopBar me={device} online={online} model={model} connected={connected} mock={mock} onDemo={() => setKurulum('ayar')} />
         <CompactStrip data={dash} />
 
         <main className="stage">
@@ -1332,6 +1353,12 @@ export default function App() {
               )}
               {drawer === 'ayarlar' && (
                 <div className="settings">
+                  <label>Beyin (yapay zekâ servisi)</label>
+                  <div className="beyin-row">
+                    <span>{mock ? 'Demo modu · hazır cevaplar ve ücretsiz gerçek veriler' : `${beyin?.ad ?? '—'}${beyin?.kaynak === 'env' ? ' · .env' : ''}`}</span>
+                    <button className="lib-btn" onClick={() => { setDrawer(null); setKurulum('ayar'); }}>{mock ? 'Beyin ekle' : 'Değiştir'}</button>
+                  </div>
+                  <p className="muted small">Google Gemini ve Groq ücretsiz; OpenAI, Claude, OpenRouter ve Abacus kendi hesabınızla. {serverStt ? '' : 'Bu beyinde ses tanıma yok: mikrofon tarayıcının ses tanımasını kullanır.'}</p>
                   <label>Ekran (tüm cihazlarda)</label>
                   <div className="seg">
                     <button className={ui === 'mark1' ? 'on' : ''} onClick={() => saveSettings({ ui: 'mark1' }).catch(e => flash(e.message))}>Mark 1 · sade</button>
@@ -1444,6 +1471,7 @@ export default function App() {
 
       <AnimatePresence>{homeOpen && home && <HomePanel home={home} onClose={() => setHomeOpen(false)} />}</AnimatePresence>
       <AnimatePresence>{homeToast && !homeOpen && <HomeToast key={homeToast} text={homeToast} />}</AnimatePresence>
+      {kurulum && <BeyinKurulum ilk={kurulum === 'ilk'} flash={flash} onClose={() => setKurulum(null)} />}
 
       {hands && (
         <Suspense fallback={null}>

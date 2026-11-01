@@ -1,6 +1,6 @@
 # Jarvis
 
-Bilgisayarda, tablette ve telefonda çalışan **tek** bir kişisel asistan. Beyni [Abacus.AI RouteLLM API](https://abacus.ai): her soruyu otomatik olarak en uygun modele yönlendirir.
+Bilgisayarda, tablette ve telefonda çalışan **tek** bir kişisel asistan. Beynini sen seçersin: ücretsiz **Google Gemini** ya da **Groq**, ya da OpenAI, Anthropic Claude, OpenRouter, [Abacus.AI RouteLLM](https://abacus.ai) ve OpenAI uyumlu herhangi bir servis. Anahtar yoksa gerçek verilerle çalışan bir demo modu var.
 
 - 🗣️ Sesli konuşur, sesle dinler (bas-konuş)
 - 📰 "Jarvis, aydınlat beni" → birden fazla haber kaynağını tarar, sahne sahne anlatır
@@ -17,13 +17,15 @@ Gerekenler: Node.js 20+
 npm run setup          # bağımlılıkları kurar, server/.env dosyasını oluşturur
 ```
 
-`server/.env` dosyasını aç ve en az şunu doldur:
+Beyin (yapay zekâ servisi) uygulamanın içinden seçilir: ilk açılışta **Beyin** ekranı gelir (Ayarlar → Beyin). İstersen `server/.env`'den de verebilirsin:
 
 ```
-ABACUS_API_KEY=...     # apps.abacus.ai → LLM APIs → API anahtarı oluştur
+AI_PROVIDER=gemini     # gemini | groq | openai | anthropic | openrouter | abacus
+AI_API_KEY=...
+# ya da eskisi gibi: ABACUS_API_KEY=...
 ```
 
-Anahtar boşsa uygulama **demo modunda** çalışır (kurgusal haberlerle), arayüzü denemek için yeterlidir.
+Anahtar yoksa uygulama **demo modunda** çalışır: hazır cevaplar + ücretsiz gerçek veriler (hava, TCMB kurları, gündem, Wikipedia). Ayrıntılar aşağıda, "Kolay Kurulum → Adım 5".
 
 ## Çalıştırma
 
@@ -797,8 +799,8 @@ Bu rehber, daha önce hiç kod çalıştırmamış biri için hazırlandı. Adı
 > **Kısaca ne yapacağız?**
 > 1. Bilgisayara Node.js kuracağız (Jarvis'i çalıştıran program).
 > 2. Jarvis'i GitHub'dan indireceğiz.
-> 3. Abacus AI'dan bir API anahtarı alacağız (Jarvis'in beyni).
-> 4. Tek bir komutla Jarvis'i başlatacağız.
+> 3. Tek bir komutla Jarvis'i başlatacağız.
+> 4. Uygulamanın içinden ücretsiz bir beyin seçeceğiz (Google Gemini ya da Groq; istersen anahtarsız demo).
 
 ---
 
@@ -807,9 +809,9 @@ Bu rehber, daha önce hiç kod çalıştırmamış biri için hazırlandı. Adı
 **Gerekenler:**
 - Mac ya da Windows bilgisayar
 - İnternet bağlantısı
-- **Abacus AI ChatLLM aboneliği** (ücretli; güncel fiyatı abacus.ai sitesinde görebilirsin). Jarvis'in beyni olan RouteLLM API bu aboneliğin içinde geliyor.
+- **Para gerekmez.** Beyin için ücretsiz bir Google Gemini ya da Groq anahtarı yeter (kart bilgisi istemez). Ücretli servisler (OpenAI, Claude, OpenRouter, Abacus.AI) isteğe bağlı.
 
-**Abonelik olmadan da deneyebilirsin:** API anahtarı eklemezsen Jarvis **demo modunda** açılır. Arayüzü, animasyonları ve örnek (kurgusal) bir haber özetini görebilirsin. Gerçek haberleri anlatması için anahtar gerekiyor.
+**Anahtarsız da deneyebilirsin:** Jarvis **demo modunda** açılır; hava, döviz, gündem manşetleri, Wikipedia, haber merkezi ve El Kontrolü gerçek verilerle çalışır.
 
 ---
 
@@ -870,50 +872,7 @@ Bu birkaç dakika sürebilir, ekranda çok sayıda yazı akacak. Normaldir. Bitt
 
 ---
 
-### Adım 4: Abacus AI API anahtarını al
-
-1. **https://apps.abacus.ai** adresine git ve ChatLLM hesabınla giriş yap.
-2. Sol menüden **LLM APIs** sayfasını aç.
-3. **Create API key** düğmesine tıkla.
-4. Çıkan anahtarı **hemen kopyala**. Anahtar bir daha gösterilmez; kaybedersen yenisini oluşturman gerekir.
-
-> ⚠️ API anahtarı bir şifre gibidir. Kimseyle paylaşma, ekran görüntüsünde gösterme. Anahtarın başkasının eline geçerse senin kredini harcayabilir.
-
----
-
-### Adım 5: Anahtarı Jarvis'e ver
-
-Jarvis'in ayar dosyasını aç:
-
-**Mac:**
-```
-open -e server/.env
-```
-
-**Windows:**
-```
-notepad server\.env
-```
-
-Açılan dosyada şu satırı bul:
-
-```
-ABACUS_API_KEY=
-```
-
-Eşittir işaretinin hemen arkasına, **boşluk bırakmadan** kopyaladığın anahtarı yapıştır:
-
-```
-ABACUS_API_KEY=s2_xxxxxxxxxxxxxxxxxxxxxxxx
-```
-
-Dosyayı kaydet (**⌘ + S** ya da **Ctrl + S**) ve kapat.
-
-> İstersen aynı dosyadaki `USER_NAME=Halil` satırını kendi adınla değiştir. Jarvis sana adınla hitap eder.
-
----
-
-### Adım 6: Jarvis'i başlat 🚀
+### Adım 4: Jarvis'i başlat 🚀
 
 Aynı pencereye yaz:
 
@@ -927,7 +886,7 @@ Birkaç saniye sonra tarayıcında (tercihen **Google Chrome**) şu adresi aç:
 http://localhost:5173
 ```
 
-Jarvis karşında! Mikrofon izni isterse **İzin ver** de.
+Jarvis karşında! İlk açılışta **Beyin** ekranı gelir (bir sonraki adım). Mikrofon izni isterse **İzin ver** de.
 
 Dene:
 - 🎙️ Mikrofon düğmesine bas (bilgisayarda **boşluk tuşu**) ve **"Jarvis, interneti tara ve bana gündemi özetle"** de.
@@ -935,6 +894,35 @@ Dene:
 
 **Kapatmak için:** Terminal/PowerShell penceresinde **Ctrl + C**.
 **Bir dahaki sefere açmak için:** Adım 3'teki `cd` komutuyla klasöre git, sonra `npm run dev`.
+
+---
+
+### Adım 5: Beynini seç (ücretsiz)
+
+Jarvis'in beyni bir yapay zekâ servisidir. İlk açılışta gelen **Beyin** ekranında birini seç (sonradan **Ayarlar → Beyin → Değiştir**):
+
+| Servis | Ücret | Ses tanıma | Seslendirme | Anahtar |
+|---|---|---|---|---|
+| **Google Gemini** | Ücretsiz (kart istemez) | ✓ | tarayıcı sesi | aistudio.google.com/apikey |
+| **Groq** | Ücretsiz (kart istemez) | ✓ (Whisper) | tarayıcı sesi | console.groq.com/keys |
+| OpenAI | Ücretli | ✓ | ✓ doğal ses | platform.openai.com/api-keys |
+| Anthropic Claude | Ücretli | tarayıcı | tarayıcı sesi | console.anthropic.com |
+| OpenRouter | Ücretli (bazı modeller ücretsiz) | tarayıcı | tarayıcı sesi | openrouter.ai/keys |
+| Abacus.AI RouteLLM | ChatLLM aboneliği | ✓ | ✓ ses kataloğu + görsel üretim | apps.abacus.ai |
+| Özel (OpenAI uyumlu) | Servise göre | tarayıcı | tarayıcı sesi | DeepSeek, Mistral, yerel Ollama … |
+
+1. Bir kart seç (en kolayı **Google Gemini**).
+2. **Anahtar sayfasını aç** bağlantısına tıkla, Google hesabınla gir, **Create API key** de ve anahtarı kopyala.
+3. Anahtarı kutuya yapıştır → **Bağlantıyı test et**. Jarvis gerçek bir soru sorar ve en uygun modelleri kendisi seçer.
+4. **Kaydet ve başla**. Sunucuyu yeniden başlatmana gerek yok.
+
+> ⚠️ API anahtarı bir şifre gibidir. Kimseyle paylaşma, ekran görüntüsünde gösterme. Anahtar yalnızca senin bilgisayarındaki `server/data/beyin.json` dosyasında saklanır, ekranda yalnızca son 4 hanesi görünür.
+
+> "Tarayıcı" yazan yerlerde Jarvis tarayıcının kendi ses tanımasını ve Türkçe sesini kullanır (Chrome önerilir). Daha doğal bir ses için ElevenLabs anahtarı ekleyebilirsin (aşağıda).
+
+**Anahtar almak istemiyorsan:** **Anahtarsız demo ile devam et** de. Demo modunda Jarvis hazır cevaplarla ama **gerçek verilerle** çalışır: "Jarvis, aydınlat beni" (onlarca kaynaktan güncel manşetler), "Hava nasıl?", "Dolar kaç?", "Kapadokya nerede?" (Wikipedia), ışık ve kahve komutları, haber merkezi, El Kontrolü ve Uzay Laboratuvarı. Serbest sohbet ve fotoğraf yorumlama için beyin gerekir; üstteki **DEMO · beyin ekle** rozetine basınca kurulum ekranı açılır.
+
+> Kurulum ekranı yerine `.env` kullanmak istersen: `AI_PROVIDER=gemini` ve `AI_API_KEY=...` (ya da eskisi gibi `ABACUS_API_KEY=...`). Uygulamadan kaydedilen ayar `.env`'den önce gelir; **Ayarlar → Beyin → Uygulamadaki ayarı sil** ile `.env`'e dönülür.
 
 ---
 
@@ -947,7 +935,10 @@ Node.js kurulduktan sonra Terminal/PowerShell penceresini kapatıp yeniden aç. 
 Doğru klasörde değilsin. Adım 3'teki "klasörü sürükleyip bırak" yöntemini kullan.
 
 **Jarvis açılıyor ama üstte DEMO yazıyor**
-API anahtarı okunamamış. `server/.env` dosyasında anahtarın `ABACUS_API_KEY=` satırına boşluksuz yapıştırıldığından ve dosyanın kaydedildiğinden emin ol. Sonra Terminal'de **Ctrl + C** ile durdurup `npm run dev` ile yeniden başlat.
+Henüz beyin eklenmemiş. **DEMO · beyin ekle** rozetine bas, bir servis seç ve anahtarı yapıştır.
+
+**"Anahtar geçersiz" / "Kota doldu"**
+Anahtarı baştan sona yeniden kopyala. Ücretsiz katmanlarda dakikalık istek sınırı var; "Kota doldu" derse bir dakika bekle ya da diğer ücretsiz servisi (Gemini ↔ Groq) dene.
 
 **Mikrofon çalışmıyor**
 Chrome'da adres çubuğunun solundaki kilit simgesine tıkla → Mikrofon → İzin ver. Safari yerine Chrome kullan.

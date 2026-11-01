@@ -19,13 +19,13 @@ function Clock() {
   );
 }
 
-export function TopBar({ me, online, model, connected, mock }: { me: Device; online: Device[]; model: string | null; connected: boolean; mock: boolean }) {
+export function TopBar({ me, online, model, connected, mock, onDemo }: { me: Device; online: Device[]; model: string | null; connected: boolean; mock: boolean; onDemo?: () => void }) {
   return (
     <header className="topbar">
       <div className="brand">
         <span className="brand-mark">JARVIS</span>
         <span className={'link ' + (connected ? 'on' : 'off')}>{connected ? 'çevrimiçi' : 'bağlanıyor…'}</span>
-        {mock && <span className="demo">DEMO</span>}
+        {mock && <button className="demo" onClick={onDemo} title="Beyin ekle: Ayarlar → Beyin">DEMO · beyin ekle</button>}
       </div>
       <div className="devices">
         {(['masaustu', 'tablet', 'telefon'] as Device[]).map(d => (

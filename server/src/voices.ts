@@ -5,12 +5,12 @@
 // Sonuç: server/data/voices.json
 import fs from 'node:fs';
 import path from 'node:path';
-import { API_KEY, routellm, type ChatResponse } from './routellm.js';
+import { API_KEY, PROVIDER, routellm, type ChatResponse } from './routellm.js';
 import { isMp3, medianF0, normalizeSpeech, pcmToWav, readWav, wavSeconds } from './audio.js';
 import { PREVIEW_TEXT, STYLE, VOICES_FILE, type VoiceEntry } from './tts.js';
 
-if (!API_KEY) {
-  console.error('ABACUS_API_KEY yok. server/.env dosyasına ekle.');
+if (!API_KEY || PROVIDER.id !== 'abacus') {
+  console.error('Bu araç Abacus RouteLLM içindir: server/.env → ABACUS_API_KEY (ya da Ayarlar → Beyin → Abacus).');
   process.exit(1);
 }
 

@@ -65,6 +65,7 @@ export type ServerEvent =
   | { type: 'reply'; message: StoredMessage; origin: string }
   | { type: 'error'; error: string; origin: string }
   | { type: 'handoff'; from: Device | null; to: Device; toClient: string }
+  | { type: 'beyin' }
   | { type: 'settings'; photoMode: 'haber' | 'video'; voice: VoiceSel; sfx: boolean; wake: WakeConfig; ui: UiMode }
   | { type: 'attention'; ms: number; by: Device }
   | { type: 'attention_end' }

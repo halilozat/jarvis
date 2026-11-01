@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { buildSystemPrompt } from './prompt.js';
-import { CHAT_MODEL, MOCK, RouteLLMError, routellmStream, type ChatMessage, type ContentPart } from './routellm.js';
+import { CHAT_MODEL, MOCK, PHOTO_MODEL, PROVIDER, RouteLLMError, routellmStream, type ChatMessage, type ContentPart } from './routellm.js';
 import { TOOLS, runTool, type ToolProgress } from './tools.js';
 import { findNewsById } from './news.js';
 import { resolveFastPhoto, resolveSlowPhoto, type PhotoMode } from './photos.js';
@@ -15,8 +15,6 @@ import { BRIEF_OPENING, BRIEF_TRIGGER } from './brief.js';
 import type { Device, Gorsel, GorselWithPhoto, JarvisReply, Photo, Sahne, StoredMessage } from './types.js';
 
 const MAX_ROUNDS = 5;
-/** Görsel girdi için model: boşsa CHAT_MODEL (Jarvis router'ı görsel isteği kendisi yönlendirir). */
-const VISION_MODEL = process.env.VISION_MODEL || CHAT_MODEL;
 
 const normalizeTr = (s: string) => s.toLocaleLowerCase('tr').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 const isOpening = (s: Sahne) => normalizeTr(s.ses).startsWith(normalizeTr(BRIEF_OPENING));
@@ -30,7 +28,10 @@ function contextVars(device: Device, prevDevice: Device | null) {
     saat: now.toLocaleTimeString('tr-TR', { timeZone: tz, hour: '2-digit', minute: '2-digit' }),
     cihaz: device,
     onceki_cihaz: prevDevice ?? device,
-    kullanici: process.env.USER_NAME || 'Halil',
+    kullanici: process.env.USER_NAME || 'Kullanıcı',
+    beyin: PROVIDER.id === 'abacus'
+      ? 'RouteLLM. Her soruda en uygun modeli seçen, birden fazla beyni olan bir asistansın.'
+      : `${PROVIDER.ad} (${CHAT_MODEL}). Beyni Ayarlar'dan tek tıkla değiştirilebilen bir asistansın; Gemini, Groq, OpenAI, Claude ya da RouteLLM.`,
     profil: getProfile().text,
     hafiza: memoryForPrompt(),
     kitaplik: libraryForPrompt(),
@@ -334,7 +335,7 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
     ...history.slice(-12).map(m => ({ role: m.role, content: m.text }) as ChatMessage),
     { role: 'user', content: userContent },
   ];
-  const model = opts.image ? VISION_MODEL : CHAT_MODEL;
+  const model = opts.image ? PHOTO_MODEL : CHAT_MODEL;
 
   // Komut yoksa haber aracı hiç sunulmaz: Jarvis kendiliğinden gündem anlatamaz. Diğer araçlar her zaman açık.
   // Her aracın çıktısı toolText'e eklenir; verifyVisual sayı/grafik/harita/alıntı görsellerini bu gerçek veriyle doğrular.

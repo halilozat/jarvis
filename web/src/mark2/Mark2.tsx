@@ -20,6 +20,8 @@ export interface Mark2Props {
   online: Device[];
   connected: boolean;
   mock: boolean;
+  /** DEMO rozetine basınca beyin kurulumu */
+  onDemo?: () => void;
   model: string | null;
   dash: Dashboard | null;
   core: CoreState;
@@ -97,7 +99,7 @@ export default function Mark2(p: Mark2Props) {
         <DayRuler day={now.getDate()} month={now.getMonth()} year={now.getFullYear()} />
         <div className="m2-top-r">
           <span className={'m2-link ' + (p.connected ? 'on' : 'off')}>{p.connected ? 'BAĞLI' : 'BAĞLANIYOR'}</span>
-          {p.mock && <span className="m2-demo">DEMO</span>}
+          {p.mock && <button className="m2-demo" onClick={p.onDemo} title="Beyin ekle">DEMO · BEYİN EKLE</button>}
           {p.model && <span className="m2-brain">BEYİN · {p.model}</span>}
         </div>
       </header>
@@ -105,7 +107,9 @@ export default function Mark2(p: Mark2Props) {
       <aside className="m2-left" key={'l' + p.panelKey}>
         <DateDial />
         <Box title="SİSTEM" meta={DEVICE_LABEL[p.device].toLocaleUpperCase('tr')}>
-          <Row k="routellm" v={ms !== null && sys?.routellm_ok ? `${ms} ms` : 'erişilemiyor'} frac={ms !== null ? 1 - Math.min(1, ms / 2500) : 0} tone={latTone} />
+          {p.mock
+            ? <Row k="beyin" v="demo · anahtar yok" tone="dim" />
+            : <Row k="gecikme" v={ms !== null && sys?.routellm_ok ? `${ms} ms` : 'erişilemiyor'} frac={ms !== null ? 1 - Math.min(1, ms / 2500) : 0} tone={latTone} />}
           <Row k="kaynaklar" v={src ? `${src.sources_ok}/${src.sources_total}` : '—'} frac={src ? src.sources_ok / Math.max(1, src.sources_total) : null} tone={!src ? 'dim' : src.sources_ok === src.sources_total ? 'ok' : src.sources_ok ? 'warn' : 'bad'} />
           <Row k="cihazlar" v={`${p.online.length}/3 · ${p.online.map(o => DEVICE_LABEL[o]).join(', ') || '—'}`} frac={p.online.length / 3} />
           <Row k="saat senkronu" v={clock.rtt === null ? 'ölçülmedi' : `±${Math.max(1, Math.round(clock.rtt / 2))} ms`} tone={clock.rtt === null ? 'dim' : 'ok'} />

@@ -1,10 +1,10 @@
 // RouteLLM'de kullanılabilen modelleri kategorize eder ve önerilen .env değerlerini yazar: `npm run models`
 // Kategori, /models'in kendi alanlarından gelir (model_type + input/output_modalities); ad tahmini yok.
-import { API_KEY, routellm } from './routellm.js';
+import { API_KEY, PROVIDER, routellm } from './routellm.js';
 import { bestVoice, pitchSpread, rankedVoices, usableVoices } from './tts.js';
 
-if (!API_KEY) {
-  console.error('ABACUS_API_KEY yok. server/.env dosyasına ekle.');
+if (!API_KEY || PROVIDER.id !== 'abacus') {
+  console.error('Bu araç Abacus RouteLLM içindir: server/.env → ABACUS_API_KEY (ya da Ayarlar → Beyin → Abacus).');
   process.exit(1);
 }
 

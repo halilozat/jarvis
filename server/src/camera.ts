@@ -7,11 +7,9 @@
 import 'dotenv/config';
 import express, { type Request, type Response, Router } from 'express';
 import { randomUUID } from 'node:crypto';
-import { routellm, type ChatResponse } from './routellm.js';
+import { VISION_MODEL, routellm, type ChatResponse } from './routellm.js';
 
 export const CAMERA_ENABLED = !!process.env.ACCESS_TOKEN;
-/** Görüntü anlama modeli (kameraya_bak). npm run models: input_modalities içinde "image" olanlar. */
-export const VISION_MODEL = process.env.VISION_MODEL || 'gemini-3.8-flash';
 const MAX_VIEWERS = 3;
 const SNAP_TIMEOUT_MS = 5000;
 

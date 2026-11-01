@@ -11,7 +11,8 @@
     "eleven": "tsx src/eleven-cli.ts",
     "test:kitaplik": "tsx src/kitaplik-test.ts",
     "test:haber": "MOCK=1 tsx src/haber-test.ts",
-    "test:sohbet": "tsx src/sohbet-test.ts"
+    "test:sohbet": "tsx src/sohbet-test.ts",
+    "test:beyin": "tsx src/beyin-test.ts"
   },
   "keywords": [],
   "author": "",

@@ -1,6 +1,6 @@
 // Bekleme ekranındaki sabah panosu: hava (Open-Meteo), döviz (TCMB), haber istatistiği, sistem durumu.
 // Kural: uydurma veri yok. Bir kaynak çökerse yalnızca o alan null döner; panel "veri alınamadı" der.
-import { API_KEY, BASE_URL, MOCK } from './routellm.js';
+import { API_KEY, BASE_URL, MOCK, yetki } from './routellm.js';
 import { SOURCE_COUNT, newsSnapshot } from './news.js';
 import type { Device } from './types.js';
 
@@ -282,12 +282,12 @@ async function getNewsStats(): Promise<NewsStats> {
   }
 }
 
-// ---------- Sistem: RouteLLM gecikmesi ----------
+// ---------- Sistem: beyin (model servisi) gecikmesi ----------
 
 const pingRouteLLM = cached<{ ms: number; ok: boolean }>(60_000, 60_000, 'RouteLLM gecikmesi', async () => {
   if (!API_KEY) return { ms: 0, ok: false };
   const t0 = performance.now();
-  const r = await fetch(`${BASE_URL}/models`, { headers: { Authorization: `Bearer ${API_KEY}` }, signal: AbortSignal.timeout(FETCH_TIMEOUT) });
+  const r = await fetch(`${BASE_URL}/models`, { headers: yetki(), signal: AbortSignal.timeout(FETCH_TIMEOUT) });
   await r.arrayBuffer();
   return { ms: Math.round(performance.now() - t0), ok: r.ok };
 });
@@ -326,14 +326,15 @@ function demoDashboard(devices: Device[]): Dashboard {
 }
 
 export async function buildDashboard(opts: { devices: Device[]; model: string }): Promise<Dashboard> {
-  if (MOCK) return demoDashboard(opts.devices);
-  const [weather, markets, news, ping] = await Promise.all([getWeather(), getMarkets(), getNewsStats(), pingRouteLLM()]);
+  // Demo modunda da hava, kur ve haberler gerçek (ücretsiz kaynaklar); yalnızca kaynak düşerse örnek veri
+  const [weather, markets, news, ping] = await Promise.all([getWeather(), getMarkets(), getNewsStats(), MOCK ? null : pingRouteLLM()]);
+  if (MOCK && !weather && !markets) return demoDashboard(opts.devices);
   return {
-    demo: false,
+    demo: MOCK,
     updated_at: new Date().toISOString(),
     weather,
     markets,
     news,
-    system: { routellm_ms: ping?.ok ? ping.ms : null, routellm_ok: !!ping?.ok, devices_online: opts.devices, model: opts.model },
+    system: { routellm_ms: ping?.ok ? ping.ms : null, routellm_ok: !!ping?.ok, devices_online: opts.devices, model: MOCK ? 'demo' : opts.model },
   };
 }

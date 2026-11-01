@@ -58,7 +58,7 @@
 .m2-link { letter-spacing: 0.14em; }
 .m2-link.on { color: var(--m2-ok); }
 .m2-link.off { color: var(--m2-warn); }
-.m2-demo { color: var(--m2-warn); border: 1px solid var(--m2-warn); padding: 1px 6px; }
+.m2-demo { color: var(--m2-warn); border: 1px solid var(--m2-warn); padding: 1px 6px; background: none; font: inherit; cursor: pointer; pointer-events: auto; }
 .m2-brain { color: var(--m2-hi); border: 1px solid var(--m2-dim); padding: 2px 8px; max-width: 26vw; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------- Kutular ---------- */

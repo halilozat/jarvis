@@ -66,8 +66,10 @@ export const SystemPanel = memo(function SystemPanel({
           <Radar key={news.sources_ok} count={news.sources_ok} />
           <dl className="kv">
             <div>
-              <dt>routellm</dt>
-              <dd><i className={'dot ' + latencyClass(sys)} />{sys.routellm_ok && sys.routellm_ms !== null ? `${sys.routellm_ms} ms` : 'erişilemiyor'}</dd>
+              <dt>gecikme</dt>
+              {demo
+                ? <dd className="mono">anahtar yok</dd>
+                : <dd><i className={'dot ' + latencyClass(sys)} />{sys.routellm_ok && sys.routellm_ms !== null ? `${sys.routellm_ms} ms` : 'erişilemiyor'}</dd>}
             </div>
             <div>
               <dt>kaynaklar</dt>

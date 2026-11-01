@@ -6,8 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Router, type Request, type Response } from 'express';
-import { CHAT_MODEL, MOCK, routellm, type ChatResponse } from './routellm.js';
-import { VISION_MODEL } from './camera.js';
+import { CHAT_MODEL, MOCK, VISION_MODEL, routellm, type ChatResponse } from './routellm.js';
 
 // KITAPLIK_DATA: testte geçici klasör (gerçek kitaplık bozulmasın)
 const DATA = process.env.KITAPLIK_DATA || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data');
@@ -497,7 +496,7 @@ const fillPrompt = (b: Kitap, shelf: string[]) =>
 /** Sohbet modeli çağrısı (testte sahte cevapla değiştirilir) */
 export const chatDeps = {
   async chat(prompt: string): Promise<string> {
-    if (MOCK) return JSON.stringify({ biliyorum: true, ozet: 'Örnek özet: gerçek içerik için ABACUS_API_KEY gerekir. Bu bir deneme metnidir. Kitap kaydedildi.', anaFikirler: ['Deneme fikri bir.', 'Deneme fikri iki.', 'Deneme fikri üç.', 'Deneme fikri dört.'], yazarHakkinda: null, temalar: ['deneme'], nedenOku: null, kimeUygun: null, benzer: [] });
+    if (MOCK) return JSON.stringify({ biliyorum: true, ozet: 'Örnek özet: gerçek içerik için Ayarlar → Beyin bölümünden bir yapay zekâ anahtarı ekleyin (Gemini ve Groq ücretsiz). Bu bir deneme metnidir. Kitap kaydedildi.', anaFikirler: ['Deneme fikri bir.', 'Deneme fikri iki.', 'Deneme fikri üç.', 'Deneme fikri dört.'], yazarHakkinda: null, temalar: ['deneme'], nedenOku: null, kimeUygun: null, benzer: [] });
     const r = await routellm<ChatResponse>('/chat/completions', { model: CHAT_MODEL, messages: [{ role: 'user', content: prompt }] });
     return String(r.choices?.[0]?.message?.content ?? '');
   },

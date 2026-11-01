@@ -47,7 +47,41 @@ export interface AppState {
   mock: boolean;
   model: string;
   online: Device[];
+  /** Sunucuda ses tanıma var mı (yoksa tarayıcının ses tanıması) */
+  stt?: boolean;
+  beyin?: { saglayici: string; ad: string; kaynak: 'dosya' | 'env' | 'demo' | 'yok' };
 }
+
+/** Beyin ses tanıma sunmuyorsa (Claude, OpenRouter, demo …) mikrofon doğrudan tarayıcının ses tanımasını kullanır */
+export let serverStt = true;
+export const setServerStt = (v: boolean) => { serverStt = v; };
+
+// ---------- Beyin (yapay zekâ sağlayıcısı) ----------
+export type Rol = 'chat' | 'vision' | 'stt' | 'tts';
+export interface SaglayiciBilgi {
+  id: string; ad: string; aciklama: string; ucretsiz: boolean; baseUrl: string; anahtarAdresi: string;
+  stt: boolean; tts: boolean; adresGirilir: boolean; varsayilan: Partial<Record<Rol, string>>;
+}
+export interface BeyinDurumu {
+  saglayicilar: SaglayiciBilgi[];
+  aktif: {
+    saglayici: string; ad: string; kaynak: 'dosya' | 'env' | 'demo' | 'yok'; demo: boolean; anahtar: string; adres: string;
+    modeller: Record<Rol, string>; yetenek: { stt: boolean; tts: boolean; gorselUretim: boolean };
+  };
+  kurulumGerekli: boolean;
+}
+export interface BeyinIstek { saglayici: string; anahtar?: string; adres?: string; modeller?: Partial<Record<Rol, string>> }
+export interface BeyinTestSonucu { ok: boolean; hata?: string; ms?: number; modeller: string[]; secilen: Partial<Record<Rol, string>>; cevap?: string }
+const beyinJson = async <T,>(r: Response): Promise<T> => {
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok && !('ok' in j)) throw new Error(j.error || j.hata || 'beyin ayarı kaydedilemedi');
+  return j as T;
+};
+export const getBeyin = () => fetch('/api/beyin', { headers: headers() }).then(r => beyinJson<BeyinDurumu>(r));
+export const testBeyin = (b: BeyinIstek) => fetch('/api/beyin/test', { method: 'POST', headers: headers(), body: JSON.stringify(b) }).then(r => beyinJson<BeyinTestSonucu>(r));
+export const saveBeyin = (b: BeyinIstek) => fetch('/api/beyin', { method: 'POST', headers: headers(), body: JSON.stringify(b) }).then(r => beyinJson<BeyinDurumu>(r));
+export const demoBeyin = () => fetch('/api/beyin/demo', { method: 'POST', headers: headers() }).then(r => beyinJson<BeyinDurumu>(r));
+export const resetBeyin = () => fetch('/api/beyin', { method: 'DELETE', headers: headers() }).then(r => beyinJson<BeyinDurumu>(r));
 
 export async function getState(): Promise<AppState> {
   const r = await fetch('/api/state', { headers: headers() });
@@ -75,7 +109,7 @@ export async function saveSettings(patch: { voice?: VoiceSel; sfx?: boolean; wak
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'kaydedilemedi');
 }
 
-/** Mikrofon kaydını RouteLLM ile yazıya çevirir. */
+/** Mikrofon kaydını sunucudaki ses tanımayla (beynin STT modeli) yazıya çevirir. */
 export async function stt(audio: Blob): Promise<string> {
   const r = await fetch('/api/stt', { method: 'POST', headers: { 'Content-Type': audio.type || 'audio/webm', ...(token ? { 'x-jarvis-token': token } : {}) }, body: audio });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'ses yazıya çevrilemedi');

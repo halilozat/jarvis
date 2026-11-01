@@ -5,10 +5,9 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MOCK, routellm, type ChatResponse } from './routellm.js';
+import { IMAGE_MODEL, MOCK, routellm, type ChatResponse } from './routellm.js';
 import type { Photo } from './types.js';
 
-export const IMAGE_MODEL = process.env.IMAGE_MODEL ?? 'flux2';
 export const IMG_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'img');
 
 const inflight = new Map<string, Promise<Photo | null>>();

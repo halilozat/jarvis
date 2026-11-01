@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { API_KEY, BASE_URL, MOCK, routellm, type ChatResponse } from './routellm.js';
+import { API_KEY, BASE_URL, MOCK, PROVIDER, TTS_MODEL, beyinDinle, routellm, yetki, type ChatResponse } from './routellm.js';
 import { BRIEF_OPENING } from './brief.js';
 import { isMp3, isWav, normalizeSpeech, pcmToWav, wavSeconds } from './audio.js';
 import { elevenReady, elevenSpeak, isEleven, type ElevenCtx } from './eleven.js';
@@ -82,7 +82,7 @@ export function isRoutedModel(model: string) {
   return /^route-llm/i.test(model) || (!!process.env.CHAT_MODEL && model === process.env.CHAT_MODEL && !/audio|tts/i.test(model));
 }
 
-/** .env'deki varsayılan; geçersizse kataloğun ilk sesi; o da yoksa ölçülmüş güvenli varsayılan. */
+/** Abacus: .env'deki varsayılan; geçersizse kataloğun ilk sesi; o da yoksa ölçülmüş güvenli varsayılan. */
 export function envVoice(): { sel: VoiceSel; warning?: string } {
   const model = process.env.TTS_MODEL || '';
   const voice = process.env.TTS_VOICE || '';
@@ -94,18 +94,50 @@ export function envVoice(): { sel: VoiceSel; warning?: string } {
   return { sel: { model, voice, speed: DEFAULT_RATE } };
 }
 
-export const ttsEnabled = (sel: VoiceSel) => sel.model !== BROWSER && (isEleven(sel.model) ? elevenReady() : !MOCK && !!API_KEY);
+/**
+ * Sağlayıcının sunduğu sesler. Abacus: ölçülmüş katalog (npm run voices); OpenAI: /audio/speech sesleri;
+ * seslendirmesi olmayan sağlayıcıda (Gemini, Groq, Claude …) boş: ElevenLabs ya da tarayıcı sesi.
+ */
+export function providerVoices(): Pick<VoiceEntry, 'id' | 'model' | 'voice' | 'label' | 'provider' | 'f0' | 'wpm'>[] {
+  if (MOCK) return [];
+  if (PROVIDER.tts === 'chat-audio') return usableVoices();
+  if (PROVIDER.tts === 'speech' && TTS_MODEL)
+    return (PROVIDER.sesler ?? []).map(v => ({ id: `${TTS_MODEL}:${v}`, model: TTS_MODEL, voice: v, label: `${v[0].toUpperCase()}${v.slice(1)} · ${TTS_MODEL}`, provider: PROVIDER.ad, f0: null, wpm: null }));
+  return [];
+}
+
+/**
+ * Varsayılan ses sağlayıcıya göre: kendi seslendirmesi → ElevenLabs (ELEVENLABS_VOICE) → tarayıcı sesi.
+ * Demo modunda (anahtar yok) tarayıcı sesi: kurulumsuz ilk açılış sessiz kalmasın.
+ */
+export function defaultVoice(): { sel: VoiceSel; warning?: string } {
+  const eleven = process.env.ELEVENLABS_VOICE || '';
+  const elevenSel = elevenReady() && eleven ? { model: process.env.ELEVENLABS_MODEL || 'eleven_v4_turbo', voice: eleven, speed: DEFAULT_RATE } : null;
+  if (MOCK) return { sel: { model: BROWSER, voice: 'tr', speed: DEFAULT_RATE } };
+  if (PROVIDER.tts === 'chat-audio') return envVoice();
+  if (PROVIDER.tts === 'speech' && TTS_MODEL) {
+    const sesler = PROVIDER.sesler ?? [];
+    const v = sesler.includes(process.env.TTS_VOICE || '') ? process.env.TTS_VOICE! : sesler[0] ?? 'onyx';
+    return { sel: { model: TTS_MODEL, voice: v, speed: DEFAULT_RATE } };
+  }
+  return { sel: elevenSel ?? { model: BROWSER, voice: 'tr', speed: DEFAULT_RATE } };
+}
+
+export const ttsEnabled = (sel: VoiceSel) =>
+  sel.model !== BROWSER && (isEleven(sel.model) ? elevenReady() : !MOCK && !!API_KEY && !!PROVIDER.tts);
 
 // ---------------------------------------------------------------- Üretim
 
 /** Hangi yöntem çalışıyor: ilk başarılı/başarısız denemeden sonra hafızada; istek başına gidip gelinmez. */
 const methodFor = new Map<string, 'speech' | 'chat'>();
+beyinDinle(() => methodFor.clear());
 
 async function viaSpeech(text: string, sel: VoiceSel): Promise<Speech | 'yok'> {
   const r = await fetch(`${BASE_URL}/audio/speech`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: sel.model, input: text, voice: sel.voice, speed: SERVER_SPEED, response_format: 'mp3', instructions: STYLE }),
+    headers: { ...yetki(), 'Content-Type': 'application/json' },
+    // Üslup talimatını yalnızca gpt-4o türü modeller alır (tts-1 almıyor)
+    body: JSON.stringify({ model: sel.model, input: text, voice: sel.voice, speed: SERVER_SPEED, response_format: 'mp3', ...(/^tts-1/.test(sel.model) ? {} : { instructions: STYLE }) }),
     signal: AbortSignal.timeout(30_000),
   });
   if ([400, 404, 405, 501].includes(r.status)) return 'yok';
@@ -145,6 +177,10 @@ async function generateOnce(text: string, sel: VoiceSel, ctx: ElevenCtx): Promis
   if (isEleven(sel.model)) {
     const buf = await elevenSpeak(text, sel.voice, sel.model, sel.speed, ctx);
     return { speech: { buf, mime: 'audio/mpeg' }, method: 'elevenlabs' };
+  }
+  if (PROVIDER.tts === 'speech') {
+    const r = await viaSpeech(text, sel).catch(e => ({ error: String(e.message) }));
+    return r === 'yok' ? { error: '/audio/speech bu modeli kabul etmedi' } : 'error' in r ? r : { speech: r, method: 'speech' };
   }
   if (methodFor.get(sel.model) !== 'chat') {
     const r = await viaSpeech(text, sel).catch(e => ({ error: String(e.message) }));

@@ -1,10 +1,14 @@
 // Ses tanıma (STT) RouteLLM'den: tarayıcının Web Speech API'si iPhone'da güvenilir değil, yalnızca yedek.
 // Ölçüm (5 Ekim 2026): /audio/transcriptions RouteLLM'de yok (404). Ses girdili sohbet modelleri arasında
 // gemini-2.5-flash 2,7 sn'de birebir doğru yazdı; gemini-2.5-pro 9 sn; gpt-audio-1.5 metni bozdu.
-import { API_KEY, BASE_URL, routellm, type ChatResponse } from './routellm.js';
+import { BASE_URL, MOCK, PROVIDER, STT_MODEL, beyinDinle, routellm, yetki, type ChatResponse } from './routellm.js';
 
-export const STT_MODEL = process.env.STT_MODEL || 'gemini-2.5-flash';
-let transcriptionsEndpoint: boolean | null = null; // ilk denemeden sonra hafızada
+export { STT_MODEL };
+/** Sunucuda ses tanıma var mı (yoksa istemci tarayıcının ses tanımasını kullanır) */
+export const sttVar = () => !MOCK && !!PROVIDER.stt && !!STT_MODEL;
+// Sağlayıcının yeteneği biliniyorsa doğrudan o yol; Abacus'ta /audio/transcriptions yok, ilk denemede öğrenilir
+let transcriptionsEndpoint: boolean | null = null;
+beyinDinle(() => { transcriptionsEndpoint = PROVIDER.stt === 'transcriptions' ? true : PROVIDER.stt === 'chat-audio' && PROVIDER.id !== 'abacus' ? false : null; });
 
 /** MediaRecorder MIME türü → RouteLLM input_audio biçimi */
 export function audioFormat(mime: string): string | null {
@@ -36,6 +40,7 @@ export function sttIstemi(baglam: string[]): string {
 }
 
 export async function transcribe(audio: Buffer, mime: string, baglam: string[] = []): Promise<{ text: string; model: string; ms: number }> {
+  if (!sttVar()) throw new Error('sunucuda ses tanıma yok');
   const t0 = Date.now();
   const format = audioFormat(mime);
   if (!format) throw new Error(`desteklenmeyen ses biçimi: ${mime}`);
@@ -46,12 +51,13 @@ export async function transcribe(audio: Buffer, mime: string, baglam: string[] =
     form.append('model', STT_MODEL);
     form.append('language', 'tr');
     form.append('prompt', ['Jarvis', ...baglam.slice(-2)].join('. ').slice(0, 600));
-    const r = await fetch(`${BASE_URL}/audio/transcriptions`, { method: 'POST', headers: { Authorization: `Bearer ${API_KEY}` }, body: form }).catch(() => null);
+    const r = await fetch(`${BASE_URL}/audio/transcriptions`, { method: 'POST', headers: yetki(), body: form }).catch(() => null);
     if (r?.ok) {
       transcriptionsEndpoint = true;
       const j: any = await r.json();
       return { text: hitapDuzelt(String(j.text ?? '').trim()), model: STT_MODEL, ms: Date.now() - t0 };
     }
+    if (PROVIDER.stt === 'transcriptions') throw new Error(`ses tanıma HTTP ${r?.status ?? 'bağlantı yok'}`);
     transcriptionsEndpoint = false;
   }
 

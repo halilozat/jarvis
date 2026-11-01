@@ -1,5 +1,5 @@
 // "İki alkışla uyanma": uyanış ayarları (tüm cihazlarda ortak), karşılama metni ve gerçek sistem kontrolleri.
-import { API_KEY, BASE_URL, MOCK } from './routellm.js';
+import { API_KEY, BASE_URL, MOCK, yetki } from './routellm.js';
 import { SOURCE_COUNT, newsCacheStats, newsSnapshot } from './news.js';
 import type { Device } from './types.js';
 
@@ -90,7 +90,7 @@ async function pingRouteLLM(): Promise<{ ok: boolean; ms: number | null }> {
   if (MOCK || !API_KEY) return { ok: false, ms: null };
   const t0 = performance.now();
   try {
-    const r = await fetch(`${BASE_URL}/models`, { headers: { Authorization: `Bearer ${API_KEY}` }, signal: AbortSignal.timeout(4000) });
+    const r = await fetch(`${BASE_URL}/models`, { headers: yetki(), signal: AbortSignal.timeout(4000) });
     await r.arrayBuffer();
     return { ok: r.ok, ms: Math.round(performance.now() - t0) };
   } catch {
