@@ -7,6 +7,7 @@ import { BRIEF_OPENING } from './brief.js';
 import { isMp3, isWav, normalizeSpeech, pcmToWav, wavSeconds } from './audio.js';
 import { elevenReady, elevenSpeak, isEleven, type ElevenCtx } from './eleven.js';
 import { SCRIPTED_LINES } from './scripted.js';
+import { UYARI_KALIPLARI } from './bekci/kaliplar.js';
 
 /**
  * Jarvis'in sesi (TTS).
@@ -264,6 +265,8 @@ export async function warmOpening(sel: VoiceSel) {
   console.log(s ? `Açılış sesi hazır: ${voiceId(sel)}` : `Açılış sesi hazırlanamadı: ${voiceId(sel)}`);
   // Hazır komutların cümleleri de: anında çalsın
   for (const line of SCRIPTED_LINES) synthesize(line, sel, 'hazır komut (hazırlık)', true).catch(() => {});
+  // Bekçi uyarı kalıpları: dolandırıcı mesaj gelince anında
+  for (const line of UYARI_KALIPLARI) synthesize(line, sel, 'bekçi uyarısı (hazırlık)', true).catch(() => {});
 }
 
 /** Ayarlar'daki ▶ dinle: sabit örnek cümle, diskte saklanır (ikinci dinleme kredisiz ve anında). */

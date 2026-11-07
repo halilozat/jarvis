@@ -52,7 +52,8 @@ export default defineConfig({
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: { globIgnores: ['mediapipe/**', 'models/**', 'space/**'], navigateFallbackDenylist: [/^\/api/, /^\/mediapipe/, /^\/models/, /^\/space/], skipWaiting: true, clientsClaim: true },
+      // gok/: Gece Gökyüzü kataloğu ve örnek fotoğraf (≈1 MB) ön belleğe girmez; mod açılınca indirilir
+      workbox: { globIgnores: ['mediapipe/**', 'models/**', 'space/**', 'gok/**'], navigateFallbackDenylist: [/^\/api/, /^\/mediapipe/, /^\/models/, /^\/space/, /^\/gok/], skipWaiting: true, clientsClaim: true },
     }),
   ],
   server: {

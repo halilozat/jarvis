@@ -11,6 +11,8 @@ import { IMG_DIR } from './imagegen.js';
 import { CHAT_MODEL, KAYNAK, MOCK, PROVIDER, VISION_MODEL } from './routellm.js';
 import { hitapDuzelt, sttVar, transcribe, STT_MODEL } from './stt.js';
 import { beyinRouter } from './beyin.js';
+import { gokNote, gokRouter, initGok, setGokRequest, type GokBaglam } from './gok.js';
+import { bekciRouter, initBekci } from './bekci/index.js';
 import {
   BROWSER, DEFAULT_RATE, clampRate, defaultVoice, isRoutedModel, loadCatalog, preview, providerVoices, synthesize, ttsEnabled, voiceId, warmOpening,
   type VoiceSel,
@@ -115,6 +117,8 @@ function presence() {
 initCameras({ broadcast, sendTo });
 initHome(broadcast);
 initLab(broadcast);
+initGok(broadcast);
+initBekci(broadcast);
 initNewsCenter(broadcast);
 initAdvisor(broadcast);
 initLibrary(broadcast);
@@ -258,6 +262,8 @@ app.post('/api/settings', (req, res) => {
 app.use(cameraRouter());
 
 // ---------- Beyin (sağlayıcı + anahtar; Ayarlar → Beyin) ----------
+app.use(gokRouter());
+app.use(bekciRouter());
 app.use(beyinRouter({
   korumali: !!ACCESS_TOKEN,
   degisti: () => {
@@ -369,6 +375,9 @@ app.post('/api/chat', async (req, res) => {
   // Uzay Laboratuvarı açıksa ekrandaki durum (istemcinin gönderdiği JSON, en çok 24 KB; tarama sonuçları dahil)
   const labRaw = req.body.lab && typeof req.body.lab === 'object' ? JSON.stringify(req.body.lab) : '';
   const labOk = !!labRaw && labRaw.length <= 24_000;
+  // Gece Gökyüzü Modu açıksa ekranın özeti (istemci hesaplar: katalog + astrometri çözümü)
+  const gokRaw = req.body.gok && typeof req.body.gok === 'object' ? JSON.stringify(req.body.gok) : '';
+  const gokOk = !!gokRaw && gokRaw.length <= 32_000 && Array.isArray(req.body.gok.yildizlar);
   if (!text && !image) return res.status(400).json({ error: 'boş mesaj' });
   if (busy) return res.status(409).json({ error: 'Jarvis şu an başka bir cevabı hazırlıyor' });
   busy = true;
@@ -395,6 +404,8 @@ app.post('/api/chat', async (req, res) => {
   let firstTts = false;
   setLabRequest(labOk ? { ctx: req.body.lab, client } : null);
   const lab = labOk ? labNote() : undefined;
+  setGokRequest(gokOk ? { ctx: req.body.gok as GokBaglam, client } : null);
+  const gok = gokNote();
   // Kitap sohbeti: { id, ilk } (istemci sohbet modundayken gönderir)
   const ks = req.body.kitapSohbeti;
   const kitapNotu = ks && typeof ks.id === 'string' ? kitapSohbetiNotu(ks.id, ks.ilk === true) ?? undefined : undefined;
@@ -403,6 +414,7 @@ app.post('/api/chat', async (req, res) => {
       text,
       image,
       lab,
+      gok,
       kitapNotu,
       device,
       prevDevice,
@@ -437,6 +449,7 @@ app.post('/api/chat', async (req, res) => {
   } finally {
     busy = false;
     setLabRequest(null);
+    setGokRequest(null);
   }
 });
 

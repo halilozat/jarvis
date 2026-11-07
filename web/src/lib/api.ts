@@ -31,7 +31,7 @@ export function detectDevice(): Device {
 }
 export function saveDevice(d: Device) { safeSet('jarvis.device', d); }
 
-const headers = (): HeadersInit => ({ 'Content-Type': 'application/json', ...(token ? { 'x-jarvis-token': token } : {}) });
+export const headers = (): HeadersInit => ({ 'Content-Type': 'application/json', ...(token ? { 'x-jarvis-token': token } : {}) });
 
 export interface AppState {
   messages: StoredMessage[];
@@ -90,8 +90,8 @@ export async function getState(): Promise<AppState> {
 }
 
 /** image: kamera/fotoğraf (data URL). lab: Uzay Laboratuvarı açıksa ekrandaki durum. Cevap SSE ile sahne sahne gelir. */
-export async function sendChat(text: string, device: Device, image?: string, lab?: object | null, kitapSohbeti?: { id: string; ilk: boolean } | null) {
-  const r = await fetch('/api/chat', { method: 'POST', headers: headers(), body: JSON.stringify({ text, device, client: clientId, image, ...(lab ? { lab } : {}), ...(kitapSohbeti ? { kitapSohbeti } : {}) }) });
+export async function sendChat(text: string, device: Device, image?: string, lab?: object | null, kitapSohbeti?: { id: string; ilk: boolean } | null, gok?: object | null) {
+  const r = await fetch('/api/chat', { method: 'POST', headers: headers(), body: JSON.stringify({ text, device, client: clientId, image, ...(lab ? { lab } : {}), ...(kitapSohbeti ? { kitapSohbeti } : {}), ...(gok ? { gok } : {}) }) });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'hata');
 }
 

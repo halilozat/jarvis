@@ -24,6 +24,9 @@ import { matchNewsCommand, type HaberCmd } from './hands/news/commands';
 import { matchBookChat, matchBookCommand, onayCumlesi, type KitapKomut } from './lib/bookCommands';
 import { tumCumleler } from './hands/space/facts';
 import { labContext } from './hands/space/labContext';
+import { gokContext } from './sky/baglam';
+import type { GokCmd } from './sky/GokyuzuModu';
+import { bekciDemo, type Analiz as BekciAnaliz } from './bekci/api';
 import { emitCamera, getCameras, getRole, isCameraEvent, onCamera, setRole, toggleCameraPanel } from './lib/camera';
 import { BeyinKurulum, DEMO_ANAHTARI } from './components/BeyinKurulum';
 import { type AppState, type ElevenUsage, clearConversation, setServerStt, serverStt, detectDevice, getDashboard, getHealth, getState, getVoices, metric, postAttention, postSleep, postWake, previewUrl, saveDevice, saveSettings, sendChat, setPhotoMode, stt, subscribe, token, clientId } from './lib/api';
@@ -65,6 +68,8 @@ const Mark2 = lazy(() => import('./mark2/Mark2'));
 // El Kontrolü (kamera + el takibi) ayrı parça: yalnızca açılınca indirilir.
 const HandControl = lazy(() => import('./hands/HandControl'));
 const Kitapligim = lazy(() => import('./library/Kitapligim'));
+const GokyuzuModu = lazy(() => import('./sky/GokyuzuModu'));
+const BekciPanel = lazy(() => import('./bekci/BekciPanel'));
 /** ?el=1 açılışta el kontrolünü açar, ?el=demo kamerasız sentetik ellerle gösterir */
 const EL_PARAM = ((q: string | null) => (q === 'demo' ? 'demo' : q === '1' || q === 'kamera' ? 'kamera' : null))(new URLSearchParams(location.search).get('el'));
 /** "Jarvis, el kontrolünü aç / kapat" — sunucuya gitmeden arayüzde karşılanır */
@@ -78,6 +83,14 @@ const EL_UZAY = MOD_PARAM === 'uzay' || MOD_PARAM === 'lab' || MOD_PARAM === 'go
 /** ?el=1&mod=haber: El Kontrolü Haber Modu'nda açılır */
 const EL_HABER = MOD_PARAM === 'haber';
 /** "Jarvis, kitaplığımı aç" / "kitaplığımı göster": Kitaplığım ekranı */
+/** Gece Gökyüzü Modu: ?gok=1 açık başlar · ?gok=demo örnek fotoğrafla (internetsiz) · &isaret=demo sentetik el */
+const GOK_PARAM = new URLSearchParams(location.search).get('gok');
+const ISARET_DEMO = new URLSearchParams(location.search).get('isaret') === 'demo';
+/** "Jarvis, gökyüzünü tara" · "gece gökyüzü modunu aç" (modele gitmez) */
+const GOK_AC = /g[öo]ky[üu]z[üu]n[üu]\s+tar|gece\s+g[öo]ky[üu]z[üu]|g[öo]ky[üu]z[üu]\s+modu/i;
+const GOK_SIM = /(g[öo]ky[üu]z[üu]\s+)?sim[üu]lasyon(u|una)?\s*(a[çc]|ge[çc]|g[öo]ster)/i;
+/** Bekçi: ?bekci=1 panel açık başlar · ?bekci=demo örnek dolandırıcı SMS'i akışa sokar (ağ isteği yok) */
+const BEKCI_PARAM = new URLSearchParams(location.search).get('bekci');
 const KITAPLIGIM_AC = /kitapl[ıi][gğ][ıi]m[ıi]?\s+(aç|göster|getir)/i;
 /** ?kitapligim=1: Kitaplığım açık başlar (deneme) */
 const KITAPLIGIM_PARAM = new URLSearchParams(location.search).get('kitapligim') === '1';
@@ -174,6 +187,25 @@ export default function App() {
   const openBook = useRef<Kitap | null>(null);
   /** Kitaplığım ekranı */
   const [kitapligim, setKitapligim] = useState(KITAPLIGIM_PARAM);
+  const [gok, setGok] = useState(GOK_PARAM !== null);
+  const gokRef = useRef(gok);
+  gokRef.current = gok;
+  const [gokCmd, setGokCmd] = useState<{ cmd: GokCmd; n: number } | null>(null);
+  const gokKomut = (cmd: GokCmd) => setGokCmd(c => ({ cmd, n: (c?.n ?? 0) + 1 }));
+  const [bekci, setBekci] = useState(BEKCI_PARAM !== null);
+  const [bekciCanli, setBekciCanli] = useState<Record<string, BekciAnaliz>>({});
+  const [bekciSecili, setBekciSecili] = useState<string | null>(null);
+  const [bekciSurum, setBekciSurum] = useState(0);
+  const [bekciAlarm, setBekciAlarm] = useState(false);
+  const bekciAlarmT = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bekciDemoBasladi = useRef(false);
+  /** Sesli uyarı (haber takibindeki gibi efektte söylenir: güncel ses seçimiyle) */
+  const [bekciSoz, setBekciSoz] = useState<{ metin: string; n: number } | null>(null);
+  useEffect(() => {
+    if (BEKCI_PARAM !== 'demo' || bekciDemoBasladi.current || !connected) return;
+    bekciDemoBasladi.current = true;
+    setTimeout(() => bekciDemo('sms').catch(() => {}), 1200);
+  }, [connected]);
   /** Kitap sohbeti: açıkken her mesaja kitabın notu eklenir (sunucu); 20 dk sessizlikte kendiliğinden biter */
   const [kitapSohbeti, setKitapSohbeti] = useState<{ id: string; ad: string } | null>(null);
   /** Takipteki haberde gelişme: ekranın üstünde bant (haber modu kapalıyken de) */
@@ -508,6 +540,30 @@ export default function App() {
       }
       if (e.type === 'kitap_oner') { setOneriKey(k => k + 1); const id = e.id, ad = e.ad; if (id) setOneriCmd(c => ({ id, ad, n: (c?.n ?? 0) + 1 })); return; }
       if (e.type === 'kitap_tarzi') { setOneriKey(k => k + 1); return; }
+      // Bekçi: gelen mesaj analizi canlı; tehlikelide masaüstü uyarıyı seçili sesle söyler, çekirdek kırmızıya döner
+      if (e.type === 'bekci') {
+        if (e.olay === 'liste') { setBekciSurum(n => n + 1); return; }
+        if (e.olay === 'goster' && e.id) { setBekci(true); setBekciSecili(e.id); return; }
+        if (e.olay === 'basla' && e.id) {
+          const bos = { durum: 'bekliyor' as const, not: '' };
+          setBekciCanli(c => ({ ...c, [e.id!]: { id: e.id!, kaynak: (e.kaynak ?? 'sms') as BekciAnaliz['kaynak'], gonderen: e.gonderen ?? '', zaman: e.zaman ?? new Date().toISOString(), puan: 0, seviye: 'temiz', marka: null, gerekceler: [], linkler: [], adimlar: { link: bos, whois: bos, usom: bos, liste: bos, metin: bos, sandbox: bos }, model: null, sandbox: null, sureMs: 0, uyari: '', cevap: '', tiklasaydim: '', demo: e.demo, log: [] } }));
+          if (e.ac) { setBekci(true); setBekciSecili(e.id); }
+          return;
+        }
+        const a = e.analiz;
+        if (!a) return;
+        setBekciCanli(c => ({ ...c, [a.id]: a }));
+        if (e.olay === 'sonuc') {
+          if (e.ac) { setBekci(true); setBekciSecili(a.id); }
+          if (a.seviye === 'tehlikeli') {
+            setBekciAlarm(true);
+            if (bekciAlarmT.current) clearTimeout(bekciAlarmT.current);
+            bekciAlarmT.current = setTimeout(() => setBekciAlarm(false), 20_000);
+          }
+          if (e.ses && device === 'masaustu') setBekciSoz(s => ({ metin: a.uyari, n: (s?.n ?? 0) + 1 }));
+        }
+        return;
+      }
       if (e.type === 'haber_takip') {
         const ek = e.yeniKume ? 'yeni gelişme' : `${e.yeniKaynaklar.length} yeni kaynak: ${e.yeniKaynaklar.slice(0, 3).join(', ')}`;
         const soz = (e.yeniKume
@@ -622,6 +678,8 @@ export default function App() {
         case 'cleared': setMessages([]); setReply(null); setSceneIdx(-1); break;
         // Jarvis'in yasam_izi_tara aracı: taramayı ekranda başlat (adımları cevabın sahneleri ilerletir)
         case 'lab_cmd': if (mine && handsRef.current) setSpaceCmd(c => ({ cmd: e.cmd as SpaceCmd, n: (c?.n ?? 0) + 1 })); break;
+        // Jarvis'in gokyuzu aracı: modu aç, animasyonu yeniden oynat ya da yıldızı vurgula
+        case 'gok_cmd': if (mine) { if (e.cmd.tip === 'tara' && !gokRef.current) setGok(true); else setGokCmd(c => ({ cmd: e.cmd as GokCmd, n: (c?.n ?? 0) + 1 })); } break;
       }
     }, setConnected);
   }, [device, play, playOpening, runPlayer, mock]);
@@ -690,6 +748,14 @@ export default function App() {
     }
     // 20 dakika sessizlik: kitap sohbeti kendiliğinden biter
     if (sohbetRef.current && !sohbetIlk && simdi() - sohbetRef.current.at > 20 * 60_000) { sohbetRef.current = null; setKitapSohbeti(null); }
+    // Gece Gökyüzü: aç / yeniden tara / simülasyon (modele gitmez). Diğer gökyüzü soruları gokyuzu aracıyla modele gider.
+    if (!image && (GOK_AC.test(t) || (gokRef.current && GOK_SIM.test(t)))) {
+      voice.unlock(); setInput(''); setInterim('');
+      if (GOK_SIM.test(t)) { setGok(true); gokKomut({ tip: 'simulasyon' }); speakLine('Gökyüzünü konumunuza ve saate göre çiziyorum efendim. Bu bir simülasyon.'); return; }
+      if (gokRef.current) { gokKomut({ tip: 'tara' }); speakLine('Gökyüzünü yeniden tarıyorum efendim.'); }
+      else { setGok(true); speakLine('Gece gökyüzü modu açık efendim. Bir fotoğraf seçin ya da çekin.'); }
+      return;
+    }
     if (!image && KITAPLIGIM_AC.test(t)) { voice.unlock(); setInput(''); setInterim(''); setKitapligim(true); return; }
     // Kitaplık taraması El Kontrolü'nün kamerasıyla yapılır (kapalıysa açılır)
     if (!image && KITAPLIK_TARA.test(t)) {
@@ -761,7 +827,7 @@ export default function App() {
       // Uzay Laboratuvarı açıksa ekrandaki durum da gider ("neden dondu?" gibi sorular için)
       const ks = sohbetRef.current;
       if (ks) ks.at = simdi();
-      await sendChat(t, device, image, handsRef.current && elMod.current === 'uzay' ? labContext() : null, ks ? { id: ks.id, ilk: sohbetIlk } : null);
+      await sendChat(t, device, image, handsRef.current && elMod.current === 'uzay' ? labContext() : null, ks ? { id: ks.id, ilk: sohbetIlk } : null, gokRef.current ? gokContext() : null);
     } catch (e: any) {
       setCore('idle');
       setTelemetry(['hata: ' + e.message]);
@@ -916,6 +982,7 @@ export default function App() {
   // Takipteki haberde gelişme: bant çıkınca Jarvis söyler
   const gelismeN = gelisme?.n ?? 0;
   useEffect(() => { if (gelisme) void speakLine(gelisme.soz); }, [gelismeN]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (bekciSoz) void speakLine(bekciSoz.metin); }, [bekciSoz?.n]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Yüz kilidi: seçili sesle tek cümle. Sesi sunucuda önceden hazır (server/src/scripted.ts YUZ_KILIDI ile aynı metin).
    *  En fazla dakikada bir; Jarvis başka bir şey anlatıyorsa araya girmez. */
@@ -1012,8 +1079,9 @@ export default function App() {
       if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.code === 'KeyW' && !e.repeat) { postWake('test (W)'); return; }
       if (e.code === 'KeyS' && !e.repeat) { voice.unlock(); postSleep(); return; }
-      if (e.code === 'KeyH' && !e.repeat) { toggleHands(); return; }
-      if (e.code === 'KeyK' && !e.repeat && !handsRef.current) { setKitapligim(v => !v); return; }
+      if (e.code === 'KeyH' && !e.repeat && !gokRef.current) { toggleHands(); return; }
+      if (e.code === 'KeyK' && !e.repeat && !handsRef.current && !gokRef.current) { setKitapligim(v => !v); return; }
+      if (e.code === 'KeyB' && !e.repeat && !handsRef.current && !gokRef.current) { setBekci(v => !v); return; }
       if (wstate !== 'awake') return;
       if (e.code === 'Space') { e.preventDefault(); toggleMic(); }
     };
@@ -1168,7 +1236,7 @@ export default function App() {
   const demo = !!dash?.demo;
 
   return (
-    <div className={`app dev-${device} state-${core} w-${wstate}${uiHidden ? ' hide-ui' : ''}${entering ? ' ui-enter' : ''}${glow ? ' wake-glow' : ''}`}>
+    <div className={`app dev-${device} state-${core} w-${wstate}${uiHidden ? ' hide-ui' : ''}${entering ? ' ui-enter' : ''}${glow ? ' wake-glow' : ''}${bekciAlarm ? ' bekci-alarm' : ''}`}>
       {/* El Kontrolü tam ekranken arkadaki arayüz hiç çizilmez: Mark 2'nin küresi ve halkaları görünmese de her karede
           çiziliyordu; bir MacBook'ta El Kontrolü 48 FPS'te kalıyordu (gizleyince 64). Kapanınca geri gelir. */}
       {hands ? null : ui === 'mark2' ? (
@@ -1207,6 +1275,8 @@ export default function App() {
             onHome={() => setHomeOpen(o => !o)}
             onHands={toggleHands}
             onLibrary={() => setKitapligim(true)}
+            onSky={() => setGok(true)}
+            onBekci={() => setBekci(true)}
             onStop={stopPlayback}
             onDrawer={d => setDrawer(drawer === d ? null : d)}
             onSleep={() => { voice.unlock(); postSleep(); }}
@@ -1307,6 +1377,12 @@ export default function App() {
           </form>
           <button className="icon-btn cam" onClick={() => setKitapligim(true)} aria-label="Kitaplığım" title="Kitaplığım (K)">
             <svg viewBox="0 0 24 24"><path d="M4 4h3v16H4zM9 4h3v16H9z" /><path d="M14.5 5.2l2.9-.8 3.6 15-2.9.8z" /></svg>
+          </button>
+          <button className="icon-btn cam" onClick={() => setBekci(true)} aria-label="Bekçi" title="Bekçi (B)">
+            <svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z" /><path d="M9 12l2 2 4-4" /></svg>
+          </button>
+          <button className="icon-btn cam" onClick={() => setGok(true)} aria-label="Gece gökyüzü" title="Gece gökyüzü">
+            <svg viewBox="0 0 24 24"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z" /><path d="M18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8zM5 15.5l.6 1.4 1.4.6-1.4.6L5 19.5l-.6-1.4-1.4-.6 1.4-.6z" /></svg>
           </button>
           <button className="icon-btn cam" onClick={() => setHomeOpen(o => !o)} aria-label="Akıllı ev" title="Akıllı ev">
             <svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7M5 10v10h14V10" /><path d="M10 20v-5h4v5" /></svg>
@@ -1498,6 +1574,19 @@ export default function App() {
           <button onClick={() => { sohbetRef.current = null; setKitapSohbeti(null); }} aria-label="Kitap sohbetini bitir">✕</button>
         </div>
       )}
+      {bekci && (
+        <Suspense fallback={null}>
+          <BekciPanel canli={bekciCanli} secili={bekciSecili} onSec={setBekciSecili} onClose={() => setBekci(false)} flash={flash} surum={bekciSurum} />
+        </Suspense>
+      )}
+
+      {gok && (
+        <Suspense fallback={null}>
+          <GokyuzuModu demo={GOK_PARAM === 'demo'} sentetikEl={ISARET_DEMO} cmd={gokCmd} caption={caption} core={core} listening={core === 'listening'}
+            onMic={toggleMic} onSor={t => submit(t)} onClose={() => setGok(false)} flash={flash} />
+        </Suspense>
+      )}
+
       {kitapligim && (
         <Suspense fallback={null}>
           <Kitapligim version={libKey} oneriVersion={oneriKey} flash={flash} onClose={() => setKitapligim(false)} kalemKaydi={kalemKaydi}

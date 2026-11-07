@@ -8,6 +8,8 @@ import { lookAtCamera } from './camera.js';
 import { control, homeMode, homeState, type DeviceId } from './home.js';
 import { addBook, addBookNote, fillInBackground, findBook, setBookStatus } from './library.js';
 import { yasamIziTara } from './lab.js';
+import { gokyuzuArac } from './gok.js';
+import { bekciArac } from './bekci/index.js';
 
 // Not: `strict` alanı bilerek yok (RouteLLM 400 döndürebiliyor).
 export const TOOLS = [
@@ -171,6 +173,37 @@ export const TOOLS = [
           hizli: { type: 'boolean', description: 'Kısa tarama (≈7 sn)' },
         },
         required: ['hedef'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'bekci',
+      description: "Bekçi: SMS/e-posta dolandırıcılık denetimi. Linkin alan adı, kayıt tarihi (kaç günlük), USOM listesi, marka eşleşmesi ve metin analizinden doğrulanmış sonucu ve SÖYLENECEK HAZIR CÜMLEYİ ('soyle') döndürür; cevabı yalnızca ondan kur, alan adı/gün/liste bilgisi uydurma. 'bu mesaj güvenli mi', 'son mesajı kontrol et' → kontrol (son gelen mesaj). Kullanıcı mesaj metnini yapıştırdıysa onu 'metin' olarak ver. 'panodaki/kopyaladığım mesaj' → kaynak: pano. 'tıklasaydım ne olurdu' → tiklasaydim.",
+      parameters: {
+        type: 'object',
+        properties: {
+          istek: { type: 'string', enum: ['kontrol', 'tiklasaydim'] },
+          metin: { type: 'string', description: 'Kullanıcının yapıştırdığı mesaj metni (varsa)' },
+          kaynak: { type: 'string', enum: ['son', 'pano'], description: "pano: macOS panosundaki metin" },
+        },
+        required: ['istek'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'gokyuzu',
+      description: "Gece Gökyüzü Modu: kullanıcının fotoğrafındaki yıldızlar astrometri çözümü ve yıldız kataloğuyla tanınmıştır (yapay zekâ ile değil). Bu araç doğrulanmış veriyi ve SÖYLENECEK HAZIR CÜMLEYİ ('soyle') döndürür; cevapta isim, sayı ve yılları yalnızca oradan al. 'gökyüzünü tara' → tara · 'bu gece hangi gezegenler görünüyor' → gezegenler · 'en parlak yıldız hangisi' → en_parlak · 'şu yıldızın ışığı ne zaman yola çıktı', 'Vega ne kadar uzak' → yildiz · 'en uzaktaki yıldızı göster' → en_uzak. Ekranda ilgili yıldızı da vurgular.",
+      parameters: {
+        type: 'object',
+        properties: {
+          istek: { type: 'string', enum: ['tara', 'gezegenler', 'en_parlak', 'yildiz', 'en_uzak'] },
+          ad: { type: 'string', description: "yildiz için: yıldızın adı (Vega, Kutup Yıldızı…). Kullanıcı 'şu/bu yıldız' dediyse boş bırak (seçili yıldız kullanılır)." },
+        },
+        required: ['istek'],
       },
     },
   },
@@ -389,6 +422,17 @@ export async function runTool(name: string, rawArgs: string, progress: ToolProgr
   if (name === 'yasam_izi_tara') {
     const out = yasamIziTara(args);
     progress(out.includes('"hata"') ? 'yaşam izi taraması: laboratuvar kapalı ya da cisim yok' : `yaşam izi taraması: ${args.hedef}`);
+    return out;
+  }
+  if (name === 'bekci') {
+    progress(args.istek === 'tiklasaydim' ? 'bekçi: sandbox bulguları' : 'bekçi: mesaj analiz ediliyor');
+    const out = await bekciArac(args);
+    progress(out.includes('"hata"') ? `bekçi: ${JSON.parse(out).hata}` : `bekçi: ${JSON.parse(out).seviye ?? 'cevap hazır'}`);
+    return out;
+  }
+  if (name === 'gokyuzu') {
+    const out = gokyuzuArac(args);
+    progress(out.includes('"hata"') ? `gökyüzü: ${JSON.parse(out).hata}` : `gökyüzü: ${args.istek}${args.ad ? ` · ${args.ad}` : ''}`);
     return out;
   }
   if (name === 'kitaplik_doldur') {

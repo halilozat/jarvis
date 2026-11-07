@@ -51,6 +51,10 @@ export interface Mark2Props {
   onHome(): void;
   onHands(): void;
   onLibrary(): void;
+  /** Gece Gökyüzü Modu */
+  onSky(): void;
+  /** Bekçi (mesaj denetimi) */
+  onBekci(): void;
   onStop(): void;
   onDrawer(d: 'detay' | 'gecmis' | 'ayarlar'): void;
   onSleep(): void;
@@ -246,6 +250,8 @@ export default function Mark2(p: Mark2Props) {
           <RoundButton label="Devam" onClick={() => p.onSubmit('Devam et')}><svg viewBox="0 0 24 24"><path d="M6 5l7 7-7 7M13 5l7 7-7 7" /></svg></RoundButton>
           <RoundButton label="Durdur" onClick={p.onStop} disabled={p.core !== 'speaking'}><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" /></svg></RoundButton>
           <RoundButton label="El" onClick={p.onHands}><svg viewBox="0 0 24 24"><path d="M8 12V5.5a1.5 1.5 0 0 1 3 0V11M11 10.5V4a1.5 1.5 0 0 1 3 0v6.5M14 10.5V5.5a1.5 1.5 0 0 1 3 0V13M8 11.5a1.5 1.5 0 0 0-3 0V14a7 7 0 0 0 7 7h1a6 6 0 0 0 6-6V9.5a1.5 1.5 0 0 0-3 0" /></svg></RoundButton>
+          <RoundButton label="Bekçi" onClick={p.onBekci}><svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z" /><path d="M9 12l2 2 4-4" /></svg></RoundButton>
+          <RoundButton label="Gökyüzü" onClick={p.onSky}><svg viewBox="0 0 24 24"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z" /><path d="M18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8zM5 15.5l.6 1.4 1.4.6-1.4.6L5 19.5l-.6-1.4-1.4-.6 1.4-.6z" /></svg></RoundButton>
           <RoundButton label="Kitaplık" onClick={p.onLibrary}><svg viewBox="0 0 24 24"><path d="M4 4h3v16H4zM9 4h3v16H9z" /><path d="M14.5 5.2l2.9-.8 3.6 15-2.9.8z" /></svg></RoundButton>
           <RoundButton label="Ev" onClick={p.onHome}><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7M5 10v10h14V10" /><path d="M10 20v-5h4v5" /></svg></RoundButton>
           <RoundButton label="Ayarlar" onClick={() => p.onDrawer('ayarlar')}><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" /></svg></RoundButton>

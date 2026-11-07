@@ -6,6 +6,8 @@ import { findNewsById } from './news.js';
 import { resolveFastPhoto, resolveSlowPhoto, type PhotoMode } from './photos.js';
 import { findWiki } from './wiki.js';
 import { mockReply } from './mock.js';
+import { gokNiyet, gokyuzuArac } from './gok.js';
+import { bekciArac, bekciNiyet } from './bekci/index.js';
 import { getProfile, memoryForPrompt } from './profile.js';
 import { libraryForPrompt } from './library.js';
 import { isEmbeddable, isShort } from './youtube.js';
@@ -214,6 +216,8 @@ export interface RunOptions {
   lab?: string;
   /** Kitap sohbeti: kullanıcı mesajına eklenen not (bookAdvisor.ts) */
   kitapNotu?: string;
+  /** Gece Gökyüzü Modu açıksa kural notu (gok.ts; veri gokyuzu aracından gelir) */
+  gok?: string;
   /** Her sahne hazır olur olmaz (sırayla) */
   onScene?: (index: number, sahne: Sahne) => void;
   /** Yapay zeka görseli sonradan hazır olunca */
@@ -311,6 +315,33 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
     return { ...r, model: 'hazır komut', router: 'hazır komut' };
   }
 
+  // Gece Gökyüzü: demo modunda (beyin yok) araç doğrudan çalışır, hazır cümlesi söylenir
+  const gn = MOCK && opts.gok ? gokNiyet(text) : null;
+  if (gn) {
+    progress('düşünüyor');
+    const out = JSON.parse(gokyuzuArac(gn));
+    progress(out.hata ? `gökyüzü: ${out.hata}` : `gökyüzü: ${gn.istek}`);
+    toolText = JSON.stringify(out);
+    modelUsed = 'demo';
+    enqueue({ ses: out.soyle ?? `Bunu bulamadım efendim: ${out.hata}`, gorsel: { tip: 'yok' } } as Sahne);
+    const r = await finish('');
+    return { ...r, router: 'demo' };
+  }
+
+  // Bekçi: demo modunda (beyin yok) "bu mesaj güvenli mi", "tıklasaydım ne olurdu" araca doğrudan gider
+  const bn = MOCK && !opts.image ? bekciNiyet(text) : null;
+  if (bn) {
+    progress('düşünüyor');
+    const metin = /[:：]\s*(.{12,})$/s.exec(text)?.[1];
+    const out = JSON.parse(await bekciArac({ ...bn, ...(metin ? { metin } : {}) }));
+    progress(out.hata ? `bekçi: ${out.hata}` : 'bekçi: cevap hazır');
+    toolText = JSON.stringify(out);
+    modelUsed = 'demo';
+    enqueue({ ses: out.soyle ?? `Efendim, ${out.hata}`, gorsel: { tip: 'yok' } } as Sahne);
+    const r = await finish('');
+    return { ...r, router: 'demo' };
+  }
+
   if (MOCK) {
     const m = await mockReply(text, device, progress);
     toolText = m.toolText;
@@ -329,7 +360,7 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
       ? `${text}\n\n${FAL_NOTE}`
       : isBrief
       ? `${text}\n\n[Sistem notu: Bu, gündem brifingi komutu. Gündem özeti protokolünü uygula.]`
-      : text + LAB_NOTE + (opts.kitapNotu ?? '');
+      : text + LAB_NOTE + (opts.gok ?? '') + (opts.kitapNotu ?? '');
   const messages: ChatMessage[] = [
     { role: 'system', content: buildSystemPrompt(contextVars(device, prevDevice)) },
     ...history.slice(-12).map(m => ({ role: m.role, content: m.text }) as ChatMessage),

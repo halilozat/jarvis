@@ -1,0 +1,13 @@
+{
+  "aciklama": "Marka ↔ resmî alan adı listesi. ÖRNEKTİR: her girdiyi kendiniz doğrulayıp 'verified': true yapın, eksikleri ekleyin. 'resmi' kayıtlı alan adlarıdır (alt alan adları da kabul edilir). 'varyantlar' metinde aranır (büyük/küçük harf ve Türkçe karakter farkı gözetilmez).",
+  "markalar": [
+    { "ad": "PTT", "varyantlar": ["ptt", "ptt kargo", "pttkargo", "hgs"], "resmi": ["ptt.gov.tr"], "verified": false },
+    { "ad": "e-Devlet", "varyantlar": ["e-devlet", "edevlet", "e devlet", "turkiye.gov"], "resmi": ["turkiye.gov.tr"], "verified": false },
+    { "ad": "Gelir İdaresi", "varyantlar": ["gelir idaresi", "gib", "vergi iadesi"], "resmi": ["gib.gov.tr"], "verified": false },
+    { "ad": "Yurtiçi Kargo", "varyantlar": ["yurtici kargo", "yurtiçi kargo", "yurticikargo"], "resmi": ["yurticikargo.com"], "verified": false },
+    { "ad": "Aras Kargo", "varyantlar": ["aras kargo", "araskargo"], "resmi": ["araskargo.com.tr"], "verified": false },
+    { "ad": "Ziraat Bankası", "varyantlar": ["ziraat"], "resmi": ["ziraatbank.com.tr"], "verified": false },
+    { "ad": "Trendyol", "varyantlar": ["trendyol"], "resmi": ["trendyol.com"], "verified": false },
+    { "ad": "Hepsiburada", "varyantlar": ["hepsiburada"], "resmi": ["hepsiburada.com"], "verified": false }
+  ]
+}

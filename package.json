@@ -14,6 +14,8 @@
     "test:kitap": "server/node_modules/.bin/tsx web/src/lib/bookCommands.test.ts && npm --prefix server run -s test:kitaplik",
     "test:haber": "npm --prefix server run -s test:haber && server/node_modules/.bin/tsx web/src/hands/news/commands.test.ts && server/node_modules/.bin/tsx web/src/hands/news/gestures.test.ts",
     "test:uzay": "server/node_modules/.bin/tsx web/src/hands/space/commands.test.ts && npm run -s test:lab",
-    "test:lab": "server/node_modules/.bin/tsx web/src/hands/space/physics.test.ts && server/node_modules/.bin/tsx web/src/hands/space/life.test.ts && server/node_modules/.bin/tsx web/src/hands/space/extra/moonHole.test.ts"
+    "test:lab": "server/node_modules/.bin/tsx web/src/hands/space/physics.test.ts && server/node_modules/.bin/tsx web/src/hands/space/life.test.ts && server/node_modules/.bin/tsx web/src/hands/space/extra/moonHole.test.ts",
+    "test:gok": "server/node_modules/.bin/tsx web/src/sky/sky.test.ts && server/node_modules/.bin/tsx server/src/gok-test.ts",
+    "test:bekci": "npm --prefix server run -s test:bekci"
   }
 }

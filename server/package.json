@@ -12,7 +12,8 @@
     "test:kitaplik": "tsx src/kitaplik-test.ts",
     "test:haber": "MOCK=1 tsx src/haber-test.ts",
     "test:sohbet": "tsx src/sohbet-test.ts",
-    "test:beyin": "tsx src/beyin-test.ts"
+    "test:beyin": "tsx src/beyin-test.ts",
+    "test:bekci": "tsx src/bekci-test.ts"
   },
   "keywords": [],
   "author": "",
@@ -20,11 +21,18 @@
   "dependencies": {
     "dotenv": "^18.0.5",
     "express": "^5.2.1",
-    "rss-parser": "^3.13.0"
+    "imapflow": "2.9.1",
+    "jpeg-js": "0.4.4",
+    "jsqr": "1.4.0",
+    "pngjs": "7.0.0",
+    "postal-mime": "4.1.4",
+    "rss-parser": "^3.13.0",
+    "tldts": "7.4.19"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.4",
+    "@types/pngjs": "6.0.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },

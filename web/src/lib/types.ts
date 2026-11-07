@@ -76,6 +76,8 @@ export type ServerEvent =
   | { type: 'kitaplik' }
   /** Uzay Laboratuvarı komutu (Jarvis'in aracından; şekli web/src/hands/space/commands.ts SpaceCmd) */
   | { type: 'lab_cmd'; cmd: unknown; origin: string }
+  | { type: 'gok_cmd'; cmd: { tip: 'tara' } | { tip: 'vurgula'; hedef: number | string }; origin?: string }
+  | { type: 'bekci'; olay: 'basla' | 'adim' | 'sonuc' | 'guncel' | 'goster' | 'liste'; id?: string; kaynak?: string; gonderen?: string; zaman?: string; demo?: boolean; analiz?: import('../bekci/api').Analiz; ses?: boolean; ac?: boolean }
   /** Jarvis kitap önerdi (raftaki kitap El Kontrolü'nde çıkar) · tarz analizi bitti */
   | { type: 'kitap_oner'; id: string | null; ad: string | null; ruhHali: string }
   | { type: 'kitap_tarzi' }

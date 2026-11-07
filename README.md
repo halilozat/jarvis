@@ -763,6 +763,67 @@ Komut gelmezse sessizce uykuya döner. Tek alkış, konuşma, müzik, kapı sesi
 
 `TTS_MODEL` boşsa tarayıcının Türkçe sesi kullanılır. RouteLLM ses modeliyle daha doğal bir ses için `npm run models` çıktısındaki bir ses modelini `TTS_MODEL` olarak yaz (ör. `gpt-audio-mini`) ve `TTS_VOICE` ile sesi seç.
 
+### Bekçi Modülü (dolandırıcı SMS ve e-posta uyarısı)
+
+Bekçi, gelen SMS'leri ve e-postaları **gelir gelmez, siz sormadan** inceler. Dolandırıcılık (oltalama) şüphesi varsa Jarvis'in sesiyle uyarır ("Efendim, son mesaj güvenli değil. Yine paranıza göz dikmişler.") ve telefonunuza bildirim gönderir. Linki **engellemez, uyarır**. Mesajları silmez, taşımaz, yanıtlamaz, okundu işaretlemez.
+
+**Ne inceler**
+- **Link:** şemasız adresler de (`ptt-ornek.xyz/odeme`), kısaltılmış linklerin gittiği yer (çerezsiz, gövde indirmeden, özel ağa gitmeden), sahte harfli adresler (Kiril "р" ile "ptt"), görünen metni başka adrese giden e-posta linkleri.
+- **Marka ↔ resmî adres:** Mesaj PTT, e-Devlet ya da bir banka adına yazılmış ama link onların resmî adresine gitmiyorsa güçlü sinyal. Liste: `server/config/brands.json`.
+- **Alan adı yaşı:** RDAP (IANA önyüklemesiyle) ya da WHOIS. 7 günden genç alan adı çok yüksek risk.
+- **Siber Güvenlik Başkanlığı (USOM) zararlı bağlantı listesi:** `siberguvenlik.gov.tr` API'sinden (eski `usom.gov.tr/url-list.txt` artık bu API'ye yönleniyor). Listede olmak kesin zararlı demektir; **olmamak güvenli demek değildir** (yeni açılan siteler henüz listede yoktur).
+- **Metin:** Seçili beyin (Abacus RouteLLM zorunlu değil; Gemini, Groq ya da OpenAI uyumlu herhangi bir servis) aciliyet, ödeme talebi, ceza tehdidi gibi taktikleri arar. Türkçe karakter kullanılmadan yazılmış mesajları da tanır. Beyin yoksa kural tabanlı analizle devam eder.
+- **E-posta:** SPF/DKIM/DMARC sonuçları, farklı Reply-To, gönderen adının markayı taklit etmesi, riskli ekler (`.html`, `.zip`, `.iso`, makrolu Office…), görsel ekteki QR kodun adresi (PDF içindeki QR desteklenmez).
+- **İsteğe bağlı:** Google Safe Browsing, VirusTotal ve urlscan.io (sayfayı uzaktaki bir sandbox'ta açar; kart numarası/CVV formu varsa "Tıklasaydınız kart bilgileriniz çalınacaktı" kanıtı buradan gelir).
+
+**Puan:** 0–100, her sinyal ekranda Türkçe bir gerekçe satırıdır. ≥ 70 **tehlikeli**: sesli uyarı + bildirim + Bekçi paneli açılır. 40–69 **şüpheli**: yalnızca bildirim. Altı: yalnızca kayıt. Eşikler, ağırlıklar, sessiz saatler (varsayılan 00:00–08:00 arası sesli uyarı yok, yalnızca bildirim): `server/config/bekci.json`. Aynı gönderen/alan adı için 10 dakika içinde tekrar uyarmaz.
+
+**Sorular:** "Jarvis, bu mesaj güvenli mi?" (son gelen mesaj; mesajı yapıştırabilir ya da kopyalayıp "panodaki mesaj güvenli mi" diyebilirsiniz) · "Tıklasaydım ne olurdu?" · Bekçi paneli: alt çubukta kalkan düğmesi ya da **B** tuşu. Panelde mesajı yapıştırıp **Kontrol et** de diyebilirsiniz.
+
+#### SMS (yalnızca macOS + iPhone)
+SMS kısmı yalnızca Mac'te çalışır: iPhone'a gelen mesajlar Mac'teki Mesajlar uygulamasına aktarılır, Bekçi oradan okur. Android'de ya da Mac'i olmayanlarda e-posta kısmı çalışır.
+1. iPhone: **Ayarlar → Mesajlar → Metin Mesajı Yönlendirme** → bu Mac'i açın (iMessage ve RCS de denetlenir; bunlar operatör filtresinden geçmez).
+2. Mac: **Sistem Ayarları → Gizlilik ve Güvenlik → Tam Disk Erişimi** → Jarvis'i başlattığınız uygulamayı (Terminal, iTerm ya da VS Code) ekleyin ve Jarvis'i yeniden başlatın.
+
+Erişim yoksa Bekçi çökmez: panelde ve sunucu kaydında ne yapmanız gerektiği yazar, dakikada bir yeniden dener. Mesajlar veritabanı yalnızca okunur.
+
+#### E-posta (Gmail, Outlook, diğerleri)
+`server/.env` → `IMAP_ACCOUNTS` (birden çok hesap olabilir):
+```
+IMAP_ACCOUNTS=[{"name":"gmail","host":"imap.gmail.com","port":993,"user":"adiniz@gmail.com","pass":"uygulama-sifresi"}]
+```
+- **Gmail:** Google hesabında iki adımlı doğrulamayı açın → [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) → yeni uygulama şifresi (16 harf) → `pass` alanına. Gmail ayarlarında IMAP açık olmalı.
+- **Outlook / Hotmail:** `"host":"outlook.office365.com"`; hesap güvenliğinde uygulama şifresi oluşturun.
+
+Kutu salt okunur açılır, mesajlar okundu işaretlenmez. Bağlantı koparsa kendiliğinden yeniden bağlanır.
+
+#### Telefona bildirim (ntfy)
+1. Telefona **ntfy** uygulamasını kurun (App Store / Google Play).
+2. Tahmin edilemeyecek uzun rastgele bir konu adı seçin (ör. `bekci-7f3k9q2xw8m1`) ve uygulamada bu konuya abone olun. Konu adını bilen herkes bildirimleri görebilir; kısa ya da tahmin edilebilir ad seçmeyin.
+3. `server/.env` → `NTFY_TOPIC=bekci-7f3k9q2xw8m1`. Bekçi panelindeki **PUSH** etiketine tıklayınca deneme bildirimi gelir.
+
+Bildirimde link tıklanamaz biçimdedir (`hxxps://ptt-ornek[.]xyz`) ve mesajın tamamı yer almaz.
+
+#### Marka listesi: doğrulayın
+`server/config/brands.json` birkaç **örnek** girdiyle gelir; hepsi `"verified": false`. Kullandığınız bankaların, kargo firmalarının ve kurumların resmî alan adlarını kendiniz doğrulayın, eksikleri ekleyin ve `"verified": true` yapın. Listede olmayan bir kurum için "marka uyuşmazlığı" sinyali çıkmaz (diğer sinyaller yine çalışır).
+
+#### Gizlilik: hangi veri nereye gider
+
+| Veri | Nereye | Ne zaman |
+|---|---|---|
+| Linkin alan adı | RDAP/WHOIS sunucuları, Siber Güvenlik Başkanlığı API'si | her şüpheli link |
+| Linkin tamamı (URL) | Google Safe Browsing, VirusTotal, urlscan.io | yalnızca anahtar tanımlıysa |
+| Mesaj metni (**maskelenmiş**: telefon, TC kimlik, IBAN, kart, e-posta yerine etiket) | seçili beyin (LLM) | her mesaj |
+| Puan, en fazla 2 gerekçe, defang'li link | ntfy (telefonunuz) | şüpheli/tehlikeli mesajda |
+| Mesaj metni | **hiçbir yere** (diske de yazılmaz) | — |
+
+Bilgisayarda yalnızca mesaj kimliği (hash), gönderen, alan adları, puan ve gerekçeler saklanır (`server/data/bekci`, 30 gün sonra silinir). Linkler bu bilgisayarda hiçbir tarayıcıda açılmaz.
+
+#### Demo (video çekimi)
+- Tarayıcıda `?bekci=demo` → örnek bir dolandırıcı SMS sanki yeni gelmiş gibi akışa girer. Panel açıkken **D** (SMS) ya da **M** (e-posta) tuşu da aynısını yapar.
+- Sunucuyu `npm --prefix server start -- --bekci-demo` ya da `BEKCI_DEMO=1` ile başlatırsanız açılıştan birkaç saniye sonra gelir.
+- Demoda **hiçbir gerçek ağ isteği yapılmaz**: alan adı yaşı, liste ve sandbox sonuçları sabittir; her çekim aynı çıkar. Adımların hızı: `server/config/bekci.json` → `demo_adim_ms`.
+
 ### Fotoğraflar
 
 *Ayarlar → Fotoğraf modu*
