@@ -27,6 +27,8 @@ import { labContext } from './hands/space/labContext';
 import { gokContext } from './sky/baglam';
 import type { GokCmd } from './sky/GokyuzuModu';
 import { bekciDemo, type Analiz as BekciAnaliz } from './bekci/api';
+import { toplantiBaslat, toplantiBitir, toplantiKes, toplantiOlayi } from './toplanti/api';
+import { toplantiKomutu } from './toplanti/komutlar';
 import { emitCamera, getCameras, getRole, isCameraEvent, onCamera, setRole, toggleCameraPanel } from './lib/camera';
 import { BeyinKurulum, DEMO_ANAHTARI } from './components/BeyinKurulum';
 import { type AppState, type ElevenUsage, clearConversation, setServerStt, serverStt, detectDevice, getDashboard, getHealth, getState, getVoices, metric, postAttention, postSleep, postWake, previewUrl, saveDevice, saveSettings, sendChat, setPhotoMode, stt, subscribe, token, clientId } from './lib/api';
@@ -70,6 +72,7 @@ const HandControl = lazy(() => import('./hands/HandControl'));
 const Kitapligim = lazy(() => import('./library/Kitapligim'));
 const GokyuzuModu = lazy(() => import('./sky/GokyuzuModu'));
 const BekciPanel = lazy(() => import('./bekci/BekciPanel'));
+const ToplantiOdasi = lazy(() => import('./toplanti/ToplantiOdasi'));
 /** ?el=1 açılışta el kontrolünü açar, ?el=demo kamerasız sentetik ellerle gösterir */
 const EL_PARAM = ((q: string | null) => (q === 'demo' ? 'demo' : q === '1' || q === 'kamera' ? 'kamera' : null))(new URLSearchParams(location.search).get('el'));
 /** "Jarvis, el kontrolünü aç / kapat" — sunucuya gitmeden arayüzde karşılanır */
@@ -91,6 +94,8 @@ const GOK_AC = /g[öo]ky[üu]z[üu]n[üu]\s+tar|gece\s+g[öo]ky[üu]z[üu]|g[öo
 const GOK_SIM = /(g[öo]ky[üu]z[üu]\s+)?sim[üu]lasyon(u|una)?\s*(a[çc]|ge[çc]|g[öo]ster)/i;
 /** Bekçi: ?bekci=1 panel açık başlar · ?bekci=demo örnek dolandırıcı SMS'i akışa sokar (ağ isteği yok) */
 const BEKCI_PARAM = new URLSearchParams(location.search).get('bekci');
+/** Toplantı Odası: ?toplanti=1 canlı toplantı · ?toplanti=demo kayıtlı tartışma senaryosu (LLM yok, ses gerçek) */
+const TOPLANTI_PARAM = new URLSearchParams(location.search).get('toplanti');
 const KITAPLIGIM_AC = /kitapl[ıi][gğ][ıi]m[ıi]?\s+(aç|göster|getir)/i;
 /** ?kitapligim=1: Kitaplığım açık başlar (deneme) */
 const KITAPLIGIM_PARAM = new URLSearchParams(location.search).get('kitapligim') === '1';
@@ -192,6 +197,16 @@ export default function App() {
   gokRef.current = gok;
   const [gokCmd, setGokCmd] = useState<{ cmd: GokCmd; n: number } | null>(null);
   const gokKomut = (cmd: GokCmd) => setGokCmd(c => ({ cmd, n: (c?.n ?? 0) + 1 }));
+  const [toplanti, setToplanti] = useState<{ canli: boolean } | null>(TOPLANTI_PARAM === '1' ? { canli: true } : TOPLANTI_PARAM === 'demo' ? { canli: false } : null);
+  const toplantiRef = useRef(toplanti);
+  toplantiRef.current = toplanti;
+  const toplantiDemoBasladi = useRef(false);
+  useEffect(() => {
+    if (TOPLANTI_PARAM !== 'demo' || toplantiDemoBasladi.current || !connected) return;
+    toplantiDemoBasladi.current = true;
+    setTimeout(() => toplantiBaslat({ mod: 'tartisma', demo: true }).catch(() => {}), 1200);
+  }, [connected]);
+  const toplantiKapat = () => { voice.stop(); void toplantiKes(null).catch(() => {}); setToplanti(null); };
   const [bekci, setBekci] = useState(BEKCI_PARAM !== null);
   const [bekciCanli, setBekciCanli] = useState<Record<string, BekciAnaliz>>({});
   const [bekciSecili, setBekciSecili] = useState<string | null>(null);
@@ -541,6 +556,15 @@ export default function App() {
       if (e.type === 'kitap_oner') { setOneriKey(k => k + 1); const id = e.id, ad = e.ad; if (id) setOneriCmd(c => ({ id, ad, n: (c?.n ?? 0) + 1 })); return; }
       if (e.type === 'kitap_tarzi') { setOneriKey(k => k + 1); return; }
       // Bekçi: gelen mesaj analizi canlı; tehlikelide masaüstü uyarıyı seçili sesle söyler, çekirdek kırmızıya döner
+      // Toplantı Odası: olaylar panele; panel yalnızca toplantıyı başlatan cihazda açılır
+      if (e.type === 'toplanti') {
+        toplantiOlayi(e as any);
+        if (e.olay === 'acildi' && (e.origin ? e.origin === clientId : device === 'masaustu')) {
+          setToplanti(t => t ?? { canli: e.mod === 'canli' });
+          setCore('idle');
+        }
+        return;
+      }
       if (e.type === 'bekci') {
         if (e.olay === 'liste') { setBekciSurum(n => n + 1); return; }
         if (e.olay === 'goster' && e.id) { setBekci(true); setBekciSecili(e.id); return; }
@@ -754,6 +778,16 @@ export default function App() {
       if (GOK_SIM.test(t)) { setGok(true); gokKomut({ tip: 'simulasyon' }); speakLine('Gökyüzünü konumunuza ve saate göre çiziyorum efendim. Bu bir simülasyon.'); return; }
       if (gokRef.current) { gokKomut({ tip: 'tara' }); speakLine('Gökyüzünü yeniden tarıyorum efendim.'); }
       else { setGok(true); speakLine('Gece gökyüzü modu açık efendim. Bir fotoğraf seçin ya da çekin.'); }
+      return;
+    }
+    // Toplantı Odası: aç / tartışın / bitir / dur (modele gitmez). Karar sorularını sunucu tanır.
+    const tk = !image ? toplantiKomutu(t, !!toplantiRef.current) : null;
+    if (tk) {
+      voice.unlock(); setInput(''); setInterim('');
+      if (tk.tip === 'ac') { setToplanti({ canli: true }); toplantiBaslat({ mod: 'canli' }).catch(e => flash(e.message)); }
+      else if (tk.tip === 'tartis') { setToplanti({ canli: false }); toplantiBaslat({ mod: 'tartisma', konu: tk.konu }).catch(e => flash(e.message)); }
+      else if (tk.tip === 'bitir') toplantiBitir().catch(e => flash(e.message));
+      else { voice.stop(); void toplantiKes(null); }
       return;
     }
     if (!image && KITAPLIGIM_AC.test(t)) { voice.unlock(); setInput(''); setInterim(''); setKitapligim(true); return; }
@@ -1081,6 +1115,7 @@ export default function App() {
       if (e.code === 'KeyS' && !e.repeat) { voice.unlock(); postSleep(); return; }
       if (e.code === 'KeyH' && !e.repeat && !gokRef.current) { toggleHands(); return; }
       if (e.code === 'KeyK' && !e.repeat && !handsRef.current && !gokRef.current) { setKitapligim(v => !v); return; }
+      if (toplantiRef.current) return; // Toplantı Odası kendi tuşlarını kullanır
       if (e.code === 'KeyB' && !e.repeat && !handsRef.current && !gokRef.current) { setBekci(v => !v); return; }
       if (wstate !== 'awake') return;
       if (e.code === 'Space') { e.preventDefault(); toggleMic(); }
@@ -1277,6 +1312,7 @@ export default function App() {
             onLibrary={() => setKitapligim(true)}
             onSky={() => setGok(true)}
             onBekci={() => setBekci(true)}
+            onToplanti={() => { voice.unlock(); setToplanti({ canli: false }); }}
             onStop={stopPlayback}
             onDrawer={d => setDrawer(drawer === d ? null : d)}
             onSleep={() => { voice.unlock(); postSleep(); }}
@@ -1377,6 +1413,9 @@ export default function App() {
           </form>
           <button className="icon-btn cam" onClick={() => setKitapligim(true)} aria-label="Kitaplığım" title="Kitaplığım (K)">
             <svg viewBox="0 0 24 24"><path d="M4 4h3v16H4zM9 4h3v16H9z" /><path d="M14.5 5.2l2.9-.8 3.6 15-2.9.8z" /></svg>
+          </button>
+          <button className="icon-btn cam" onClick={() => { voice.unlock(); setToplanti({ canli: false }); }} aria-label="Toplantı Odası" title="Toplantı Odası">
+            <svg viewBox="0 0 24 24"><circle cx="7.5" cy="10" r="3.5" /><circle cx="16.5" cy="10" r="3.5" /><path d="M2.5 20c.8-3 2.6-4.5 5-4.5s4.2 1.5 5 4.5M11.5 20c.8-3 2.6-4.5 5-4.5s4.2 1.5 5 4.5" /></svg>
           </button>
           <button className="icon-btn cam" onClick={() => setBekci(true)} aria-label="Bekçi" title="Bekçi (B)">
             <svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z" /><path d="M9 12l2 2 4-4" /></svg>
@@ -1574,6 +1613,12 @@ export default function App() {
           <button onClick={() => { sohbetRef.current = null; setKitapSohbeti(null); }} aria-label="Kitap sohbetini bitir">✕</button>
         </div>
       )}
+      {toplanti && (
+        <Suspense fallback={null}>
+          <ToplantiOdasi device={device} canli={toplanti.canli} onClose={toplantiKapat} flash={flash} />
+        </Suspense>
+      )}
+
       {bekci && (
         <Suspense fallback={null}>
           <BekciPanel canli={bekciCanli} secili={bekciSecili} onSec={setBekciSecili} onClose={() => setBekci(false)} flash={flash} surum={bekciSurum} />

@@ -8,6 +8,7 @@ import { findWiki } from './wiki.js';
 import { mockReply } from './mock.js';
 import { gokNiyet, gokyuzuArac } from './gok.js';
 import { bekciArac, bekciNiyet } from './bekci/index.js';
+import { toplantiArac, toplantiNiyet } from './toplanti/index.js';
 import { getProfile, memoryForPrompt } from './profile.js';
 import { libraryForPrompt } from './library.js';
 import { isEmbeddable, isShort } from './youtube.js';
@@ -329,6 +330,16 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
   }
 
   // Bekçi: demo modunda (beyin yok) "bu mesaj güvenli mi", "tıklasaydım ne olurdu" araca doğrudan gider
+  // Toplantı Odası: "son toplantının kararları neydi" (beyin yokken de)
+  const tn = MOCK && !opts.image ? toplantiNiyet(text) : null;
+  if (tn) {
+    const out = JSON.parse(toplantiArac(tn));
+    toolText = JSON.stringify(out);
+    modelUsed = 'demo';
+    enqueue({ ses: out.soyle, gorsel: { tip: 'yok' } } as Sahne);
+    const r = await finish('');
+    return { ...r, router: 'demo' };
+  }
   const bn = MOCK && !opts.image ? bekciNiyet(text) : null;
   if (bn) {
     progress('düşünüyor');

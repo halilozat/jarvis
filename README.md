@@ -824,6 +824,33 @@ Bilgisayarda yalnızca mesaj kimliği (hash), gönderen, alan adları, puan ve g
 - Sunucuyu `npm --prefix server start -- --bekci-demo` ya da `BEKCI_DEMO=1` ile başlatırsanız açılıştan birkaç saniye sonra gelir.
 - Demoda **hiçbir gerçek ağ isteği yapılmaz**: alan adı yaşı, liste ve sandbox sonuçları sabittir; her çekim aynı çıkar. Adımların hızı: `server/config/bekci.json` → `demo_adim_ms`.
 
+### Toplantı Odası (Jarvis + Friday)
+
+Jarvis'in yanına ikinci bir yapay zekâ karakteri, **Friday** gelir: şüpheci, sorgulayan, şeytanın avukatı. Bir karar sorusunu ikisi tartışıp ortak sonuca varır; isterseniz sesle tartışmaya katılırsınız; toplantı bitince elinizde bir **tutanak** kalır.
+
+- **Tartış ve karar ver:** "Bu iş teklifini kabul edeyim mi? Maaş yüzde 20 fazla ama ofise gitmem gerekiyor." Karar soruları kendiliğinden Toplantı Odası'na gider (kapatmak için `server/config/meeting.json` → `otomatik_tartisma: false`). "Jarvis ve Friday tartışsın: …" ya da "İkiniz tartışın: …" da olur. Jarvis kısa bir ilk görüş verir, Friday itiraz eder ya da eksik bulur, Jarvis savunur ya da düzeltir; en fazla 3 tur. Her turdan sonra küçük bir "hakem" modeli uzlaşmayı ölçer (ekranda **Uzlaşma %**). Sonunda: "Anlaştığımız nokta şu… Anlaşamadığımız nokta şu… Önerimiz şu…"
+- **Canlı toplantı:** "Toplantı başlat" ya da alt çubukta **Toplantı** düğmesi → **M** (mikrofon). Konuşun; sabit bir sıra yoktur: her karakter konuşmasının sonunda sözü kime bırakacağını kendisi seçer. Friday Jarvis'e itiraz edip sözü ona verebilir, Jarvis size soru sorabilir, ikisi kendi aralarında devam edebilir (en fazla 4 konuşma, `ardisik_karakter_siniri`; sonra söz size döner). Canlı toplantıda karar soruları da bu doğal sohbette konuşulur; hakemli resmî tartışma için "tartışın: …" deyin. "Friday, sen ne düşünüyorsun?" deyince söz Friday'e geçer. Biri konuşurken lafa girerseniz o konuşma anında kesilir ve sizi dinler. "Bekle" / "Dur" ya da **Boşluk** konuşanı susturur.
+- **Tutanak:** "Toplantıyı bitir" → ekranda kararlar, açık sorular ve yapılacaklar kartı; dosya olarak `server/data/meetings/YYYY-MM-DD_HHMM_<başlık>.md`. Jarvis tek cümlelik özeti söyler. "Son toplantının kararları neydi?" diye sorabilirsiniz.
+- Basit sorular ("Saat kaç?", "Işığı aç") tartışma başlatmaz; normal Jarvis cevap verir.
+
+**Kurulum**
+- **Modeller (farklı iki model önerilir):** Aynı model kendisiyle tartışınca hızla uzlaşır. `server/.env` → `JARVIS_MODEL`, `FRIDAY_MODEL`, `JUDGE_MODEL` (hakem için hızlı/ucuz bir model). Boş bırakırsanız Jarvis seçili beynin model listesinden **farklı ailelerden** hızlı iki model seçer (ör. Abacus'ta Jarvis `gpt-6-luna`, Friday `DeepSeek V4.1 Flash`, hakem `gemini-3.5-flash-lite`); hangi modellerin konuştuğu reaktörlerin altında yazar. Abacus AI RouteLLM zorunlu değil: Gemini, Groq, OpenAI ya da OpenAI uyumlu herhangi bir servisle çalışır (Ayarlar → Beyin).
+- **Friday'in sesi:** ElevenLabs anahtarı varsa hesabınızdaki bir Türkçe kadın sesi kendiliğinden seçilir; değiştirmek için `FRIDAY_VOICE_ID`. Ünlü birinin (filmdeki oyuncunun) sesini taklit eden ya da klonlayan bir ses kullanmayın. ElevenLabs yoksa Friday tarayıcının kadın sesiyle konuşur. Jarvis her zaman seçili sesinizle konuşur.
+- **Mikrofon:** Tarayıcı ilk açılışta izin ister. Canlı mod yalnızca Toplantı Odası açıkken dinler (alttaki kırmızı **● CANLI** göstergesi); panel kapanınca mikrofon kapanır. Ses tanıma Chrome/Safari'nin kendi tanımasıdır; yoksa Jarvis'in ses tanıma modeli kullanılır.
+- **Kulaklık önerilir:** Hoparlörden çıkan Jarvis/Friday sesinin mikrofona girip "araya girme" sayılmaması için yankı engelleme açıktır ve karakterler konuşurken eşik yükselir; yine de en temiz sonuç kulaklıkla alınır.
+
+**Gecikme:** Hedef, siz sustuktan sonra ilk sesin ≤ 1,5 sn içinde gelmesi. Ölçümler (Abacus üzerinden, kasım 2026): modelin ilk cümlesi medyan ≈ 1,25 sn, p90 ≈ 1,6 sn; ElevenLabs ilk cümle sesi medyan ≈ 0,8 sn; bunlara sessizliği anlama süresi (`VAD_SILENCE_MS`, 700 ms) eklenir. Yani bu kurulumda ilk ses ≈ 2,5 sn gelir. Hızlandırmak için: daha düşük `VAD_SILENCE_MS` (ör. 500), ilk token süresi kısa modeller. Geliştirici panelinde (Toplantı Odası'nda **G** tuşu) her turun gerçek gecikmesi, medyan ve 90. persentil görünür.
+
+**Maliyet:** Bir tartışma tek bir sorudan birkaç kat fazla token harcar (ölçüm: tek turluk bir tartışma ≈ 2.500 token; hakem ve uzlaşma dahil). Arayüzde oturumun yaklaşık token ve seslendirme karakteri görünür. Sınırlar: `MEETING_MAX_TURNS`, `MEETING_MAX_TOKENS`; aşılınca Jarvis kibarca uyarır ve toplantıyı tutanakla kapatır.
+
+**Gizlilik:** Ses kaydedilmez; yalnızca metin döküm ve tutanak saklanır (`server/data/meetings`, git'e girmez). Saklama süresi `server/config/meeting.json` → `transkript_saklama_gun` (varsayılan 30 gün).
+
+**Karakterler ve promptlar:** `server/prompts/jarvis_meeting.md`, `friday_meeting.md` (ayrıca hakem, uzlaşma, tutanak) düzenlenebilir Türkçe dosyalardır. Hitaplar ("efendim", "patron"), cümle sınırı (3), uzlaşma eşiği (%80) ve renkler `server/config/meeting.json` içinde.
+
+**Demo (video çekimi):** Tarayıcıda `?toplanti=demo` ya da sunucuyu `npm --prefix server start -- --meeting-demo` ile başlatın: `server/config/meeting-demo.json` senaryosu **LLM çağrılmadan** ama gerçek seslerle ve animasyonlarla oynar; her çekim aynı çıkar (hızlar: `meeting.json` → `demo`). `--meeting-record` ile gerçek bir toplantının dökümü ve zamanlaması `server/data/meetings/kayit-*.json` olarak kaydedilir; `MEETING_DEMO_FILE=data/meetings/kayit-….json` ile demo senaryosu olarak oynatılır.
+
+**Testler:** `npm --prefix server run test:toplanti` (orkestratör: tur sınırı, uzlaşma eşiği, söz sırası, isimle hitap, kısa soru) · `npx tsx web/src/toplanti/canli.test.ts` (araya girme ≤ 200 ms, hoparlör sesi yanlış tetiklemez, ses tanıma geç dönse de ilk söz kaybolmaz) · `npm --prefix server run eval:toplanti` (gerçek modellerle 10 karar sorusu: Friday'in somut itirazı ve tekrar kontrolü; token harcar).
+
 ### Fotoğraflar
 
 *Ayarlar → Fotoğraf modu*

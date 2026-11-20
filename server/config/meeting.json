@@ -1,0 +1,13 @@
+{
+  "aciklama": "Toplantı Odası ayarları. Modeller, Friday'in sesi ve sınırlar .env'de (MEETING_*, JARVIS_MODEL, FRIDAY_MODEL, JUDGE_MODEL, FRIDAY_VOICE_ID).",
+  "karakterler": {
+    "jarvis": { "ad": "Jarvis", "hitap": "efendim", "renk": "#4de1ff" },
+    "friday": { "ad": "Friday", "hitap": "patron", "renk": "#ff9d4d" }
+  },
+  "cumle_siniri": 3,
+  "uzlasma_esigi": 80,
+  "ardisik_karakter_siniri": 4,
+  "otomatik_tartisma": true,
+  "transkript_saklama_gun": 30,
+  "demo": { "cumle_arasi_ms": 250, "tur_arasi_ms": 650, "hakem_ms": 900 }
+}

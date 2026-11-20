@@ -10,6 +10,7 @@ import { addBook, addBookNote, fillInBackground, findBook, setBookStatus } from 
 import { yasamIziTara } from './lab.js';
 import { gokyuzuArac } from './gok.js';
 import { bekciArac } from './bekci/index.js';
+import { toplantiArac } from './toplanti/index.js';
 
 // Not: `strict` alanı bilerek yok (RouteLLM 400 döndürebiliyor).
 export const TOOLS = [
@@ -173,6 +174,21 @@ export const TOOLS = [
           hizli: { type: 'boolean', description: 'Kısa tarama (≈7 sn)' },
         },
         required: ['hedef'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'toplanti',
+      description: "Toplantı Odası: Jarvis ve ikinci yapay zekâ Friday. 'Jarvis ve Friday tartışsın: …', 'ikiniz tartışın: …' → tartis (konu ile); 'toplantı başlat', 'toplantı odasını aç' → baslat; 'son toplantının kararları neydi' → son_kararlar (cevabı 'soyle' alanından AYNEN kur, karar uydurma).",
+      parameters: {
+        type: 'object',
+        properties: {
+          istek: { type: 'string', enum: ['tartis', 'baslat', 'son_kararlar'] },
+          konu: { type: 'string', description: 'tartis için tartışılacak soru' },
+        },
+        required: ['istek'],
       },
     },
   },
@@ -422,6 +438,11 @@ export async function runTool(name: string, rawArgs: string, progress: ToolProgr
   if (name === 'yasam_izi_tara') {
     const out = yasamIziTara(args);
     progress(out.includes('"hata"') ? 'yaşam izi taraması: laboratuvar kapalı ya da cisim yok' : `yaşam izi taraması: ${args.hedef}`);
+    return out;
+  }
+  if (name === 'toplanti') {
+    const out = toplantiArac(args);
+    progress(`toplantı: ${args.istek}`);
     return out;
   }
   if (name === 'bekci') {

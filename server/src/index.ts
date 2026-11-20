@@ -13,6 +13,7 @@ import { hitapDuzelt, sttVar, transcribe, STT_MODEL } from './stt.js';
 import { beyinRouter } from './beyin.js';
 import { gokNote, gokRouter, initGok, setGokRequest, type GokBaglam } from './gok.js';
 import { bekciRouter, initBekci } from './bekci/index.js';
+import { baslat as toplantiBaslat, initToplanti, otomatikTartisma, toplantiBeyinDegisti, toplantiRouter } from './toplanti/index.js';
 import {
   BROWSER, DEFAULT_RATE, clampRate, defaultVoice, isRoutedModel, loadCatalog, preview, providerVoices, synthesize, ttsEnabled, voiceId, warmOpening,
   type VoiceSel,
@@ -119,6 +120,7 @@ initHome(broadcast);
 initLab(broadcast);
 initGok(broadcast);
 initBekci(broadcast);
+initToplanti(broadcast, { jarvisSes: () => currentVoice() });
 initNewsCenter(broadcast);
 initAdvisor(broadcast);
 initLibrary(broadcast);
@@ -264,12 +266,14 @@ app.use(cameraRouter());
 // ---------- Beyin (sağlayıcı + anahtar; Ayarlar → Beyin) ----------
 app.use(gokRouter());
 app.use(bekciRouter());
+app.use(toplantiRouter());
 app.use(beyinRouter({
   korumali: !!ACCESS_TOKEN,
   degisti: () => {
     const v = currentVoice();
     console.log(`[tts] seslendiren: ${voiceId(v)}`);
     if (ttsEnabled(v)) { warmOpening(v).catch(() => {}); warmGreetings(v); }
+    toplantiBeyinDegisti();
     broadcast({ type: 'beyin' });
     broadcast(settingsEvent());
   },
@@ -379,6 +383,14 @@ app.post('/api/chat', async (req, res) => {
   const gokRaw = req.body.gok && typeof req.body.gok === 'object' ? JSON.stringify(req.body.gok) : '';
   const gokOk = !!gokRaw && gokRaw.length <= 32_000 && Array.isArray(req.body.gok.yildizlar);
   if (!text && !image) return res.status(400).json({ error: 'boş mesaj' });
+  // Karar sorusu ("Bu iş teklifini kabul edeyim mi?") → Jarvis ve Friday tartışır (Toplantı Odası)
+  if (!image && otomatikTartisma(text)) {
+    const m: StoredMessage = { role: 'user', text, device, at: new Date().toISOString() };
+    state.messages.push(m);
+    broadcast({ type: 'user', message: m, origin: client });
+    void toplantiBaslat({ mod: 'tartisma', konu: text, origin: client }).catch(e => console.warn('[toplantı]', e));
+    return res.json({ ok: true, toplanti: true });
+  }
   if (busy) return res.status(409).json({ error: 'Jarvis şu an başka bir cevabı hazırlıyor' });
   busy = true;
   const t0 = Date.now();

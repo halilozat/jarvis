@@ -13,7 +13,9 @@
     "test:haber": "MOCK=1 tsx src/haber-test.ts",
     "test:sohbet": "tsx src/sohbet-test.ts",
     "test:beyin": "tsx src/beyin-test.ts",
-    "test:bekci": "tsx src/bekci-test.ts"
+    "test:bekci": "tsx src/bekci-test.ts",
+    "test:toplanti": "tsx src/toplanti-test.ts",
+    "eval:toplanti": "tsx src/toplanti-eval.ts"
   },
   "keywords": [],
   "author": "",

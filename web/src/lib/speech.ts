@@ -285,9 +285,11 @@ class VoiceEngine {
   async speak(text: string, v?: VoiceSel, i?: number, n?: number, ctx: TtsCtx = {}): Promise<void> {
     this.stop();
     const gen = this.gen;
+    // Toplantı Odası: Friday'in sesi tarayıcı sesiyse (ElevenLabs yokken) yalnızca o cümle tarayıcıda okunur
+    if (v?.model === 'browser') return this.speakBrowser(text, v.voice);
     this.playRate = v?.model.startsWith('eleven_') ? 1 : this.rate;
     if (this.serverTts && !this.replyBrowser) {
-      // Seçili ses ASLA başka sese düşmez (Halil'in kuralı). Sunucu kısa süre cevap veremezse (ör. yeniden başlarken)
+      // Seçili ses ASLA başka sese düşmez (kullanıcının kuralı). Sunucu kısa süre cevap veremezse (ör. yeniden başlarken)
       // artan aralıklarla tekrar denenir; yine olmazsa bu cümle sessiz geçer (altyazı ekranda kalır).
       for (const wait of [0, 600, 1500, 3000]) {
         if (wait) await new Promise(r => setTimeout(r, wait));
@@ -307,18 +309,22 @@ class VoiceEngine {
     return this.speakBrowser(text);
   }
 
-  private speakBrowser(text: string): Promise<void> {
+  private speakBrowser(text: string, tip?: string): Promise<void> {
     if (!('speechSynthesis' in window)) return new Promise(r => setTimeout(r, Math.max(1500, text.length * 55)));
     return new Promise(resolve => {
       const u = new SpeechSynthesisUtterance(text);
       u.lang = 'tr-TR';
       const voices = this.browserVoices();
       const chosen = this.browserVoiceName ? voices.find(v => v.name === this.browserVoiceName) : undefined;
-      const preferred = chosen || voices.find(v => /yelda|google|premium|enhanced/i.test(v.name)) || voices[0];
+      const kadin = tip === 'tr-kadin';
+      // Friday (kadın sesi): Jarvis'in tarayıcı sesinden farklı bir ses ve biraz daha yüksek perde
+      const preferred = kadin
+        ? voices.find(v => /yelda|filiz|seda|female|kadın/i.test(v.name) && v.name !== this.browserVoiceName) || voices.find(v => v.name !== chosen?.name) || voices[0]
+        : chosen || voices.find(v => /yelda|google|premium|enhanced/i.test(v.name)) || voices[0];
       if (preferred) u.voice = preferred;
       u.rate = this.rate;
       u.onstart = () => this.onPlay?.();
-      u.pitch = 0.95;
+      u.pitch = kadin ? 1.12 : 0.95;
       const done = () => { this.speakingBrowser = false; resolve(); };
       u.onend = done;
       u.onerror = done;

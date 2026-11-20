@@ -1,0 +1,30 @@
+{
+  "aciklama": "Toplantı Odası demo senaryosu (--meeting-demo ya da ?toplanti=demo). LLM çağrılmaz; sesler gerçek. --meeting-record ile kaydedilen bir toplantı da (server/data/meetings/kayit-*.json) MEETING_DEMO_FILE ile oynatılabilir.",
+  "konu": "Bu iş teklifini kabul edeyim mi? Maaş yüzde 20 fazla ama ofise gitmem gerekiyor.",
+  "turlar": [
+    { "kim": "jarvis", "metin": "Efendim, yüzde yirmi ciddi bir artış ve kariyer açısından da ileri bir adım olabilir. Asıl soru, ofis hayatının size neye mal olacağı. Ben şartlar netleşirse kabul etmenizden yanayım." },
+    { "kim": "friday", "metin": "Jarvis, maaşı brüt konuşuyorsun ama yol, öğle yemeği ve günde iki saat trafik net kazancı eritir. Patron, o yüzde yirminin gerçekte yüzde kaça düştüğünü hesaplamadan evet demek erken." },
+    { "kim": "jarvis", "metin": "Haklısın Friday, net hesap şart. Efendim, aylık yol ve yemek giderini çıkarıp kalan farkı saatlik ücrete bölelim; trafikte geçen zamanı da iş saati gibi sayalım." },
+    { "kim": "friday", "metin": "Bir şey daha var: haftada kaç gün ofis? Hibrit pazarlığı yapılmadan teklif kabul edilirse sonradan değiştirmek çok zor, patron." },
+    { "kim": "jarvis", "metin": "Bu sefer Friday'e tamamen katılıyorum. Kabul etmeden önce iki günlük uzaktan çalışma hakkını yazılı olarak istemek en güçlü pazarlık kozunuz efendim." }
+  ],
+  "hakemler": [
+    { "agreement": 55, "new_point_raised": true, "should_continue": true },
+    { "agreement": 88, "new_point_raised": false, "should_continue": false }
+  ],
+  "uzlasma": {
+    "agreed": ["Teklif, net kazanç yol ve zaman maliyetinden sonra da belirgin biçimde yüksekse değerlendirilmeli"],
+    "disagreed": ["Ofise gitmenin kariyer getirisi ne kadar önemli, ondan emin değiliz"],
+    "recommendation": "net farkı hesaplayın ve kabul etmeden önce haftada iki gün uzaktan çalışmayı yazılı olarak isteyin",
+    "confidence": "orta"
+  },
+  "tutanak": {
+    "title": "İş teklifi değerlendirmesi",
+    "date": "",
+    "participants": ["Kullanıcı", "Jarvis", "Friday"],
+    "decisions": ["Teklif, yol ve yemek giderleri çıkarıldıktan sonraki net farka göre değerlendirilecek", "Kabulden önce haftada iki gün uzaktan çalışma yazılı olarak istenecek"],
+    "open_questions": ["Ofiste çalışmanın kariyer getirisi ne kadar önemli?"],
+    "action_items": [{ "who": "Kullanıcı", "what": "Aylık yol, yemek ve trafik süresini hesapla", "when": "bu hafta" }, { "who": "Kullanıcı", "what": "İK ile hibrit çalışma pazarlığı yap", "when": "teklifi kabul etmeden önce" }],
+    "summary": "Teklif cazip ama önce net kazancı hesaplayıp hibrit çalışmayı yazılı olarak isteyeceğiz."
+  }
+}
