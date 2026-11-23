@@ -3,12 +3,11 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Core } from './components/Core';
 import { Handoff, TopBar, Telemetry } from './components/Chrome';
 import { Visual } from './components/Visuals';
-import { AgendaPanel } from './components/dashboard/AgendaPanel';
 import { buildAgenda } from './components/dashboard/agenda';
 import { CompactStrip } from './components/dashboard/CompactStrip';
 import { HeadlineTicker } from './components/dashboard/HeadlineTicker';
 import { MarketsPanel } from './components/dashboard/MarketsPanel';
-import { NewsStatsPanel } from './components/dashboard/NewsStatsPanel';
+import { RightHubPanel } from './components/dashboard/RightHubPanel';
 import { SystemPanel } from './components/dashboard/SystemPanel';
 import { WeatherPanel } from './components/dashboard/WeatherPanel';
 import { SleepLayer, WakeChecks, WakeSettings, calibBus } from './components/Wake';
@@ -21,13 +20,13 @@ import { HomePanel, HomeToast, getHome, homeAct, type HomeState } from './compon
 import type { Kontrol } from './hands/controller';
 import type { GezegenTur } from './hands/fx';
 import { emitCamera, getCameras, getRole, isCameraEvent, onCamera, setRole, toggleCameraPanel } from './lib/camera';
-import { type ElevenUsage, clearConversation, detectDevice, getDashboard, getHealth, getState, getVoices, metric, postAttention, postSleep, postWake, previewUrl, saveDevice, saveSettings, sendChat, setPhotoMode, stt, subscribe, token, clientId } from './lib/api';
+import { type ElevenUsage, activateSession, clearConversation, createNewSession, detectDevice, getDashboard, getHealth, getSessions, getState, getVoices, metric, postAttention, postSleep, postWake, previewUrl, removeSession, saveDevice, saveSettings, sendChat, setPhotoMode, stt, subscribe, token, clientId } from './lib/api';
 import { startClapListener, type ClapListener } from './lib/clap';
 import { shrinkImage } from './lib/image';
 import { recorderSupported, startRecording } from './lib/recorder';
 import { Markdown } from './lib/markdown';
 import { createRecognizer, speechRecognitionSupported, voice } from './lib/speech';
-import { DEVICE_LABEL, type CoreState, type CurrencyCode, type Dashboard, type Device, type GreetingPeriod, type Health, type JarvisReply, type Sahne, type ServerEvent, type StoredMessage, type UiMode, type VoiceOption, type VoiceSel, type WakeConfig } from './lib/types';
+import { DEVICE_LABEL, type CoreState, type CurrencyCode, type Dashboard, type Device, type GreetingPeriod, type Health, type JarvisReply, type Sahne, type ServerEvent, type SessionSummary, type StoredMessage, type UiMode, type VoiceOption, type VoiceSel, type WakeConfig } from './lib/types';
 import { atServerTime, clockInfo, keepAwake, listenForCommand, preciseTimeout, startClockSync, syncClock, type CommandListen } from './lib/wake';
 
 type Highlight = CurrencyCode | 'weather';
@@ -112,6 +111,10 @@ export default function App() {
   const [model, setModel] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [interim, setInterim] = useState('');
+  const [lastQuestion, setLastQuestion] = useState('');
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string>('');
+  const [activeSessionTitle, setActiveSessionTitle] = useState<string>('');
   const [drawer, setDrawer] = useState<null | 'detay' | 'gecmis' | 'ayarlar'>(null);
   const [handoff, setHandoff] = useState<{ kind: 'out' | 'in'; from: Device | null; to: Device } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -429,6 +432,9 @@ export default function App() {
     getState()
       .then(s => {
         setMessages(s.messages);
+        if ((s as any).sessions) setSessions((s as any).sessions);
+        if ((s as any).sessionId) setActiveSessionId((s as any).sessionId);
+        if ((s as any).sessionTitle) setActiveSessionTitle((s as any).sessionTitle);
         setOnline(s.online);
         setMock(s.mock);
         setMode(s.photoMode);
@@ -555,6 +561,14 @@ export default function App() {
           break;
         case 'dashboard': setDash(e.data); setDashTried(true); break;
         case 'cleared': setMessages([]); setReply(null); setSceneIdx(-1); break;
+        case 'session_switched':
+          setActiveSessionId(e.sessionId);
+          setActiveSessionTitle(e.title);
+          setMessages(e.messages);
+          break;
+        case 'sessions_updated':
+          setSessions(e.sessions);
+          break;
       }
     }, setConnected);
   }, [device, play, playOpening, runPlayer, mock]);
@@ -648,6 +662,7 @@ export default function App() {
     stopPlayback();
     setVideo(null); // yeni soru: açık video kapanır
     setInput('');
+    setLastQuestion(t);
     setInterim('');
     setTelemetry([]);
     setCore('thinking');
@@ -660,6 +675,38 @@ export default function App() {
       setTelemetry(['hata: ' + e.message]);
     }
   };
+
+  const handleSwitchSession = useCallback((id: string) => {
+    activateSession(id)
+      .then(res => {
+        setActiveSessionId(res.id);
+        setActiveSessionTitle(res.title);
+        setMessages(res.messages);
+      })
+      .catch(err => flash(err.message));
+  }, []);
+
+  const handleCreateSession = useCallback(() => {
+    createNewSession()
+      .then(res => {
+        setActiveSessionId(res.id);
+        setActiveSessionTitle(res.title);
+        setMessages(res.messages);
+      })
+      .catch(err => flash(err.message));
+  }, []);
+
+  const handleDeleteSession = useCallback((id: string) => {
+    removeSession(id)
+      .then(() => {
+        getSessions().then(data => {
+          setSessions(data.sessions);
+          setActiveSessionId(data.activeId);
+          setActiveSessionTitle(data.activeTitle);
+        });
+      })
+      .catch(err => flash(err.message));
+  }, []);
 
   // Web Speech API yalnızca yedek (iPhone'da güvenilir değil).
   const startWebSpeech = () => {
@@ -939,7 +986,13 @@ export default function App() {
   const scene = reply && sceneIdx >= 0 && sceneIdx < reply.sahneler.length ? reply.sahneler[sceneIdx] : null;
   const photo = scene?.gorsel.foto ?? null;
   const done = !!reply && sceneIdx >= reply.sahneler.length;
-  const caption = core === 'listening' ? interim || 'dinliyorum…' : scene?.ses ?? preCaption;
+  const caption = core === 'listening'
+    ? interim || 'dinliyorum…'
+    : core === 'thinking'
+    ? (lastQuestion ? `“${lastQuestion}”` : 'düşünüyorum…')
+    : core === 'speaking'
+    ? (scene?.ses ?? preCaption)
+    : '';
   const showCta = core === 'idle' && !caption;
 
   // Görselsiz yorum sahnesinde bir önceki görsel ekranda kalır; çekirdek her sahnede büyüyüp küçülmez.
@@ -1063,9 +1116,17 @@ export default function App() {
           <div className="caption">
             <AnimatePresence mode="wait">
               {caption && (
-                <motion.p key={caption} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }}>
-                  {caption}
-                </motion.p>
+                <motion.div
+                  key={caption}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.25 }}
+                  className="caption-box"
+                >
+                  {core === 'thinking' && <span className="caption-tag thinking">sorunuz</span>}
+                  <p>{caption}</p>
+                </motion.div>
               )}
             </AnimatePresence>
             {reply && sceneIdx >= 0 && !done && (
@@ -1077,7 +1138,6 @@ export default function App() {
                 <motion.div key="cta" className="cta" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.15 } }} transition={{ duration: 0.35 }}>
                   {!reply && <div className="cta-hint">{speechRecognitionSupported() ? 'Mikrofona dokun ya da yaz.' : 'Bir şey yaz.'}</div>}
                   <div className="chips">
-                    {done && reply?.detay && <button className="detail-cta" onClick={() => setDrawer('detay')}>detaylı özeti aç ↗</button>}
                     {SUGGESTIONS.map(s => <button key={s} onClick={() => submit(s)}>{s}</button>)}
                   </div>
                 </motion.div>
@@ -1085,16 +1145,28 @@ export default function App() {
             </AnimatePresence>
           </div>
 
-          {/* Sağ sütun: piyasalar + gündem; konuşurken gündem "Bugünün akışı"na dönüşür */}
+          {/* Sağ sütun: piyasalar + gündem & WhatsApp tarzı chat */}
           <aside className="dash-col right" key={'r' + panelKey}>
             <MarketsPanel index={2} data={dash?.markets ?? null} loading={dashLoading} demo={demo} highlight={hl} />
-            <AnimatePresence mode="wait" initial={false}>
-              {showAgenda ? (
-                <AgendaPanel key={'agenda-' + reply!.id} reply={reply!} items={agenda} sceneIdx={sceneIdx} />
-              ) : (
-                <NewsStatsPanel key="news" index={3} data={dash?.news ?? null} loading={dashLoading} demo={demo} />
-              )}
-            </AnimatePresence>
+            <RightHubPanel
+              index={3}
+              data={dash?.news ?? null}
+              loading={dashLoading}
+              demo={demo}
+              reply={reply}
+              agenda={agenda}
+              sceneIdx={sceneIdx}
+              showAgenda={showAgenda}
+              messages={messages}
+              core={core}
+              telemetry={telemetry}
+              sessions={sessions}
+              activeSessionId={activeSessionId}
+              activeSessionTitle={activeSessionTitle}
+              onSwitchSession={handleSwitchSession}
+              onCreateSession={handleCreateSession}
+              onDeleteSession={handleDeleteSession}
+            />
           </aside>
         </main>
 

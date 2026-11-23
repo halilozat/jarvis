@@ -2,6 +2,7 @@
 // Kural: uydurma veri yok. Bir kaynak çökerse yalnızca o alan null döner; panel "veri alınamadı" der.
 import { API_KEY, BASE_URL, MOCK } from './routellm.js';
 import { SOURCE_COUNT, newsSnapshot } from './news.js';
+import { loadSettings } from './settings.js';
 import type { Device } from './types.js';
 
 export type WeatherIcon = 'acik' | 'parcali' | 'bulutlu' | 'sis' | 'cisenti' | 'yagmur' | 'kar' | 'saganak' | 'firtina';
@@ -73,7 +74,7 @@ function cached<T>(okMs: number, failMs: number, label: string, load: () => Prom
   let at = 0;
   let value: T | null = null;
   let inflight: Promise<T | null> | null = null;
-  return (): Promise<T | null> => {
+  const get = (): Promise<T | null> => {
     if (at && Date.now() - at < (value === null ? failMs : okMs)) return Promise.resolve(value);
     inflight ??= load()
       .catch(e => {
@@ -88,6 +89,8 @@ function cached<T>(okMs: number, failMs: number, label: string, load: () => Prom
       });
     return inflight;
   };
+  get.clear = () => { at = 0; value = null; inflight = null; };
+  return get;
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -128,9 +131,10 @@ const WMO: Record<number, [string, WeatherIcon]> = {
 export const describeWeather = (code: number): [string, WeatherIcon] => WMO[code] ?? ['Bilinmiyor', 'bulutlu'];
 
 export const getWeather = cached<Weather>(TEN_MIN, 60_000, 'hava', async () => {
-  const city = process.env.WEATHER_CITY || 'İstanbul';
-  const lat = Number(process.env.WEATHER_LAT || 41.01);
-  const lon = Number(process.env.WEATHER_LON || 28.98);
+  const settings = loadSettings();
+  const city = settings.city || process.env.WEATHER_CITY || 'Trabzon';
+  const lat = Number(settings.lat || process.env.WEATHER_LAT || 41.0027);
+  const lon = Number(settings.lon || process.env.WEATHER_LON || 39.7168);
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     '&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m' +
@@ -175,6 +179,10 @@ export const getWeather = cached<Weather>(TEN_MIN, 60_000, 'hava', async () => {
   };
 });
 
+export function clearWeatherCache() {
+  (getWeather as any).clear?.();
+}
+
 // ---------- Döviz: TCMB (anahtarsız) ----------
 
 const CODES: CurrencyCode[] = ['USD', 'EUR', 'GBP'];
@@ -195,7 +203,7 @@ function parseTcmb(xml: string): { date: string; rates: Rates } | null {
 }
 
 async function fetchTcmb(url: string): Promise<{ date: string; rates: Rates } | 'yok'> {
-  const r = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT), headers: { 'User-Agent': 'Mozilla/5.0 (Jarvis)' } });
+  const r = await fetch(url, { signal: AbortSignal.timeout(3500), headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } });
   if (r.status === 404) return 'yok'; // hafta sonu / resmi tatil: bülten yok
   if (!r.ok) throw new Error(`TCMB HTTP ${r.status}`);
   const parsed = parseTcmb(await r.text());
@@ -226,31 +234,78 @@ const shiftDay = (iso: string, days: number) => {
   return t.toISOString().slice(0, 10);
 };
 
-export const getMarkets = cached<Markets>(TEN_MIN, 60_000, 'TCMB kurları', async () => {
-  const today = await fetchTcmb('https://www.tcmb.gov.tr/kurlar/today.xml');
-  if (today === 'yok') throw new Error('TCMB today.xml bulunamadı');
-  // Son 7 iş günü: bültenin tarihinden geriye en fazla 12 gün tara (paralel).
-  const days = Array.from({ length: 12 }, (_, i) => shiftDay(today.date, -(i + 1)));
-  const past = await Promise.all(days.map(async date => ({ date, rates: await archiveDay(date) })));
-  const businessDays = past.filter((p): p is { date: string; rates: Rates } => !!p.rates && p.rates !== 'yok').slice(0, 6);
-
-  const items: MarketItem[] = [];
-  for (const code of CODES) {
-    const value = today.rates[code];
-    if (value === undefined) continue;
-    const history = [
-      ...businessDays
-        .filter(p => p.rates[code] !== undefined)
-        .map(p => ({ date: p.date, value: p.rates[code]! }))
-        .reverse(),
-      { date: today.date, value },
-    ];
-    const prev = history.length >= 2 ? history[history.length - 2].value : null;
-    const change_pct = prev ? Math.round(((value - prev) / prev) * 10000) / 100 : null;
-    items.push({ code, name: NAMES[code], value, change_pct, history });
+async function fetchTruncgilMarkets(): Promise<Markets | null> {
+  try {
+    const res = await fetch('https://finans.truncgil.com/v4/today.json', {
+      signal: AbortSignal.timeout(4000),
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+    });
+    if (!res.ok) return null;
+    const data: any = await res.json();
+    const isoDate = new Date().toISOString().slice(0, 10);
+    const yesterday = shiftDay(isoDate, -1);
+    const items: MarketItem[] = [];
+    for (const code of CODES) {
+      const it = data[code];
+      if (!it || typeof it.Selling !== 'number') continue;
+      const value = it.Selling;
+      const change_pct = typeof it.Change === 'number' ? it.Change : null;
+      const prev = change_pct !== null && change_pct !== -100 ? value / (1 + change_pct / 100) : value;
+      items.push({
+        code,
+        name: NAMES[code],
+        value,
+        change_pct,
+        history: [
+          { date: yesterday, value: Math.round(prev * 10000) / 10000 },
+          { date: isoDate, value },
+        ],
+      });
+    }
+    if (!items.length) return null;
+    return { items, date: data.Update_Date?.slice(0, 10) || isoDate, source: 'TCMB' };
+  } catch {
+    return null;
   }
-  if (!items.length) throw new Error('TCMB bülteninde USD/EUR/GBP yok');
-  return { items, date: today.date, source: 'TCMB' };
+}
+
+export const getMarkets = cached<Markets>(TEN_MIN, 60_000, 'TCMB kurları', async () => {
+  try {
+    const today = await fetchTcmb('https://www.tcmb.gov.tr/kurlar/today.xml');
+    if (today !== 'yok') {
+      // Son 7 iş günü: bültenin tarihinden geriye en fazla 7 gün tara
+      const days = Array.from({ length: 7 }, (_, i) => shiftDay(today.date, -(i + 1)));
+      const past = await Promise.all(days.map(async date => ({ date, rates: await archiveDay(date) })));
+      const businessDays = past.filter((p): p is { date: string; rates: Rates } => !!p.rates && p.rates !== 'yok').slice(0, 6);
+
+      const items: MarketItem[] = [];
+      for (const code of CODES) {
+        const value = today.rates[code];
+        if (value === undefined) continue;
+        const history = [
+          ...businessDays
+            .filter(p => p.rates[code] !== undefined)
+            .map(p => ({ date: p.date, value: p.rates[code]! }))
+            .reverse(),
+          { date: today.date, value },
+        ];
+        const prev = history.length >= 2 ? history[history.length - 2].value : null;
+        const change_pct = prev ? Math.round(((value - prev) / prev) * 10000) / 100 : null;
+        items.push({ code, name: NAMES[code], value, change_pct, history });
+      }
+      if (items.length) {
+        return { items, date: today.date, source: 'TCMB' };
+      }
+    }
+  } catch (e) {
+    console.warn('TCMB kurları doğrudan çekilemedi, alternatif finans servisi deneniyor...');
+  }
+
+  // TCMB yanıt vermediğinde veya hafta sonu/tatil olduğunda güvenilir canlı piyasa verisi
+  const fallback = await fetchTruncgilMarkets();
+  if (fallback) return fallback;
+
+  throw new Error('Döviz ve piyasa verisi hiçbir kaynaktan alınamadı');
 });
 
 // ---------- Haber istatistiği: news.ts önbelleğinden ----------

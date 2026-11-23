@@ -47,6 +47,15 @@ export interface StoredMessage {
   reply?: JarvisReply;
 }
 
+export interface SessionSummary {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+  lastMessage?: string;
+}
+
 export type CoreState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
 import type { CameraEvent } from './camera';
@@ -72,7 +81,9 @@ export type ServerEvent =
   | { type: 'sleep' }
   | { type: 'dashboard'; data: Dashboard }
   | { type: 'cleared' }
-  | { type: 'kitaplik' };
+  | { type: 'kitaplik' }
+  | { type: 'session_switched'; sessionId: string; title: string; messages: StoredMessage[] }
+  | { type: 'sessions_updated'; sessions: SessionSummary[] };
 
 /** Ekran: mark1 sade, mark2 yoğun HUD (tüm cihazlarda ortak) */
 export type UiMode = 'mark1' | 'mark2';

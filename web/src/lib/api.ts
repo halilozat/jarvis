@@ -136,6 +136,29 @@ export async function clearConversation() {
   await fetch('/api/clear', { method: 'POST', headers: headers() });
 }
 
+export async function getSessions(): Promise<{ activeId: string; activeTitle: string; sessions: import('./types').SessionSummary[] }> {
+  const r = await fetch('/api/sessions', { headers: headers() });
+  if (!r.ok) throw new Error('Oturumlar alınamadı');
+  return r.json();
+}
+
+export async function createNewSession(title?: string): Promise<{ id: string; title: string; messages: import('./types').StoredMessage[] }> {
+  const r = await fetch('/api/sessions', { method: 'POST', headers: headers(), body: JSON.stringify({ title }) });
+  if (!r.ok) throw new Error('Yeni oturum açılamadı');
+  return r.json();
+}
+
+export async function activateSession(id: string): Promise<{ id: string; title: string; messages: import('./types').StoredMessage[] }> {
+  const r = await fetch(`/api/sessions/${encodeURIComponent(id)}/activate`, { method: 'POST', headers: headers() });
+  if (!r.ok) throw new Error('Oturum değiştirilemedi');
+  return r.json();
+}
+
+export async function removeSession(id: string): Promise<void> {
+  const r = await fetch(`/api/sessions/${encodeURIComponent(id)}`, { method: 'DELETE', headers: headers() });
+  if (!r.ok) throw new Error('Oturum silinemedi');
+}
+
 /** Önceki/sonraki cümle: ElevenLabs tonlamayı cümleler arasında sürdürsün diye */
 export interface TtsCtx { prev?: string; next?: string }
 

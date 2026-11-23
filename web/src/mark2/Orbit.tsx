@@ -78,37 +78,6 @@ function Categories({ d }: { d: Dashboard | null }) {
   );
 }
 
-/** Önümüzdeki 12 saat: sıcaklık çubukları ve yağış olasılığı. */
-function Hourly({ d, hl }: { d: Dashboard | null; hl: boolean }) {
-  const hrs = d?.weather?.hourly ?? [];
-  const temps = hrs.map(h => h.temp);
-  const mn = Math.min(...temps), mx = Math.max(...temps);
-  const from = 118, to = 166;
-  const step = (to - from) / Math.max(1, hrs.length);
-  return (
-    <g className={'o-hourly' + (hl ? ' hl' : '')}>
-      <Frame from={from} to={to} r1={430} label="HAVA · 12 SAAT" at={from - 4} anchor="start" />
-      {hrs.length === 0 && <text x={polar(320, 140)[0]} y={polar(320, 140)[1]} className="o-na">veri yok</text>}
-      {hrs.map((h, i) => {
-        const a = from + step * (i + 0.5);
-        const len = 18 + 90 * (mx > mn ? (h.temp - mn) / (mx - mn) : 0.5);
-        const [x0, y0] = polar(R0 + 10, a), [x1, y1] = polar(R0 + 10 + len, a), [tx, ty] = polar(R0 + 18 + len, a);
-        const [rx, ry] = polar(R0 + 140, a);
-        const p = (h.rain_prob ?? 0) / 100;
-        return (
-          <g key={h.time}>
-            <line x1={x0} y1={y0} x2={x1} y2={y1} className="o-bar" />
-            {i % 3 === 0 && (
-              <text x={tx} y={ty} className="o-t" dominantBaseline="middle" transform={rot(a, tx, ty, false)}>{h.time} {Math.round(h.temp)}°</text>
-            )}
-            <circle cx={rx} cy={ry} r={1.5 + p * 5} className={'o-rain' + (p >= 0.4 ? ' wet' : '')} />
-          </g>
-        );
-      })}
-    </g>
-  );
-}
-
 /** Haber kaynakları: çekirdekten çıkan kılavuz çizgileri, sağda durum noktası. */
 function Sources({ d }: { d: Dashboard | null }) {
   const src = d?.news.sources ?? [];
@@ -142,7 +111,6 @@ export const Orbit = memo(function Orbit({ d, hl, dim }: { d: Dashboard | null; 
       <circle r={455} className="o-ring faint" />
       <Markets d={d} hl={hl} />
       <Categories d={d} />
-      <Hourly d={d} hl={hl.includes('weather')} />
       <Sources d={d} />
     </svg>
   );

@@ -12,6 +12,7 @@ import { isEmbeddable, isShort } from './youtube.js';
 import { FAL_SON, findScripted, isFalTurn } from './scripted.js';
 import { cameraList } from './camera.js';
 import { BRIEF_OPENING, BRIEF_TRIGGER } from './brief.js';
+import { listProjects, type ManagedProject } from './projects.js';
 import type { Device, Gorsel, GorselWithPhoto, JarvisReply, Photo, Sahne, StoredMessage } from './types.js';
 
 const MAX_ROUNDS = 5;
@@ -128,9 +129,25 @@ function normalizeGorsel(g: any): GorselWithPhoto {
   }
 }
 
+export function cleanRepetitiveSentences(text: string): string {
+  if (!text) return '';
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  const seen: string[] = [];
+  for (const s of sentences) {
+    const norm = s.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+    if (!norm) continue;
+    const lastNorm = seen.length > 0 ? seen[seen.length - 1].toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '') : '';
+    if (norm === lastNorm) continue;
+    seen.push(s.trim());
+  }
+  return seen.join(' ');
+}
+
 export function normalizeScene(s: any): Sahne | null {
   if (!s || typeof s.ses !== 'string' || !s.ses.trim()) return null;
-  return { ses: s.ses.trim(), gorsel: normalizeGorsel(s.gorsel) };
+  const ses = cleanRepetitiveSentences(s.ses.trim());
+  if (!ses) return null;
+  return { ses, gorsel: normalizeGorsel(s.gorsel) };
 }
 
 /**
@@ -254,6 +271,11 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
       if (!sc) return;
       // Fal turunda model kapanış cümlesini kendisi de yazarsa atla: o cümle sunucudan, birebir gelir
       if (fal && !raw?.__falSon && /100\s*bin/i.test(sc.ses)) return;
+      // Gündem brifingi DEĞİLKEN model sehven brifing açılışı veya haber taklidi yaparsa filtrele / atla
+      if (!isBrief && (isOpening(sc) || /kahvenizi\s*ald[ıi]ysan[ıi]z/i.test(sc.ses))) {
+        console.warn(`[agent] Brifing dışı turda brifing kalıbı atlandı: ${sc.ses}`);
+        return;
+      }
       // Brifing her zaman sabit açılışla başlar; model yazmadıysa önüne eklenir.
       if (isBrief && firstScene && !isOpening(sc)) emit({ ses: BRIEF_OPENING, gorsel: { tip: 'yok' } });
       firstScene = false;
@@ -275,6 +297,21 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
   };
   const finish = async (detay: string): Promise<JarvisReply> => {
     await chain;
+    // Eğer hiçbir sahne üretilmediyse asla boş dönme; kullanıcıya güvenli fallback sahnesi ver:
+    if (emitted.length === 0) {
+      let fb = detay?.trim() || toolText?.trim();
+      if (!fb) {
+        if (isProjectIntent) {
+          fb = 'Efendim, projeniz için teknik mülakatı başlatıyorum. Mimari tercihleriniz, teknoloji stacki ve temel gereksinimler üzerine odaklanabiliriz. Projede özellikle vurgulamak istediğiniz detaylar nelerdir?';
+        } else {
+          fb = 'Sizi dinliyorum efendim.';
+        }
+      }
+      emit({
+        ses: fb.slice(0, 300),
+        gorsel: { tip: 'ikon', ikon: isProjectIntent ? 'code' : 'sparkles', baslik: isProjectIntent ? 'Yazılım Direktörü' : 'Jarvis' },
+      });
+    }
     opts.onScenesDone?.(emitted.length);
     console.log(`[zaman] tüm sahneler · ${emitted.length} sahne · ${since()}`);
     // Geç gelen yapay zeka görselleri kaydedilen cevaba da girsin (en fazla 15 sn beklenir; çalma bunu beklemez).
@@ -282,7 +319,12 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
     return {
       id: randomUUID(),
       sahneler: emitted.slice(),
-      detay,
+      detay:
+        detay &&
+        detay.trim() !== emitted[0]?.ses?.trim() &&
+        !(emitted.length === 1 && emitted[0]?.ses?.trim() && detay.trim().startsWith(emitted[0].ses.trim()) && Math.abs(detay.trim().length - emitted[0].ses.trim().length) < 30)
+          ? detay.trim()
+          : '',
       model: modelUsed,
       router: CHAT_MODEL,
       tool_log: toolLog,
@@ -315,6 +357,40 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
     return { ...r, router: 'demo' };
   }
 
+  // Yazılım / Web / Proje geliştirme niyeti kontrolü
+  const isProjectIntent = /(?:proje|yaz[ıi]l[ıi]m|web|site|rent\s*a\s*car|kodlama|uygulama|geli[sş]tir|tasar[ıi]m|frontend|backend|fullstack|api|veritaban[ıi]|react|vue|node|python|cli|bot|dashboard|panel)/i.test(text);
+  const isCodingTrigger = /(?:kodla|kodlama|kodlamaya|geli[sş]tir|in[sş]a\s*et|kodlar[ıi]\s*yaz|kod\s*yaz|ba[sş]la|başla)/i.test(text) &&
+    /(?:proje|kod|web|site|admin|rentacar|rent\s*a\s*car|araç|filo|uygulama|bot|api|dashboard|panel)/i.test(text);
+
+  // Proje sicilindeki mevcut projeler ve hedef proje tespiti
+  const currentProjects = listProjects();
+  const sortedProjects = [...currentProjects].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+  const matchedProject: ManagedProject | null = currentProjects.find(
+    p => text.toLowerCase().includes(p.id.toLowerCase()) || text.toLowerCase().includes(p.name.toLowerCase())
+  ) || sortedProjects[0] || null;
+
+  const PROJECT_NOTE = `[Sistem Direktifi - Baş Mimar / Yazılım Direktörü (Tech Lead) Modu]:
+Kullanıcı bir yazılım, web sitesi veya proje geliştirme sürecinde konuşuyor.
+KESİNLİKLE haber, gündem veya hava durumu anlatma! "Merhaba efendim kahvenizi aldıysanız..." kalıbını KESİNLİKLE KULLANMA!
+${isCodingTrigger && matchedProject ? `
+KRİTİK TALİMAT - KODLAMA GÖREVİNİ HEMEN BAŞLAT:
+Kullanıcı "${matchedProject.name}" projesinin kodlanmasını / başlatılmasını emretti ("${text}")!
+Hiç vakit kaybetmeden ve sadece lafla oyalamadan DERHAL \`kod_gorevi_ver\` aracını çağır!
+- proje: "${matchedProject.id}"
+- talimat: "${matchedProject.name}" projesi (${matchedProject.techStack?.join(', ') || 'Modern Stack'} - Hedef: ${matchedProject.purpose || 'Uygulama'}) için gerekli tüm kaynak dosyaları, bileşenleri, veri modelini/şemasını, konfigürasyonu ve test komutunu içeren eksiksiz teknik şartname.
+Asla konuşup aracı çağırmamazlık etme, ŞİMDİ \`kod_gorevi_ver\` aracını çağır!` : `
+Kullanıcının son mesajındaki teknik tercihleri ve soruları analiz et:
+- Eğer kullanıcı YENİ bir proje fikrinden bahsediyorsa ve henüz gereksinimler konuşulmadıysa: 2-3 kilit soruyla mülakat yap (Teknoloji stack'i, frontend/backend, veritabanı veya tasarım tercihleri).
+- Eğer kullanıcı mülakat sorularına yanıt verdiyse veya projeyi kaydetmek istiyorsa:
+  1. Kullanıcının tüm tercihlerini onayla ve mimari kararları özetle.
+  2. \`proje_sicili\` (islem: "olustur", proje_adi: "...", proje_id: "...", tur: "...", port: ..., komut: "...", cli: "claude", hedef: "...", teknolojiler: [...]) aracını çağırarak projeyi oluştur ve sicil defterine kaydet!
+  3. "ses" sahnelerinde: Kararları onayladığını, projenin oluşturulduğunu ve şartnamenin hazır olduğunu söyle (1-2 sahne). Asla aynı cümleyi ardışık tekrarlama!
+  4. "detay" alanında: Modüler dosya mimarisini ve gereksinimleri içeren tam teknik şartnameyi sun.
+- Kullanıcı kodlamaya başlama emri verdiyse ("kodla", "başla") derhal \`kod_gorevi_ver\` aracını çağır.`}
+`;
+
   // Sistem prompt'u: değişmeyen kısım başta, tarih/saat/cihaz sonda (RouteLLM prompt önbelleği her turda tutsun).
   const userContent: string | ContentPart[] = opts.image
     ? [{ type: 'text', text: `${text || 'Bu ne?'}${fal ? `\n\n${FAL_NOTE}` : ''}` }, { type: 'image_url', image_url: { url: opts.image } }]
@@ -322,10 +398,26 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
       ? `${text}\n\n${FAL_NOTE}`
       : isBrief
       ? `${text}\n\n[Sistem notu: Bu, gündem brifingi komutu. Gündem özeti protokolünü uygula.]`
+      : isProjectIntent
+      ? `${text}\n\n${PROJECT_NOTE}`
       : text;
+
+  // 1) Son kullanıcı mesajı zaten userContent olarak eklendiğinden geçmişte çift eklenmesin
+  // 2) Önceki oturumlardan kalan devasa haber bültenleri modeli şaşırtmasın diye özetlensin
+  const priorHistory = history
+    .filter((m, idx) => !(idx === history.length - 1 && m.role === 'user' && m.text === text))
+    .slice(-8)
+    .map(m => {
+      let content = m.text;
+      if (m.role === 'assistant' && (content.includes(BRIEF_OPENING) || /kahvenizi\s*ald[ıi]ysan[ıi]z/i.test(content))) {
+        content = '[Gündem ve haber brifingi tamamlandı.]';
+      }
+      return { role: m.role, content } as ChatMessage;
+    });
+
   const messages: ChatMessage[] = [
     { role: 'system', content: buildSystemPrompt(contextVars(device, prevDevice)) },
-    ...history.slice(-12).map(m => ({ role: m.role, content: m.text }) as ChatMessage),
+    ...priorHistory,
     { role: 'user', content: userContent },
   ];
   const model = opts.image ? VISION_MODEL : CHAT_MODEL;
@@ -334,28 +426,76 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
   // Her aracın çıktısı toolText'e eklenir; verifyVisual sayı/grafik/harita/alıntı görsellerini bu gerçek veriyle doğrular.
   const tools = isBrief ? TOOLS : TOOLS.filter(t => t.function.name !== 'get_news');
   let forceNews = isBrief;
+  let forceCoding = isCodingTrigger;
   let retriedJson = false;
+  let lastCallEndTime = 0;
+  let keepaliveRetries = 0;
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
-    const body: any = { model, messages, tools, tool_choice: forceNews ? { type: 'function', function: { name: 'get_news' } } : 'auto' };
+    // Model sağlayıcısının (OmniRoute / Codestral) ardışık çağrılarda 3 sn soğuma kuralına uyum sağlamak için pacing:
+    const elapsed = Date.now() - lastCallEndTime;
+    if (lastCallEndTime > 0 && elapsed < 3100) {
+      await new Promise(r => setTimeout(r, 3100 - elapsed));
+    }
+
+    const body: any = {
+      model,
+      messages,
+      tools,
+      tool_choice: forceNews
+        ? { type: 'function', function: { name: 'get_news' } }
+        : forceCoding
+        ? { type: 'function', function: { name: 'kod_gorevi_ver' } }
+        : 'auto',
+      temperature: 0.4,
+      frequency_penalty: 0.2,
+      presence_penalty: 0.1,
+    };
     log(round === 0 ? 'düşünüyor' : 'cevabı hazırlıyor');
 
     const parser = new SceneStream();
     let res;
     try {
       res = await routellmStream(body, (_d, full) => parser.push(full).forEach(enqueue));
-    } catch (e) {
-      if (forceNews && e instanceof RouteLLMError && e.status === 400) {
-        forceNews = false; // sağlayıcı zorunlu tool_choice'u desteklemiyorsa 'auto' ile tekrar dene
+      lastCallEndTime = Date.now();
+    } catch (e: any) {
+      lastCallEndTime = Date.now();
+      if ((forceNews || forceCoding) && e instanceof RouteLLMError && e.status === 400) {
+        forceNews = false;
+        forceCoding = false;
+        round--;
+        continue;
+      }
+      const isCooldown =
+        e instanceof RouteLLMError &&
+        (e.status === 429 ||
+          e.status === 503 ||
+          /cooling down|quota|rate limit|ALL_TARGETS_SKIPPED|temporarily unavailable/i.test(e.body));
+
+      if (isCooldown) {
+        console.warn(`[agent] Model soğuma aşamasında (HTTP ${e.status}), 3.2 sn bekleniyor...`);
+        await new Promise(r => setTimeout(r, 3200));
         round--;
         continue;
       }
       throw e;
     }
     forceNews = false;
+    forceCoding = false;
     if (res.model && res.model !== modelUsed) console.log(`[beyin] istenen: ${model} → çalışan: ${res.model}`);
     modelUsed = res.model ?? modelUsed;
     console.log(`[zaman] tur ${round + 1} · ilk token ${res.firstTokenMs ?? '—'} ms · bitiş ${res.totalMs} ms · ${res.tool_calls.length ? 'araç: ' + res.tool_calls.map(c => c.function.name).join(', ') : res.content.length + ' karakter'}`);
+
+    // OmniRoute geçici olarak keepalive / 0 karakter döndüyse (sağlayıcı o an soğumada / meşgul):
+    if (res.model === 'keepalive' || (!res.content.trim() && !res.tool_calls.length)) {
+      if (keepaliveRetries < 3) {
+        keepaliveRetries++;
+        console.warn(`[agent] OmniRoute keepalive / boş yanıt döndü (${keepaliveRetries}/3), sağlayıcı soğuması bekleniyor (2.8 sn)...`);
+        await new Promise(r => setTimeout(r, 2800));
+        round--;
+        continue;
+      }
+    }
 
     if (res.tool_calls.length) {
       messages.push({ role: 'assistant', content: res.content || null, tool_calls: res.tool_calls });
@@ -385,11 +525,48 @@ export async function runJarvis(opts: RunOptions): Promise<JarvisReply> {
       continue;
     }
 
+    // Kodlama başlatma emrinde model aracı çağırmayıp sadece lafla geçiştirdiyse:
+    if (isCodingTrigger && !toolText && round === 0 && matchedProject) {
+      console.log(`[agent] Kodlama tetikleyicisi devrede, kod_gorevi_ver doğrudan çağrılıyor (${matchedProject.id})...`);
+      log(`Claude Code CLI çalışıyor (${matchedProject.name})...`);
+      const defaultTalimat = `${matchedProject.name} projesinin (${matchedProject.techStack?.join(', ') || 'Modern Stack'} - Hedef: ${matchedProject.purpose || 'Uygulama'}) tüm kaynak dosyalarını, bileşenlerini, veri şemasını ve konfigürasyonunu eksiksiz oluştur ve çalışır duruma getir.`;
+
+      const out = await runTool('kod_gorevi_ver', JSON.stringify({ proje: matchedProject.id, talimat: defaultTalimat }), log);
+      toolText += '\n' + out;
+      messages.push({ role: 'assistant', content: content || `${matchedProject.name} projesini kodlamaya başlıyorum efendim.` });
+      messages.push({
+        role: 'user',
+        content: `kod_gorevi_ver aracının sonucu:\n${out}\n\nŞimdi bu sonuca göre:
+1. "ses" sahnelerinde: Kodlamanın tamamlandığını veya durumunu 1-2 şık cümleyle bildir (Asla aynı cümleyi ardışık tekrar etme).
+2. "detay" alanında: Hangi dosyaların oluşturulduğunu, kurulum ve test adımlarını özetleyen net bir teknik rapor hazırla.
+JSON şemasına uygun yanıt ver.`
+      });
+      continue;
+    }
+
     // Akışta kaçan sahne kaldıysa (ör. nesne bölünmüş geldiyse) tam JSON'dan tamamla.
     const all: any[] = Array.isArray(parsed?.sahneler) ? parsed.sahneler : [];
     all.slice(parser.count).forEach(enqueue);
 
     if (!parser.count && !all.length) {
+      // Model geçerli JSON yerine doğrudan düz metin cevap verdiyse (özellikle araç çağrılarından sonra):
+      // Tekrar JSON istemek yerine bu cevabı hemen sahneye dönüştür — böylece keepalive / boş yanıt riski sıfırlanır!
+      if (content && content.trim()) {
+        const plain = content.trim();
+        console.log(`[agent] Düz metin yanıt sahneye dönüştürüldü: ${plain.slice(0, 80)}`);
+        let ikon = 'sparkles';
+        if (/indir|dosya|fatura|download|belge/i.test(plain) || /dosya/i.test(toolLog.join(' '))) ikon = 'file';
+        else if (/hava|derece|sıcaklık/i.test(plain)) ikon = 'cloud';
+        else if (/piyasa|altın|dolar|borsa/i.test(plain)) ikon = 'trending-up';
+
+        enqueue({
+          ses: plain.slice(0, 400),
+          gorsel: { tip: 'ikon', ikon, baslik: 'Jarvis' },
+        });
+        if (fal) enqueue(FAL_FINAL);
+        return finish(plain);
+      }
+
       if (!retriedJson) {
         retriedJson = true;
         console.warn(`JSON alınamadı, yeniden isteniyor: ${content.slice(0, 160).replace(/\s+/g, ' ')}`);
