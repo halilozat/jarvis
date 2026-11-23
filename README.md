@@ -261,6 +261,84 @@ Beyin RouteLLM'de kalır, yalnızca seslendirme ElevenLabs'ten gelir.
 
 Her cümle, önceki ve sonraki cümle bağlam olarak verilerek seslendirilir; böylece tonlama sahneden sahneye kopmaz. Hız ElevenLabs tarafında uygulanır, tarayıcıda hızlandırma yapılmaz. Aynı cümleler diske önbelleklenir, tekrar çalınması kredi harcamaz.
 
+### 🦾 Iron Man Laboratuvarı & CLI Kodlama Mimarı
+
+Jarvis sadece soru yanıtlayan bir asistan değildir; aynı zamanda sizin **Baş Mimarınız ve Yazılım Direktörünüzdür (Tech Lead)**. Bilgisayarınızdaki AI kodlama motorlarını (Claude Code CLI veya Antigravity CLI) yöneterek bağımsız yazılım projeleri inşa eder.
+
+Tüm projeler `C:\_Projects\JarvisProject\<proje-adi>` klasöründe bağımsız olarak oluşturulur ve `proje_sicili` defterinde saklanır.
+
+#### 1. CLI Kodlama Motorlarının Kurulumu
+
+Jarvis'in kodlama görevlerini delege edebilmesi için bilgisayarınızda **Claude Code CLI** (birincil) veya **Antigravity CLI** (yedek) kurulu olmalıdır:
+
+```bash
+# Claude Code CLI Kurulumu (Önerilen Birincil Motor):
+npm install -g @anthropic-ai/claude-code
+
+# İlk yetkilendirme (tarayıcıdan bir kez giriş yapın):
+claude auth
+```
+
+> **Not:** Claude Code kota aşımı veya hata verirse, sistem otomatik olarak **Antigravity CLI (`agy.exe`)** motoruna devreder. Kodlama sürecinde bağlam (`/resume`, `-c`) daima korunur.
+
+#### 2. Proje Geliştirme Döngüsü
+
+1. **Fikri Belirtme & Teknik Mülakat:**
+   Jarvis'e mikrofonla veya sohbetten *"Bana bir rent a car / e-ticaret / kripto takip web sitesi yap"* dediğinizde Jarvis haber veya hava durumu anlatmaz; doğrudan Yazılım Direktörü moduna geçer ve 2-3 kilit soruyla mimariyi olgunlaştırır (teknoloji stack'i, veritabanı, özel modüller).
+2. **Proje Sicili:**
+   Gereksinimler netleştiğinde projeyi `C:\_Projects\JarvisProject\<proje_id>` altında sicile kaydeder.
+3. **Kodlama Emri:**
+   *"Projeyi kodlamaya başla"* dediğinizde Jarvis kapsamlı teknik şartnameyi hazırlar ve arka planda Claude Code CLI'ı çalıştırır. Sağ paneldeki düşünme balonunda anlık kodlama telemetrisi (`CLAUDE: ...`) akar.
+4. **Denetleme & Canlı Önizleme:**
+   *"Projeyi denetle"* veya *"projeyi test et"* dediğinizde Jarvis geliştirme sunucusunu ayağa kaldırır, portunu doğrular ve gerçek ekran görüntüsünü alarak size sunar.
+
+---
+
+### 💬 WhatsApp Tarzı Çoklu Sohbet & Kalıcı Oturumlar
+
+Arayüzün sağ paneli **[GÜNDEM]** ve **[CHAT]** olarak ikiye ayrılmıştır:
+
+- **Gündem Sekmesi:** Türkiye ve dünya gündeminden kategorize edilmiş haber istatistiklerini ve haber bültenini sunar.
+- **Chat Sekmesi:** WhatsApp mesajlaşma deneyimi sunar:
+  - Kullanıcı (sağ) ve Jarvis (sol) konuşma balonları, zaman damgası ve cihaz etiketi.
+  - Jarvis düşünürken çalışan araçların telemetrisi düşünme balonunda canlı akar.
+  - **Kalıcı Oturum Yönetimi:** `+ Yeni` düğmesiyle yeni oturum açabilir, `🕒 Geçmiş` düğmesiyle önceki sohbetleri listeleyip istediğiniz oturuma dönebilirsiniz.
+- **Geçmişi Hatırlama (`hafizadan_hatirla`):**
+  *"Geçen gün bahsettiğim konu neydi?"* veya *"Daha önce kararlaştırdığımız renk teması neydi?"* dediğinizde Jarvis tüm geçmiş oturumları tarayıp o bilgiyi anında hatırlar.
+
+---
+
+### 📁 Dosya, Masaüstü ve Sistem Yönetimi
+
+- **Dosya Arama & İndirilenler:**
+  - *"İndirilenler klasöründeki en son dosyayı bul"*
+  - *"Masaüstümdeki fatura PDF'lerini ara"*
+  - Sistem dosyaları (`desktop.ini`, `thumbs.db`) filtrelenir; yalnızca gerçek kullanıcı dosyaları listelenir.
+- **Masaüstü Düzenleyici:**
+  - *"Masaüstümü düzenle / toparla"*: Masaüstündeki dağınık dosyaları uzantılarına göre (Resimler, Belgeler, Kodlar vb.) otomatik klasörler.
+- **Sistem Kontrolü:**
+  - *"Sesi yüzde elli yap / sesi kıs / sessize al"*
+  - *"CPU ve RAM durumunu söyle"*
+  - *"Bilgisayarı kilitle"*, *"1 saat sonra bilgisayarı kapat"*
+  - *"Spotify'ı aç"*, *"VS Code'u kapat"*
+- **Masaüstü & Telegram Bildirimleri:**
+  - *"Bunu masaüstüme bildirim olarak at"* (Windows Toast bildirimi çıkarır)
+  - *"Telegram'dan telefonuma gönder"* (Telegram bot entegrasyonu)
+
+---
+
+### 📍 Akıllı Konum, Canlı Piyasa ve Hatırlatıcılar
+
+- **Dinamik Konum:**
+  - *"Biz Trabzon'dayız"* veya *"Konumumu İzmir yap"*: Şehir, koordinatlar ve hava durumu anında güncellenir.
+  - *"Konumumu otomatik yap"*: IP üzerinden otomatik şehir tespiti yapılır.
+- **Canlı Finans & Altın:**
+  - *"Gram altın ne kadar?"*, *"Borsa (BIST 100) bugün nasıl kapandı?"*, *"Dolar ve Euro kaç TL?"*
+  - TCMB kurları tatile girdiğinde veya geciktiğinde otomatik canlı serbest piyasa fallback servisi devreye girer.
+- **Hatırlatıcı & Yapılacaklar (Todo):**
+  - *"Bana 15 dakika sonra fırını kapatmamı hatırlat"*
+  - *"Görevlerime market alışverişini ekle"*, *"Yapılacaklar listemi oku"*
+
 ### Ekran: Mark 1 / Mark 2
 
 *Ayarlar → Ekran* bölümünden seçilir ve tüm cihazlarda ortaktır. Ortak ayarı değiştirmeden yalnızca bir sekmede denemek için adresin sonuna `?ui=mark2` (ya da `?ui=mark1`) ekleyin.

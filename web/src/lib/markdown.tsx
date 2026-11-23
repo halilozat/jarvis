@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 
-// Küçük ve güvenli markdown: başlık, madde, alıntı, kalın, italik, kod, link.
+// Küçük ve güvenli markdown: başlık, madde, alıntı, kalın, italik, kod, link ve görsel.
 function inline(text: string, key: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const re = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g;
+  const re = /(!\[[^\]]*\]\([^)\s]+\)|\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^)\s]+\))/g;
   let last = 0;
   let m: RegExpExecArray | null;
   let i = 0;
@@ -11,7 +11,14 @@ function inline(text: string, key: string): ReactNode[] {
     if (m.index > last) out.push(text.slice(last, m.index));
     const t = m[0];
     const k = `${key}-${i++}`;
-    if (t.startsWith('**')) out.push(<strong key={k}>{t.slice(2, -2)}</strong>);
+    if (t.startsWith('![')) {
+      const mm = /!\[([^\]]*)\]\(([^)]+)\)/.exec(t)!;
+      out.push(
+        <a key={k} href={mm[2]} target="_blank" rel="noreferrer" className="md-img-link">
+          <img src={mm[2]} alt={mm[1] || 'Ekran görüntüsü'} className="md-img" />
+        </a>
+      );
+    } else if (t.startsWith('**')) out.push(<strong key={k}>{t.slice(2, -2)}</strong>);
     else if (t.startsWith('`')) out.push(<code key={k}>{t.slice(1, -1)}</code>);
     else if (t.startsWith('[')) {
       const mm = /\[([^\]]+)\]\(([^)]+)\)/.exec(t)!;

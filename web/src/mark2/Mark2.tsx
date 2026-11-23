@@ -182,9 +182,10 @@ export default function Mark2(p: Mark2Props) {
         <div className="m2-caption">
           <AnimatePresence mode="wait">
             {p.caption && (
-              <motion.p key={p.caption} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.22 }}>
-                <span className="who">{p.core === 'listening' ? 'SİZ' : 'JARVIS'} ▸</span> {p.caption}
-              </motion.p>
+              <motion.div key={p.caption} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.22 }} className="m2-caption-box">
+                <span className="who">{p.core === 'listening' ? 'SİZ' : p.core === 'thinking' ? 'SORU' : 'JARVIS'} ▸</span>
+                <p>{p.caption}</p>
+              </motion.div>
             )}
           </AnimatePresence>
           {p.speakingReply && p.reply && (

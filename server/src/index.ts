@@ -21,6 +21,20 @@ import { markBlocked } from './youtube.js';
 import { CAMERA_ENABLED, VISION_MODEL, cameraRouter, initCameras, onClientClosed } from './camera.js';
 import { control, homeState, initHome, type DeviceId, type HomeAction } from './home.js';
 import { initLibrary, libraryRouter } from './library.js';
+import { initSettings } from './settings.js';
+import { SCREENSHOTS_DIR, auditProject } from './inspector.js';
+import { listProjects, getProject } from './projects.js';
+import {
+  initSessions,
+  getActiveSession,
+  listSessions,
+  getSession,
+  createSession,
+  switchSession,
+  deleteSession,
+  appendMessageToActiveSession,
+  clearActiveSessionMessages,
+} from './sessions.js';
 import { ELEVEN_MODEL, ELEVEN_MODEL_LABEL, elevenReady, elevenUsage, elevenVoices, isEleven } from './eleven.js';
 import type { Device, StoredMessage } from './types.js';
 
@@ -53,6 +67,8 @@ function loadState(): State {
   }
 }
 const state = loadState();
+const activeSess = initSessions(state.messages);
+state.messages = activeSess.messages;
 function saveState() {
   fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
   fs.writeFileSync(DATA_FILE, JSON.stringify({ ...state, messages: state.messages.slice(-100) }, null, 2));
@@ -109,6 +125,7 @@ function presence() {
 initCameras({ broadcast, sendTo });
 initHome(broadcast);
 initLibrary(broadcast);
+initSettings();
 
 const app = express();
 app.use(express.json({ limit: '12mb' })); // kamera fotoğrafı (istemci ~1280 px JPEG'e küçültür)
@@ -146,8 +163,13 @@ const uiMode = () => state.ui ?? 'mark1';
 const settingsEvent = () => ({ type: 'settings', photoMode: state.photoMode, voice: currentVoice(), sfx: sfx(), wake: wakeCfg(), ui: uiMode() });
 
 app.get('/api/state', (_req, res) => {
+  const currentSess = getActiveSession();
+  state.messages = currentSess.messages;
   res.json({
-    messages: state.messages.slice(-50),
+    messages: currentSess.messages,
+    sessionId: currentSess.id,
+    sessionTitle: currentSess.title,
+    sessions: listSessions(),
     photoMode: state.photoMode,
     lastDevice: state.lastDevice,
     tts: ttsEnabled(currentVoice()),
@@ -277,6 +299,23 @@ app.delete('/api/memory/:id', (req, res) => {
   res.json({ memory: getMemory() });
 });
 
+// ---------- Proje Sicili & Ekran Görüntüleri ----------
+app.use('/api/screenshots', express.static(SCREENSHOTS_DIR));
+app.get('/api/projects', (_req, res) => res.json({ projects: listProjects() }));
+app.get('/api/projects/:id', (req, res) => {
+  const p = getProject(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Proje bulunamadı' });
+  res.json({ project: p });
+});
+app.post('/api/projects/:id/audit', async (req, res) => {
+  try {
+    const audit = await auditProject(req.params.id);
+    res.json(audit);
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Oynatıcı "sahibi bu sitede oynatılmasını engelledi" dedi (oEmbed bunu göremiyor; ör. LaLiga): bir daha önerilmesin
 app.post('/api/video-blocked', (req, res) => {
   const id = String(req.body?.id ?? '');
@@ -317,12 +356,56 @@ app.post('/api/sleep', (_req, res) => {
 });
 
 app.post('/api/clear', (_req, res) => {
+  clearActiveSessionMessages();
   state.messages = [];
   state.lastClient = null;
   state.lastDevice = null;
   saveState();
   broadcast({ type: 'cleared' });
+  broadcast({ type: 'sessions_updated', sessions: listSessions() });
   res.json({ ok: true });
+});
+
+// ---------- Oturum Yönetimi (Sessions) ----------
+app.get('/api/sessions', (_req, res) => {
+  const active = getActiveSession();
+  res.json({ activeId: active.id, activeTitle: active.title, sessions: listSessions() });
+});
+
+app.get('/api/sessions/:id', (req, res) => {
+  const sess = getSession(req.params.id);
+  if (!sess) return res.status(404).json({ error: 'oturum bulunamadı' });
+  res.json(sess);
+});
+
+app.post('/api/sessions', (req, res) => {
+  const title = typeof req.body?.title === 'string' ? req.body.title : undefined;
+  const sess = createSession(title);
+  state.messages = sess.messages;
+  saveState();
+  broadcast({ type: 'session_switched', sessionId: sess.id, title: sess.title, messages: sess.messages });
+  broadcast({ type: 'sessions_updated', sessions: listSessions() });
+  res.json(sess);
+});
+
+app.post('/api/sessions/:id/activate', (req, res) => {
+  const sess = switchSession(req.params.id);
+  if (!sess) return res.status(404).json({ error: 'oturum bulunamadı' });
+  state.messages = sess.messages;
+  saveState();
+  broadcast({ type: 'session_switched', sessionId: sess.id, title: sess.title, messages: sess.messages });
+  broadcast({ type: 'sessions_updated', sessions: listSessions() });
+  res.json(sess);
+});
+
+app.delete('/api/sessions/:id', (req, res) => {
+  deleteSession(req.params.id);
+  const active = getActiveSession();
+  state.messages = active.messages;
+  saveState();
+  broadcast({ type: 'session_switched', sessionId: active.id, title: active.title, messages: active.messages });
+  broadcast({ type: 'sessions_updated', sessions: listSessions() });
+  res.json({ ok: true, activeId: active.id });
 });
 
 // ---------- Sohbet: sahneler hazır oldukça akar ----------
@@ -348,9 +431,11 @@ app.post('/api/chat', async (req, res) => {
   const voice = { ...currentVoice() };
   const replyId = randomUUID();
   const userMsg: StoredMessage = { role: 'user', text: image ? `📷 ${text || 'Bu ne?'}` : text, device, at: new Date().toISOString() };
-  const history = state.messages.slice();
-  state.messages.push(userMsg);
+  appendMessageToActiveSession(userMsg);
+  state.messages = getActiveSession().messages;
+  const history = state.messages.slice(0, -1);
   broadcast({ type: 'user', message: userMsg, origin: client });
+  broadcast({ type: 'sessions_updated', sessions: listSessions() });
   // Açılışın sesi diskte hazır: brifing yazılmayı beklemeden Jarvis hemen cevap versin.
   if (BRIEF_TRIGGER.test(text)) broadcast({ type: 'opening', text: BRIEF_OPENING, voice, origin: client });
 
@@ -382,9 +467,11 @@ app.post('/api/chat', async (req, res) => {
     const full = { ...reply, id: replyId, voice };
     console.log(`[beyin] ${full.router} → ${full.model} · ${full.sahneler.length} sahne · ${Date.now() - t0} ms`);
     const msg: StoredMessage = { role: 'assistant', text: full.sahneler.map(s => s.ses).join(' '), device, at: full.created_at, reply: full };
-    state.messages.push(msg);
+    appendMessageToActiveSession(msg);
+    state.messages = getActiveSession().messages;
     saveState();
     broadcast({ type: 'reply', message: msg, origin: client });
+    broadcast({ type: 'sessions_updated', sessions: listSessions() });
     res.json({ ok: true, scenes: total });
   } catch (e: any) {
     console.error(e);
