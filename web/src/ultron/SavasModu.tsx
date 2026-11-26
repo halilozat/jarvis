@@ -40,6 +40,8 @@ export default function SavasModu({ onBitti, final: finalZorla, onizleme }: { on
   const [hata, setHata] = useState('');
   const bittiRef = useRef(onBitti);
   bittiRef.current = onBitti;
+  /** ✕ düğmesi (dokunmatik ekranlarda Esc yerine) */
+  const kapatRef = useRef<(s: SavasSonu) => void>(() => bittiRef.current('iptal'));
 
   useEffect(() => {
     let canli = true, raf = 0;
@@ -63,6 +65,7 @@ export default function SavasModu({ onBitti, final: finalZorla, onizleme }: { on
       bittiRef.current(s);
     };
 
+    kapatRef.current = kapat;
     const escErken = (e: KeyboardEvent) => { if (e.key === 'Escape') kapat('iptal'); };
     window.addEventListener('keydown', escErken);
     temizlik.push(() => window.removeEventListener('keydown', escErken));
@@ -207,6 +210,9 @@ export default function SavasModu({ onBitti, final: finalZorla, onizleme }: { on
         {hazir === 'yukleniyor' && <div className="u-durum">bağlantı kuruluyor…</div>}
         {hazir === 'kilitli' && <div className="u-durum">başlatmak için bir yere dokunun</div>}
         {hazir === 'hata' && <div className="u-durum">Savaş Modu açılamadı: {hata} · Esc</div>}
+        {onizleme == null && (
+          <button className="u-kapat" onPointerDown={e => e.stopPropagation()} onClick={() => kapatRef.current('iptal')} aria-label="Savaş Modunu kapat" title="Kapat (Esc)">✕</button>
+        )}
         <div className="u-ipucu">Esc · iptal</div>
       </div>
     </>,

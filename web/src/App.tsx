@@ -77,6 +77,7 @@ const ToplantiOdasi = lazy(() => import('./toplanti/ToplantiOdasi'));
 const SavasModu = lazy(() => import('./ultron/SavasModu'));
 const UltronGozu = lazy(() => import('./ultron/goz/UltronGozu'));
 const UltronKayit = lazy(() => import('./ultron/UltronKayit'));
+const UltronSecici = lazy(() => import('./ultron/UltronSecici'));
 /** ?el=1 açılışta el kontrolünü açar, ?el=demo kamerasız sentetik ellerle gösterir */
 const EL_PARAM = ((q: string | null) => (q === 'demo' ? 'demo' : q === '1' || q === 'kamera' ? 'kamera' : null))(new URLSearchParams(location.search).get('el'));
 /** "Jarvis, el kontrolünü aç / kapat" — sunucuya gitmeden arayüzde karşılanır */
@@ -216,6 +217,7 @@ export default function App() {
     toplantiDemoBasladi.current = true;
     setTimeout(() => toplantiBaslat({ mod: 'tartisma', demo: true }).catch(() => {}), 1200);
   }, [connected]);
+  const [ultronSecici, setUltronSecici] = useState(false);
   const [ultron, setUltron] = useState<{ mod: 'savas' | 'goz'; gecis?: boolean } | null>(ULTRON_KAYIT ? null : ULTRON_ILK === 'savas' || ULTRON_ONIZLEME != null ? { mod: 'savas' } : ULTRON_ILK === 'goz' ? { mod: 'goz' } : null);
   const ultronRef = useRef(ultron);
   ultronRef.current = ultron;
@@ -1336,6 +1338,7 @@ export default function App() {
             onSky={() => setGok(true)}
             onBekci={() => setBekci(true)}
             onToplanti={() => { voice.unlock(); setToplanti({ canli: false }); }}
+            onUltron={() => { voice.unlock(); setUltronSecici(true); }}
             onStop={stopPlayback}
             onDrawer={d => setDrawer(drawer === d ? null : d)}
             onSleep={() => { voice.unlock(); postSleep(); }}
@@ -1442,6 +1445,9 @@ export default function App() {
           </button>
           <button className="icon-btn cam" onClick={() => setBekci(true)} aria-label="Bekçi" title="Bekçi (B)">
             <svg viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z" /><path d="M9 12l2 2 4-4" /></svg>
+          </button>
+          <button className="icon-btn cam" onClick={() => { voice.unlock(); setUltronSecici(true); }} aria-label="Ultron" title="Ultron: Savaş Modu ve Ultron'un Gözü">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2" /><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4M5.3 5.3l2.9 2.9M15.8 15.8l2.9 2.9M5.3 18.7l2.9-2.9M15.8 8.2l2.9-2.9" /></svg>
           </button>
           <button className="icon-btn cam" onClick={() => setGok(true)} aria-label="Gece gökyüzü" title="Gece gökyüzü">
             <svg viewBox="0 0 24 24"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z" /><path d="M18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8zM5 15.5l.6 1.4 1.4.6-1.4.6L5 19.5l-.6-1.4-1.4-.6 1.4-.6z" /></svg>
@@ -1635,6 +1641,11 @@ export default function App() {
           <span>📖 KİTAP SOHBETİ</span><b>{kitapSohbeti.ad}</b>
           <button onClick={() => { sohbetRef.current = null; setKitapSohbeti(null); }} aria-label="Kitap sohbetini bitir">✕</button>
         </div>
+      )}
+      {ultronSecici && (
+        <Suspense fallback={null}>
+          <UltronSecici onKapat={() => setUltronSecici(false)} onSec={mod => { voice.unlock(); setUltronSecici(false); setUltron({ mod }); }} />
+        </Suspense>
       )}
       {ultron?.mod === 'savas' && (
         <Suspense fallback={null}>
