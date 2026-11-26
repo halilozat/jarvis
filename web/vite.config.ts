@@ -29,6 +29,8 @@ function mediapipeWasm(): Plugin {
 }
 
 export default defineConfig({
+  // Ultron Paketi tembel yüklenir: bağımlılıklar baştan optimize edilsin (yoksa ilk açılışta Vite sayfayı yeniler)
+  optimizeDeps: { include: ['three', 'three/addons/postprocessing/EffectComposer.js', 'three/addons/postprocessing/RenderPass.js', 'three/addons/postprocessing/UnrealBloomPass.js', 'three/addons/postprocessing/OutputPass.js'] },
   plugins: [
     react(),
     mediapipeWasm(),

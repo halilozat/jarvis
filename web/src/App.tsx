@@ -29,6 +29,7 @@ import type { GokCmd } from './sky/GokyuzuModu';
 import { bekciDemo, type Analiz as BekciAnaliz } from './bekci/api';
 import { toplantiBaslat, toplantiBitir, toplantiKes, toplantiOlayi } from './toplanti/api';
 import { toplantiKomutu } from './toplanti/komutlar';
+import { ultronKomutu } from './ultron/komutlar';
 import { emitCamera, getCameras, getRole, isCameraEvent, onCamera, setRole, toggleCameraPanel } from './lib/camera';
 import { BeyinKurulum, DEMO_ANAHTARI } from './components/BeyinKurulum';
 import { type AppState, type ElevenUsage, clearConversation, setServerStt, serverStt, detectDevice, getDashboard, getHealth, getState, getVoices, metric, postAttention, postSleep, postWake, previewUrl, saveDevice, saveSettings, sendChat, setPhotoMode, stt, subscribe, token, clientId } from './lib/api';
@@ -73,6 +74,9 @@ const Kitapligim = lazy(() => import('./library/Kitapligim'));
 const GokyuzuModu = lazy(() => import('./sky/GokyuzuModu'));
 const BekciPanel = lazy(() => import('./bekci/BekciPanel'));
 const ToplantiOdasi = lazy(() => import('./toplanti/ToplantiOdasi'));
+const SavasModu = lazy(() => import('./ultron/SavasModu'));
+const UltronGozu = lazy(() => import('./ultron/goz/UltronGozu'));
+const UltronKayit = lazy(() => import('./ultron/UltronKayit'));
 /** ?el=1 açılışta el kontrolünü açar, ?el=demo kamerasız sentetik ellerle gösterir */
 const EL_PARAM = ((q: string | null) => (q === 'demo' ? 'demo' : q === '1' || q === 'kamera' ? 'kamera' : null))(new URLSearchParams(location.search).get('el'));
 /** "Jarvis, el kontrolünü aç / kapat" — sunucuya gitmeden arayüzde karşılanır */
@@ -96,6 +100,12 @@ const GOK_SIM = /(g[öo]ky[üu]z[üu]\s+)?sim[üu]lasyon(u|una)?\s*(a[çc]|ge[ç
 const BEKCI_PARAM = new URLSearchParams(location.search).get('bekci');
 /** Toplantı Odası: ?toplanti=1 canlı toplantı · ?toplanti=demo kayıtlı tartışma senaryosu (LLM yok, ses gerçek) */
 const TOPLANTI_PARAM = new URLSearchParams(location.search).get('toplanti');
+/** Ultron Paketi: ?ultron=savas|goz · ?ultron-final=A|B · ?ultron-preview=28.5 (tek kare) · ?ultron-record=war|eye|full&aspect=9:16 (kayıt) */
+const ULTRON_Q = new URLSearchParams(location.search);
+const ULTRON_ILK = ULTRON_Q.get('ultron');
+const ULTRON_FINAL = (['A', 'B'] as const).find(f => f === ULTRON_Q.get('ultron-final')?.toUpperCase());
+const ULTRON_ONIZLEME = ULTRON_Q.get('ultron-preview') != null ? Number(ULTRON_Q.get('ultron-preview')!.replace(/^t=/, '')) : null;
+const ULTRON_KAYIT = (['war', 'eye', 'full'] as const).find(m => m === ULTRON_Q.get('ultron-record')) ?? null;
 const KITAPLIGIM_AC = /kitapl[ıi][gğ][ıi]m[ıi]?\s+(aç|göster|getir)/i;
 /** ?kitapligim=1: Kitaplığım açık başlar (deneme) */
 const KITAPLIGIM_PARAM = new URLSearchParams(location.search).get('kitapligim') === '1';
@@ -206,6 +216,11 @@ export default function App() {
     toplantiDemoBasladi.current = true;
     setTimeout(() => toplantiBaslat({ mod: 'tartisma', demo: true }).catch(() => {}), 1200);
   }, [connected]);
+  const [ultron, setUltron] = useState<{ mod: 'savas' | 'goz'; gecis?: boolean } | null>(ULTRON_KAYIT ? null : ULTRON_ILK === 'savas' || ULTRON_ONIZLEME != null ? { mod: 'savas' } : ULTRON_ILK === 'goz' ? { mod: 'goz' } : null);
+  const ultronRef = useRef(ultron);
+  ultronRef.current = ultron;
+  /** Ultron'un Gözü açıkken söylenen/yazılan her şey panele gider */
+  const gozGirdi = useRef<((t: string) => void) | null>(null);
   const toplantiKapat = () => { voice.stop(); void toplantiKes(null).catch(() => {}); setToplanti(null); };
   const [bekci, setBekci] = useState(BEKCI_PARAM !== null);
   const [bekciCanli, setBekciCanli] = useState<Record<string, BekciAnaliz>>({});
@@ -772,6 +787,14 @@ export default function App() {
     }
     // 20 dakika sessizlik: kitap sohbeti kendiliğinden biter
     if (sohbetRef.current && !sohbetIlk && simdi() - sohbetRef.current.at > 20 * 60_000) { sohbetRef.current = null; setKitapSohbeti(null); }
+    // Ultron Paketi: Savaş Modu / Ultron'un Gözü / Jarvis'i geri getir (modele gitmez). Göz açıkken sözler Ultron'a gider.
+    const uk = !image ? ultronKomutu(t, ultronRef.current?.mod ?? null) : null;
+    if (uk) {
+      voice.unlock(); voice.stop(); setInput(''); setInterim(''); setCore('idle');
+      setUltron(uk.tip === 'kapat' ? null : { mod: uk.tip === 'savas' ? 'savas' : 'goz' });
+      return;
+    }
+    if (!image && ultronRef.current?.mod === 'goz' && gozGirdi.current) { setInput(''); setInterim(''); setCore('idle'); gozGirdi.current(t); return; }
     // Gece Gökyüzü: aç / yeniden tara / simülasyon (modele gitmez). Diğer gökyüzü soruları gokyuzu aracıyla modele gider.
     if (!image && (GOK_AC.test(t) || (gokRef.current && GOK_SIM.test(t)))) {
       voice.unlock(); setInput(''); setInterim('');
@@ -1178,7 +1201,7 @@ export default function App() {
     // Jarvis konuşurken, komut dinlenirken ve ses bittikten sonraki 600 ms boyunca analiz yok (kendi sesi tetiklemesin)
     const paused = () => {
       if (voice.isPlaying()) { quietUntil = performance.now() + 600; return true; }
-      return !!commandRef.current || performance.now() < quietUntil || (wstateRef.current === 'attention' && !calibRef.current);
+      return !!commandRef.current || !!ultronRef.current || performance.now() < quietUntil || (wstateRef.current === 'attention' && !calibRef.current);
     };
     const cfg = wakeRef.current!;
     startClapListener(ctx, { sens: cfg.sens, rhythm: cfg.rhythmOn ? cfg.rhythm : null }, {
@@ -1612,6 +1635,21 @@ export default function App() {
           <span>📖 KİTAP SOHBETİ</span><b>{kitapSohbeti.ad}</b>
           <button onClick={() => { sohbetRef.current = null; setKitapSohbeti(null); }} aria-label="Kitap sohbetini bitir">✕</button>
         </div>
+      )}
+      {ultron?.mod === 'savas' && (
+        <Suspense fallback={null}>
+          <SavasModu final={ULTRON_FINAL} onizleme={ULTRON_ONIZLEME} onBitti={s => setUltron(s === 'goz' ? { mod: 'goz', gecis: true } : null)} />
+        </Suspense>
+      )}
+      {ultron?.mod === 'goz' && (
+        <Suspense fallback={null}>
+          <UltronGozu gecis={!!ultron.gecis} girdi={gozGirdi} onKapat={() => setUltron(null)} onMic={toggleMic} dinliyor={core === 'listening'} />
+        </Suspense>
+      )}
+      {ULTRON_KAYIT && (
+        <Suspense fallback={null}>
+          <UltronKayit mod={ULTRON_KAYIT} />
+        </Suspense>
       )}
       {toplanti && (
         <Suspense fallback={null}>

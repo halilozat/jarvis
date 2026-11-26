@@ -79,6 +79,8 @@ function whois(sunucu: string, sorgu: string, ms: number): Promise<string> {
 
 const USOM_API = process.env.USOM_API || 'https://siberguvenlik.gov.tr/api/address/index';
 let usom: { set: Set<string>; yuklendi: number; satir: number } | null = null;
+/** USOM listesinin yüklü satır sayısı (Ultron'un Gözü siber katmanı; liste yüklenmediyse null) */
+export const usomSatir = () => (usom && usom.satir > 0 ? usom.satir : null);
 
 /** Kayıt adresini host'a indir: "http://www.a.b/yol" → "a.b" */
 export const usomHost = (x: string) => x.trim().toLowerCase().replace(/^[a-z]+:\/\//, '').split(/[/?#]/)[0].replace(/:\d+$/, '').replace(/^www\./, '');

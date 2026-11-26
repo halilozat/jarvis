@@ -17,6 +17,9 @@
     "test:lab": "server/node_modules/.bin/tsx web/src/hands/space/physics.test.ts && server/node_modules/.bin/tsx web/src/hands/space/life.test.ts && server/node_modules/.bin/tsx web/src/hands/space/extra/moonHole.test.ts",
     "test:gok": "server/node_modules/.bin/tsx web/src/sky/sky.test.ts && server/node_modules/.bin/tsx server/src/gok-test.ts",
     "test:bekci": "npm --prefix server run -s test:bekci",
+    "test:ultron": "npm --prefix server run -s test:ultron && server/node_modules/.bin/tsx web/src/ultron/ultron.test.ts",
+    "ultron:kayit": "npm --prefix server run -s ultron:kayit --",
+    "ultron:sinirlar": "node scripts/ultron-sinirlar.mjs",
     "test:toplanti": "npm --prefix server run -s test:toplanti && server/node_modules/.bin/tsx web/src/toplanti/komutlar.test.ts && server/node_modules/.bin/tsx web/src/toplanti/canli.test.ts"
   }
 }

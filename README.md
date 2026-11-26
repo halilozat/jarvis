@@ -851,6 +851,81 @@ Jarvis'in yanına ikinci bir yapay zekâ karakteri, **Friday** gelir: şüpheci,
 
 **Testler:** `npm --prefix server run test:toplanti` (orkestratör: tur sınırı, uzlaşma eşiği, söz sırası, isimle hitap, kısa soru) · `npx tsx web/src/toplanti/canli.test.ts` (araya girme ≤ 200 ms, hoparlör sesi yanlış tetiklemez, ses tanıma geç dönse de ilk söz kaybolmaz) · `npm --prefix server run eval:toplanti` (gerçek modellerle 10 karar sorusu: Friday'in somut itirazı ve tekrar kontrolü; token harcar).
 
+### Ultron Paketi (Savaş Modu + Ultron'un Gözü)
+
+İki bağlantılı modül. Sisteme üçüncü bir yapay zekâ, **Ultron**, "uyanır": Jarvis'le konuşur, sinematik bir animasyonla arayüzü ele geçirir ve ardından onun gücüyle dünyayı canlı izlemeye başlar. Ultron tamamen özgün, soyut bir parçacık/enerji varlığıdır; film karakterinin yüzü, tasarımı, logosu, görüntüsü, müziği ya da repliği kullanılmaz.
+
+**A · Savaş Modu (gösteri ve hikâye modu)**
+- **Başlat:** "Savaş modunu başlat" ya da "Ultron uyan" (sesle ya da yazarak) · tarayıcıda `?ultron=savas`. **Durdur:** `Esc`, her an güvenle iptal eder.
+- **Ne yapar:** 7 vuruş, seslendirme sürelerine göre ≈ 50–75 sn. Ekran kararır ve tek bir turuncu nokta nabız gibi atar. Jarvis onu tarar. Ekran, Jarvis'in kendi modüllerinden karelerin aktığı bir veri tüneline dönüşür. İki küre karşı karşıya gelir: Jarvis altıgen kalkan açar, ekranda üç kez "ERİŞİM REDDEDİLDİ" yazar. Elektrik ark'ları kalkanı hücre hücre turuncuya çevirir. Gerçek sekmeler (Haber → Bekçi → Akıllı Ev → Toplantı/Friday) tek tek glitch'le turuncuya döner, "Sistem bütünlüğü" %30'a iner. Jarvis'in küresi dağılıp turuncu buluta emilir.
+- **Sistemde hiçbir şey değişmez:** Sahne yalnızca görünümü değiştirir (elemanlara bir öznitelik ve CSS değişkeni ekler). Hiçbir modülün durumu, ayarı ya da verisi değişmez. Sahne bitince ya da `Esc` ile iptal edilince arayüz birebir önceki hâline döner.
+- **Final A (varsayılan):** Turuncu bulut dönen bir dünya küresine dönüşür ve ekran kesintisiz olarak **Ultron'un Gözü**'ne geçer. **Final B:** Sahne kapatma parolasını bekler (`ULTRON_KILL_PHRASE`, varsayılan "Protokol Friday"; söyleyin ya da yazıp Enter). Mavi bir kıvılcım Ultron'u dağıtır, sekmeler tek tek maviye döner ve Jarvis geri gelir. Seçim: `ULTRON_FINAL=A|B` ya da `?ultron-final=B`.
+- **Metin ve zamanlama:** Replikler `scenes/ultron/script.tr.json`, zaman çizelgesi `scenes/ultron/timeline.json`, renkler, parçacık sayısı, bloom ve tohum `scenes/ultron/config.json` içinde. Görsel olaylar repliğe bağlıdır; replik uzarsa sonraki her şey kayar ve ses ile görüntü senkron kalır. Final A'daki selamdaki ad `.env` → `USER_NAME`'den gelir; boşsa ad söylenmez.
+- **Ses:** Sabit replikler ilk açılışta üretilir ve `scenes/ultron/audio/` altında saklanır; metin ya da ses değişmedikçe yeniden üretilmez (git'e girmez). Ultron'a hafif perde düşürme, metalik halka ve kısa yankı uygulanır. Jarvis 5. ve 6. vuruşta bit-crush ve kesilmelerle bozulur; son repliği yavaşlayıp kopar. Müzik ve efektler (drone, riser, ritim, "boom", cızırtı, glitch, kalkan) tamamen sentezle üretilir; seslendirme sırasında müzik kısılır.
+
+**B · Ultron'un Gözü (gerçek veriyle çalışan araç)**
+- **Aç:** "Ultron, dünyayı göster" / "Ultron'un gözünü aç" · `?ultron=goz`. Turuncu bir 3D dünya küresi döner, katmanlar tek tek yanar ve Ultron 20–30 sn'lik açılış anlatımını yapar.
+- **Sorular:**
+  - "Türkiye'de şu an ne oluyor?"
+  - "Çevremde ne var?"
+  - "Şu an en büyük deprem nerede?"
+  - "ISS nerede?"
+  - "Türksat uyduları nerede?"
+  - "Kaç uçak havada?"
+  - "Bugün kaç zararlı link yakalandı?"
+  - "Dünyanın en tehlikeli yeri neresi?"
+- **Katman komutları:** "Katmanı kapat: uçuşlar", "Sadece depremleri göster". Yan paneldeki satırlara tıklayarak da açılıp kapanır.
+- **Kapat:** "Jarvis'i geri getir" ya da `Esc`; kısa bir mavi geri dönüşle normal arayüze dönülür.
+- **Rakamlar koddan gelir, modelden değil.** Önce katmanlardan bir özet JSON çıkarılır. Model yalnızca bu olguları Ultron tonunda yeniden söyler. Çıktıdaki her sayı JSON'la karşılaştırılır; uyuşmayan sayı ya da yazıyla yazılmış sayı ("yüzlerce") varsa çıktı reddedilir ve şablon cümleler kullanılır. Bir kaynak cevap vermezse o katman gri ve **VERİ YOK** olarak görünür; Ultron o katmandan rakam söylemez.
+- **En tehlikeli yer:** Dünya 15°×15° hücrelere bölünür. `skor = deprem·Σ(M−3)² + yangın·(yangın/100) + haber·(son dakika manşeti) + hava·(uyarı)`. Ağırlıklar `scenes/ultron/config.json` → `goz.tehlike` içindedir. Ultron gerekçesini rakamlarla söyler.
+
+| Katman | Kaynak | Yenileme | Anahtar |
+|---|---|---|---|
+| 🌋 Depremler (dünya) | USGS GeoJSON özet akışı (son 1 gün) | 60 sn | yok |
+| 🌋 Depremler (Türkiye) | AFAD apiv2; yedek Kandilli son 500 deprem listesi | 60 sn | yok |
+| ✈️ Uçuşlar | OpenSky Network `states/all` | 30 sn (anahtarsız 90 sn) | isteğe bağlı |
+| 🔥 Yangınlar | NASA FIRMS VIIRS (son 24 saat) | 15 dk | **gerekli** (ücretsiz) |
+| 🛰️ Uydular | CelesTrak TLE (ISS, Tiangong, Türksat, Göktürk, İMECE, RASAT) + satellite.js | TLE 6 saatte bir, konum her karede | yok |
+| 📰 Haberler | Mevcut haber modu (konum: başlıktaki ülke/şehir) | 5 dk | yok |
+| ⚡ Siber | Bekçi kayıtları (bugünkü şüpheli mesaj/link **sayısı**) + USOM liste boyutu; isteğe bağlı URLhaus | 15 dk | URLhaus için gerekli |
+| 🌦️ Hava | Open-Meteo (büyük şehirler + sizin şehriniz) | 30 dk | yok |
+
+Katmanlar yalnızca panel açıkken sorgulanır; her isteğin zaman aşımı 5 sn'dir. Bir kaynak çökerse son başarılı veri "ESKİ VERİ" etiketiyle kalır. Her satırda kaynak ve saat yazar (ör. `USGS · 13:42`).
+
+**Ücretsiz anahtarlar** (`server/.env`)
+- **NASA FIRMS:** firms.modaps.eosdis.nasa.gov → "MAP KEY" → e-postanızla isteyin → `NASA_FIRMS_MAP_KEY`.
+- **OpenSky (isteğe bağlı):** opensky-network.org'da hesap açın → Account → API Client oluşturun → `OPENSKY_CLIENT_ID`, `OPENSKY_CLIENT_SECRET`. Anahtarsız da çalışır ama günlük kota düşüktür (dünya sorgusu 4 kredi, günde 400 kredi), bu yüzden anahtarsızken uçuşlar 90 sn'de bir yenilenir.
+- **URLhaus (isteğe bağlı):** abuse.ch hesabından Auth-Key → `URLHAUS_AUTH_KEY` ve `URLHAUS_ENABLED=true`.
+
+**Gizlilik:** "Çevremde ne var?" varsayılan olarak `ULTRON_HOME_CITY` şehrini kullanır. Konumunuz yalnızca paneldeki **konumumu kullan** ile izin verirseniz o soruda kullanılır; saklanmaz ve dış servislere gönderilmez (hava ve geocoding isteklerine yalnızca şehir adı ya da şehir koordinatı gider). Siber katmanında yalnızca sayılar görünür; mesaj içerikleri, gönderenler ve linkler asla küreye ya da anlatıma çıkmaz. **Afet verisi bilgilendirme amaçlıdır; resmî uyarıların (AFAD, AKOM, MGM) yerini tutmaz.**
+
+**Ultron'un sesi:** `ULTRON_VOICE_ID` ile ElevenLabs kütüphanesinden özgün, derin ve soğuk bir erkek sesi seçin. Boş bırakılırsa hesabınızdaki derin bir Türkçe erkek sesi (Jarvis'inkinden farklı) kendiliğinden seçilir; hangisi olduğu sunucu kaydında yazar. Film oyuncusunun ya da Türkçe dublaj sanatçısının sesini taklit eden veya klonlanmış bir ses kullanmayın. ElevenLabs yoksa sahne sessiz oynar ve replikler altyazı olarak görünür; tarayıcı sesine düşülmez.
+
+**Video çekimi (kayıt modu)** · Jarvis açıkken (`npm run dev`):
+- `npm run ultron:kayit -- --ultron-record=war --aspect=9:16` → Savaş Modu.
+- `npm run ultron:kayit -- --ultron-record=eye --aspect=16:9` → Ultron'un Gözü açılış anlatımı. O anki gerçek veriler ve anlatım `snapshot.json` / `anlatim.json` olarak yazılır. `--snapshot=<klasör adı>` ile aynı rakamlarla tekrar çekilir.
+- `npm run ultron:kayit -- --ultron-record=full --aspect=9:16` → Savaş Modu + Final A geçişi + Göz açılışı, tek parça.
+- `npm run ultron:kayit -- --ultron-preview t=28.5` → tek kare.
+
+Komut kayıt sayfasını tarayıcıda açar. Kareler sabit 30 fps'te ve deterministik çizilir (aynı t, aynı kare). Çıktı `server/data/ultron-kayit/<tarih>-<mod>-<oran>/` klasörüne yazılır: `kareler/kare_00000.png…` + `seslendirme.wav`, `muzik.wav`, `efekt.wav` (stem'ler) + `karisim.wav`. ffmpeg kuruluysa `ultron.mp4` da üretilir.
+
+Kayıt **temiz plakadır**: altyazı yok, ses ayrı; altyazıyı kurguda kendiniz ekleyin. 9:16'da önemli öğeler alt ~350 px ve sağ ~120 px dışında tutulur. Kayıtta arkada uygulama olmadığından sekmeler sahnenin içinde kopya olarak çizilir. Tarayıcıda da açılabilir: `?ultron-record=war&aspect=9:16`.
+
+**Beyin:** Anlatım cümleleri seçili beyinle kurulur (Abacus AI RouteLLM zorunlu değildir; OpenAI uyumlu herhangi bir servis ya da `ULTRON_MODEL`). Beyin yoksa (demo) şablon cümleler kullanılır; rakamlar yine gerçek veridir.
+
+**Testler:** `npm run test:ultron`:
+- veri servislerinin kaydedilmiş örnek yanıtlarla ayrıştırılması (USGS, AFAD, Kandilli, OpenSky, FIRMS, CelesTrak, Open-Meteo, Bekçi),
+- kaynak çökünce VERİ YOK / ESKİ VERİ,
+- anlatımdaki her sayının özet JSON'la eşleşmesi ve uyuşmazlıkta şablona düşme,
+- haversine ve en yakın deprem,
+- SGP4 uydu konumu (Vallado referans değerleri),
+- tehlike skoru,
+- zaman çizelgesinin kayması ve replik–görsel olay senkronu (±100 ms),
+- `durum(t)` determinizmi,
+- sahne sonrası sekmelerin birebir eski hâli.
+
+Ülke sınırları verisi `npm run ultron:sinirlar` ile üretilir (Natural Earth, kamu malı).
+
 ### Fotoğraflar
 
 *Ayarlar → Fotoğraf modu*

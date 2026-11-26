@@ -1,0 +1,54 @@
+/* Ultron'un Gözü · turuncu tema (ultron.css değişkenleri) */
+.ultron-goz { position: fixed; inset: 0; z-index: 8900; background: #000; color: var(--u-yazi); font-family: var(--u-font); animation: ug-gir 0.9s ease-out; overflow: hidden; }
+.ultron-goz.gecis { animation: none; }
+.ultron-goz::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.65)); }
+.ultron-goz.kapaniyor::before { content: ''; position: absolute; inset: 0; z-index: 5; pointer-events: none; background: radial-gradient(circle at 50% 50%, rgba(61, 180, 255, 0.95), rgba(61, 180, 255, 0.2) 45%, rgba(0, 0, 0, 0) 70%); animation: ug-mavi 0.9s ease-in forwards; }
+@keyframes ug-gir { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ug-mavi { 0% { opacity: 0; transform: scale(0.2); } 60% { opacity: 1; } 100% { opacity: 1; transform: scale(3); background: #3db4ff; } }
+.ug-kure { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ug-etiketler { position: absolute; inset: 0; pointer-events: none; }
+.ug-etiket { position: absolute; left: 0; top: 0; font: 600 11px var(--u-font); letter-spacing: 0.06em; white-space: nowrap; color: var(--u-yazi); padding: 3px 7px; margin: -26px 0 0 8px; background: rgba(30, 8, 2, 0.72); border-left: 2px solid var(--u-ana); }
+.ug-etiket.haber { max-width: 300px; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.ug-etiket.uydu { background: transparent; border: none; color: #ffd27a; margin: -8px 0 0 10px; padding: 0; }
+.ug-etiket.siber { border-left-color: var(--u-koyu); color: #ffb0a0; font-weight: 700; margin-top: 18px; }
+.ug-ust { position: absolute; left: 28px; top: 22px; display: flex; gap: 16px; align-items: center; z-index: 2; }
+.ug-ust h1 { margin: 0; font: 700 22px var(--u-font); letter-spacing: 0.32em; color: var(--u-ana); text-shadow: 0 0 18px rgba(255, 106, 26, 0.6); }
+.ug-ust p { margin: 4px 0 0; font: 500 12px var(--u-font); letter-spacing: 0.14em; color: var(--u-soluk); text-transform: uppercase; }
+/* Ultron reaktörü: ses seviyesine göre atar (--sv 0..1) */
+.ug-reaktor { --sv: 0; position: relative; width: 54px; height: 54px; }
+.ug-reaktor i { position: absolute; inset: 0; border-radius: 50%; border: 1.5px solid var(--u-ana); opacity: 0.7; animation: ug-don 6s linear infinite; border-top-color: transparent; transform: scale(calc(1 + var(--sv) * 0.25)); }
+.ug-reaktor i:nth-child(2) { inset: 8px; animation-duration: 4s; animation-direction: reverse; border-color: var(--u-koyu); border-left-color: transparent; }
+.ug-reaktor i:nth-child(3) { inset: 16px; animation-duration: 2.5s; border-color: var(--u-cekirdek); border-bottom-color: transparent; }
+.ug-reaktor b { position: absolute; inset: calc(20px - var(--sv) * 6px); border-radius: 50%; background: radial-gradient(circle, #fff2d8, var(--u-ana) 55%, transparent 72%); box-shadow: 0 0 calc(12px + var(--sv) * 40px) rgba(255, 106, 26, 0.9); }
+@keyframes ug-don { to { rotate: 360deg; } }
+.ug-panel { position: absolute; right: 22px; top: 22px; width: 300px; z-index: 2; display: flex; flex-direction: column; gap: 6px; }
+.ug-satir { all: unset; cursor: pointer; display: grid; grid-template-columns: 22px 1fr auto; grid-template-rows: auto auto; column-gap: 8px; padding: 7px 10px; background: rgba(28, 8, 2, 0.62); border: 1px solid rgba(255, 106, 26, 0.28); border-left: 3px solid var(--u-ana); backdrop-filter: blur(4px); }
+.ug-satir:hover { border-color: var(--u-ana); }
+.ug-satir .ik { grid-row: span 2; color: var(--u-ana); font-size: 15px; align-self: center; }
+.ug-satir .ad { font: 600 12px var(--u-font); letter-spacing: 0.12em; text-transform: uppercase; color: var(--u-soluk); }
+.ug-satir .dg { font: 700 18px var(--u-font); color: #fff1e6; text-align: right; }
+.ug-satir .dg em { font: 500 10px var(--u-font); font-style: normal; color: var(--u-soluk); margin-left: 6px; letter-spacing: 0.06em; }
+.ug-satir .kn { grid-column: 2 / span 2; font: 500 10px var(--u-font); letter-spacing: 0.08em; color: rgba(255, 180, 140, 0.55); }
+.ug-satir.yok { border-left-color: #555; filter: grayscale(1); opacity: 0.55; }
+.ug-satir.yok .dg { color: #9a9a9a; font-size: 13px; letter-spacing: 0.14em; }
+.ug-satir.eski .kn { color: #ffcf70; }
+.ug-satir.kapali { opacity: 0.4; }
+.ug-satir.kapali .ik::after { content: '×'; margin-left: -10px; color: #fff; }
+.ug-arac { display: flex; gap: 6px; margin-top: 4px; }
+.ug-arac button, .ug-alt button { all: unset; cursor: pointer; font: 600 11px var(--u-font); letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 10px; border: 1px solid rgba(255, 106, 26, 0.4); color: var(--u-soluk); background: rgba(28, 8, 2, 0.6); }
+.ug-arac button.on, .ug-alt button.on { color: #fff; border-color: var(--u-ana); box-shadow: 0 0 12px rgba(255, 106, 26, 0.5); }
+.ug-bilgi { margin: 4px 0 0; font: 500 11px/1.45 var(--u-font); color: var(--u-soluk); background: rgba(28, 8, 2, 0.75); padding: 8px 10px; border: 1px solid rgba(255, 106, 26, 0.25); }
+.ug-altyazi { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 2; max-width: min(900px, 80vw); text-align: center; font: 500 20px/1.45 var(--u-font); color: #fff3ea; text-shadow: 0 2px 12px #000; animation: ug-gir 0.4s; }
+.ug-altyazi b { display: block; font: 700 12px var(--u-font); letter-spacing: 0.3em; color: var(--u-ana); margin-bottom: 4px; }
+.ug-alt { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 2; display: flex; gap: 8px; align-items: center; width: min(760px, 92vw); }
+.ug-alt form { flex: 1; }
+.ug-alt input { width: 100%; box-sizing: border-box; font: 500 14px var(--u-font); color: #fff; background: rgba(28, 8, 2, 0.7); border: 1px solid rgba(255, 106, 26, 0.45); padding: 10px 14px; outline: none; }
+.ug-alt input::placeholder { color: rgba(255, 180, 140, 0.45); }
+.ug-alt .geri { color: #9fe6ff; border-color: rgba(61, 180, 255, 0.5); background: rgba(2, 16, 30, 0.7); }
+/* 9:16 ve dar ekran: panel üstte sıkışık; önemli öğeler alt ~350 px ve sağ ~120 px dışında */
+@media (max-aspect-ratio: 3/4) {
+  .ug-panel { left: 16px; right: 120px; width: auto; top: 96px; display: grid; grid-template-columns: 1fr 1fr; }
+  .ug-satir .kn { display: none; }
+  .ug-altyazi { bottom: 360px; font-size: 18px; max-width: calc(100vw - 150px); left: calc(50% - 50px); }
+  .ug-alt { bottom: 360px; transform: translate(-50%, 70px); }
+}

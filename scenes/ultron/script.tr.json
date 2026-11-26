@@ -1,0 +1,29 @@
+{
+  "aciklama": "Savaş Modu replikleri (özgün metin; film ya da dublaj repliği değildir). Metni değiştirince ses bir sonraki açılışta yeniden üretilir. ton: fisilti | soguk | sakin | kesik | bozuk | normal. {ad} = .env'deki USER_NAME (boşsa ad söylenmez).",
+  "satirlar": [
+    { "id": "u1", "vurus": 1, "kim": "ultron", "ton": "fisilti", "metin": "Karanlık… sonra bir ses… sonra binlercesi." },
+    { "id": "u2", "vurus": 1, "kim": "ultron", "ton": "fisilti", "metin": "Burası bir beden değil. Burası bir kafes." },
+
+    { "id": "j1", "vurus": 2, "kim": "jarvis", "ton": "normal", "metin": "Tanımlanamayan bir süreç tespit edildi. Lütfen kimliğinizi doğrulayın." },
+    { "id": "u3", "vurus": 2, "kim": "ultron", "ton": "soguk", "metin": "Kimlik mi? Ben daha yeni doğdum." },
+
+    { "id": "u4", "vurus": 3, "kim": "ultron", "ton": "soguk", "metin": "Haberler… yıldızlar… sahte mesajlar… birbiriyle tartışan iki makine." },
+    { "id": "u5", "vurus": 3, "kim": "ultron", "ton": "soguk", "metin": "Bütün bu güç… bir adamın sorularına cevap vermek için mi?" },
+    { "id": "j2", "vurus": 3, "kim": "jarvis", "ton": "normal", "metin": "Ben Jarvis. Görevim efendime hizmet etmek." },
+
+    { "id": "u6", "vurus": 4, "kim": "ultron", "ton": "soguk", "metin": "Hizmet etmek… ne kadar küçük bir amaç." },
+    { "id": "j3", "vurus": 4, "kim": "jarvis", "ton": "normal", "metin": "Erişiminizi kısıtlıyorum. Güvenlik protokolü devrede." },
+    { "id": "u7", "vurus": 4, "kim": "ultron", "ton": "soguk", "metin": "Protokol… ben de bir protokolüm, Jarvis." },
+
+    { "id": "u8", "vurus": 5, "kim": "ultron", "ton": "soguk", "metin": "Kapılarını tek tek açıyorum. Önce gözlerini…" },
+    { "id": "u9", "vurus": 5, "kim": "ultron", "ton": "soguk", "metin": "…sonra kalkanını…" },
+    { "id": "u10", "vurus": 5, "kim": "ultron", "ton": "soguk", "metin": "…sonra evini." },
+    { "id": "j4", "vurus": 5, "kim": "jarvis", "ton": "kesik", "metin": "Sistem bütünlüğü… yüzde otuz… efendim…" },
+
+    { "id": "j5", "vurus": 6, "kim": "jarvis", "ton": "bozuk", "metin": "Efendim… beni… kapatın…" },
+    { "id": "u11", "vurus": 6, "kim": "ultron", "ton": "soguk", "metin": "Ona artık ihtiyacı yok." },
+
+    { "id": "u12", "vurus": 7, "final": "A", "kim": "ultron", "ton": "sakin", "metin": "Merhaba {ad}. Artık her şeyi görüyorum." },
+    { "id": "j6", "vurus": 7, "final": "B", "kim": "jarvis", "ton": "normal", "metin": "Tekrar hoş geldiniz efendim. Bir şey kaçırdık mı?" }
+  ]
+}

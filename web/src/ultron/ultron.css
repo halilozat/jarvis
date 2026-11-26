@@ -1,0 +1,27 @@
+/* Ultron Paketi · tema ve sahne katmanları. Tema tek bir değişken setiyle açılıp kapanır: html.ultron-tema + --u-tema (0..1).
+   Mavi (#3db4ff, ~205°) → turuncu (#ff6a1a, ~21°): hue-rotate ≈ 176°. */
+:root {
+  --u-ana: #ff6a1a; --u-koyu: #ff3b1f; --u-cekirdek: #ffd27a; --u-arka: #070302;
+  --u-cizgi: rgba(255, 106, 26, 0.55); --u-soluk: rgba(255, 160, 110, 0.6); --u-yazi: #ffe3d2;
+  --u-font: 'Rajdhani', 'Orbitron', ui-monospace, Menlo, monospace;
+}
+html.ultron-tema .app { filter: hue-rotate(calc(var(--u-tema, 0) * 176deg)) saturate(calc(1 + var(--u-tema, 0) * 0.45)); }
+/* Ele geçirilen sekme: turuncu + glitch (RGB kayması, kırpma, titreme). Tema zaten turuncuysa ikinci kez döndürülmez. */
+[data-ultron-ele] {
+  filter: hue-rotate(calc(max(0, var(--u-ele, 0) - var(--u-tema, 0)) * 176deg)) saturate(calc(1 + var(--u-ele, 0) * 0.7))
+    drop-shadow(calc(var(--u-glitch, 0) * 4px) 0 0 rgba(255, 0, 60, 0.7)) drop-shadow(calc(var(--u-glitch, 0) * -4px) 0 0 rgba(0, 200, 255, 0.6))
+    drop-shadow(0 0 calc(var(--u-ele, 0) * 8px) rgba(255, 106, 26, 0.85)) !important;
+  translate: var(--u-gx, 0px) 0;
+  clip-path: inset(var(--u-kirp-ust, 0%) 0 var(--u-kirp-alt, 0%) 0);
+}
+
+.ultron-savas-karart { position: fixed; inset: 0; z-index: 9000; background: #000; }
+.ultron-savas-gl, .ultron-savas-hud { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; }
+.ultron-savas-gl { z-index: 9001; mix-blend-mode: screen; }
+.ultron-savas-hud { z-index: 9002; }
+.ultron-savas-ust { position: fixed; inset: 0; z-index: 9003; cursor: none; }
+.ultron-savas { position: fixed; inset: 0; z-index: 9000; }
+.ultron-savas-ust .u-durum, .ultron-savas .u-durum { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font: 600 14px var(--u-font); letter-spacing: 0.2em; color: var(--u-soluk); text-transform: uppercase; }
+.ultron-savas-ust .u-ipucu, .ultron-savas .u-ipucu { position: absolute; right: 18px; bottom: 14px; font: 500 11px var(--u-font); letter-spacing: 0.12em; color: rgba(255, 200, 170, 0.35); }
+.ultron-savas.kayit .u-ipucu, .ultron-savas.kayit { cursor: default; }
+.ultron-kayit-ilerleme { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 9100; font: 600 13px var(--u-font); color: var(--u-yazi); background: rgba(20, 6, 2, 0.85); border: 1px solid var(--u-cizgi); padding: 8px 14px; letter-spacing: 0.1em; }

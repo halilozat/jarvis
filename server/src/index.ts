@@ -14,6 +14,7 @@ import { beyinRouter } from './beyin.js';
 import { gokNote, gokRouter, initGok, setGokRequest, type GokBaglam } from './gok.js';
 import { bekciRouter, initBekci } from './bekci/index.js';
 import { baslat as toplantiBaslat, initToplanti, otomatikTartisma, toplantiBeyinDegisti, toplantiRouter } from './toplanti/index.js';
+import { initUltron, ultronRouter } from './ultron/index.js';
 import {
   BROWSER, DEFAULT_RATE, clampRate, defaultVoice, isRoutedModel, loadCatalog, preview, providerVoices, synthesize, ttsEnabled, voiceId, warmOpening,
   type VoiceSel,
@@ -121,6 +122,7 @@ initLab(broadcast);
 initGok(broadcast);
 initBekci(broadcast);
 initToplanti(broadcast, { jarvisSes: () => currentVoice() });
+initUltron({ jarvisSes: () => currentVoice() });
 initNewsCenter(broadcast);
 initAdvisor(broadcast);
 initLibrary(broadcast);
@@ -267,6 +269,7 @@ app.use(cameraRouter());
 app.use(gokRouter());
 app.use(bekciRouter());
 app.use(toplantiRouter());
+app.use(ultronRouter());
 app.use(beyinRouter({
   korumali: !!ACCESS_TOKEN,
   degisti: () => {

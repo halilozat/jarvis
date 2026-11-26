@@ -59,6 +59,9 @@ const YERLER: Yer[] = [
   ['Avustralya', -35.28, 149.13, ['avustralya', 'sidney', 'kanberra']],
 ];
 
+/** Yer listesi (Ultron'un Gözü: en yakın yer adı) */
+export const yerListesi = () => YERLER.map(([ad, lat, lon]) => ({ ad, lat, lon }));
+
 /** Başlıkta ilk geçen yer (sadeleştirilmiş metinde kelime başı). Yoksa null. */
 export function yerBul(metin: string): { yer: string; konum: [number, number] } | null {
   const t = ` ${fold(metin).replace(/\s+/g, ' ').trim()} `;

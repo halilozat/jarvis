@@ -15,7 +15,9 @@
     "test:beyin": "tsx src/beyin-test.ts",
     "test:bekci": "tsx src/bekci-test.ts",
     "test:toplanti": "tsx src/toplanti-test.ts",
-    "eval:toplanti": "tsx src/toplanti-eval.ts"
+    "eval:toplanti": "tsx src/toplanti-eval.ts",
+    "test:ultron": "tsx src/ultron-test.ts",
+    "ultron:kayit": "tsx src/ultron-kayit.ts"
   },
   "keywords": [],
   "author": "",
@@ -29,6 +31,7 @@
     "pngjs": "7.0.0",
     "postal-mime": "4.1.4",
     "rss-parser": "^3.13.0",
+    "satellite.js": "^7.2.0",
     "tldts": "7.4.19"
   },
   "devDependencies": {

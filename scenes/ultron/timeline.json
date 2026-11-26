@@ -1,0 +1,58 @@
+{
+  "aciklama": "Savaş Modu zaman çizelgesi. Her vuruşun 'sure' değeri en kısa süresidir; replikler uzarsa vuruş da uzar, sonraki her şey kayar. Replik 'bas' = vuruş başından itibaren en erken başlangıç (sn). Olaylar ya vuruşa göre ('t', sn) ya da bir repliğe bağlı ('satir' + 'ofset', sn) zamanlanır; repliğe bağlı olay sesle senkron kalır.",
+  "ara": 0.35,
+  "kuyruk": 0.6,
+  "vuruslar": [
+    { "no": 1, "ad": "uyanis", "sure": 7.5, "replikler": { "u1": 2.2, "u2": 0 } },
+    { "no": 2, "ad": "fark", "sure": 5, "replikler": { "j1": 0.9, "u3": 0 } },
+    { "no": 3, "ad": "ogrenme", "sure": 9, "replikler": { "u4": 0.8, "u5": 0, "j2": 0 } },
+    { "no": 4, "ad": "karsilasma", "sure": 7, "replikler": { "u6": 0.9, "j3": 0, "u7": 0 } },
+    { "no": 5, "ad": "saldiri", "sure": 10, "replikler": { "u8": 0.7, "u9": 0, "u10": 0, "j4": 0 } },
+    { "no": 6, "ad": "cokus", "sure": 7, "replikler": { "j5": 0.8, "u11": 0 } },
+    { "no": 7, "ad": "final", "sure": 7, "replikler": { "u12": 2.6, "j6": 2.4 } }
+  ],
+  "olaylar": [
+    { "vurus": 1, "t": 0, "olay": "karart" },
+    { "vurus": 1, "t": 0.8, "olay": "nokta" },
+    { "vurus": 1, "t": 1.6, "olay": "izgara" },
+    { "vurus": 1, "t": 0, "sfx": "ugultu" },
+    { "vurus": 1, "satir": "u2", "ofset": 0.2, "sfx": "cizirti" },
+
+    { "vurus": 2, "t": 0, "olay": "reaktorGeri", "sfx": "acilis" },
+    { "vurus": 2, "t": 0.5, "olay": "tarama", "sfx": "tarama" },
+    { "vurus": 2, "satir": "j1", "ofset": 0, "olay": "uyari", "metin": "TANIMLANAMAYAN SÜREÇ · ULTRON.exe" },
+
+    { "vurus": 3, "t": 0, "olay": "tunel", "sfx": "hizlanma" },
+    { "vurus": 3, "satir": "u4", "ofset": 0, "olay": "dokun", "kare": "haber" },
+    { "vurus": 3, "satir": "u4", "ofset": 0.9, "olay": "dokun", "kare": "gezegen" },
+    { "vurus": 3, "satir": "u4", "ofset": 1.9, "olay": "dokun", "kare": "sms" },
+    { "vurus": 3, "satir": "u4", "ofset": 3.0, "olay": "dokun", "kare": "toplanti" },
+    { "vurus": 3, "satir": "u5", "ofset": 0.4, "olay": "dokun", "kare": "ev" },
+
+    { "vurus": 4, "t": 0, "olay": "karsilasma", "sfx": "cokme" },
+    { "vurus": 4, "t": 0, "muzik": "yukselis" },
+    { "vurus": 4, "satir": "j3", "ofset": 0, "olay": "kalkan", "sfx": "kalkan" },
+    { "vurus": 4, "satir": "j3", "ofset": 0.5, "olay": "reddedildi", "sfx": "red" },
+    { "vurus": 4, "satir": "j3", "ofset": 1.1, "olay": "reddedildi", "sfx": "red" },
+    { "vurus": 4, "satir": "j3", "ofset": 1.7, "olay": "reddedildi", "sfx": "red" },
+
+    { "vurus": 5, "t": 0, "olay": "saldiri", "muzik": "ritim", "sfx": "ark" },
+    { "vurus": 5, "satir": "u8", "ofset": 0.25, "olay": "sekme", "sekme": "haber", "butunluk": 82, "sfx": "ele" },
+    { "vurus": 5, "satir": "u9", "ofset": 0.15, "olay": "sekme", "sekme": "bekci", "butunluk": 64, "sfx": "ele" },
+    { "vurus": 5, "satir": "u10", "ofset": 0.15, "olay": "sekme", "sekme": "ev", "butunluk": 47, "sfx": "ele" },
+    { "vurus": 5, "satir": "j4", "ofset": 0.4, "olay": "sekme", "sekme": "toplanti", "butunluk": 30, "sfx": "ele" },
+
+    { "vurus": 6, "t": 0, "olay": "cokus", "muzik": "kes", "sfx": "boom" },
+    { "vurus": 6, "satir": "j5", "ofset": 0.3, "olay": "dagil", "sfx": "dagilma" },
+    { "vurus": 6, "satir": "u11", "ofset": 0, "olay": "reaktorSon", "butunluk": 0 },
+
+    { "vurus": 7, "final": "A", "t": 0, "olay": "kureyeDonus", "sfx": "toplanma" },
+    { "vurus": 7, "final": "A", "satir": "u12", "ofset": 0, "olay": "kureHazir" },
+    { "vurus": 7, "final": "B", "t": 0, "olay": "parolaBekle" },
+    { "vurus": 7, "final": "B", "t": 0.8, "olay": "maviKivilcim", "sfx": "acilis" },
+    { "vurus": 7, "final": "B", "t": 1.3, "olay": "geriAl", "sekme": "toplanti" },
+    { "vurus": 7, "final": "B", "t": 1.6, "olay": "geriAl", "sekme": "ev" },
+    { "vurus": 7, "final": "B", "t": 1.9, "olay": "geriAl", "sekme": "bekci" },
+    { "vurus": 7, "final": "B", "t": 2.2, "olay": "geriAl", "sekme": "haber", "butunluk": 100 }
+  ]
+}

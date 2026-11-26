@@ -1,0 +1,42 @@
+{
+  "aciklama": "Ultron Paketi görsel ve veri ayarları. Renkler, parçacık sayıları, bloom, katman yenileme aralıkları ve 'en tehlikeli yer' skor ağırlıkları.",
+  "renk": {
+    "jarvis": "#3db4ff",
+    "jarvisAcik": "#9fe6ff",
+    "ultron": "#ff6a1a",
+    "ultronKoyu": "#ff3b1f",
+    "ultronCekirdek": "#ffd27a",
+    "arka": "#030509"
+  },
+  "parcacik": { "jarvis": 1600, "ultron": 3400, "tunelKare": 72, "kivilcim": 260 },
+  "bloom": { "guc": 1.0, "yaricap": 0.5, "esik": 0.3 },
+  "kalite": { "hedefFps": 60, "dusurEsik": 45, "kayitFps": 30 },
+  "tohum": 20251126,
+  "goz": {
+    "yenileme_sn": { "deprem_dunya": 60, "deprem_tr": 60, "ucus": 30, "ucus_anahtarsiz": 90, "yangin": 900, "uydu_tle": 21600, "haber": 300, "siber": 900, "hava": 1800 },
+    "zaman_asimi_ms": 5000,
+    "yeniden_deneme": 1,
+    "en_fazla_ucak": 5000,
+    "en_fazla_yangin": 6000,
+    "tehlike": {
+      "aciklama": "Dünya 15°×15° hücrelere bölünür. skor = deprem·Σ(M−3)² (son 24 saat, M≥4) + yangin·(yangın sayısı/100) + haber·(son dakika manşet sayısı) + hava·(uyarı sayısı). En yüksek skorlu hücre seçilir.",
+      "hucre_derece": 15,
+      "agirlik": { "deprem": 1.0, "yangin": 0.6, "haber": 0.8, "hava": 1.5 },
+      "min_buyukluk": 4
+    }
+  },
+  "buyuk_sehirler": [
+    { "ad": "İstanbul", "lat": 41.01, "lon": 28.97 },
+    { "ad": "Ankara", "lat": 39.93, "lon": 32.86 },
+    { "ad": "İzmir", "lat": 38.42, "lon": 27.14 },
+    { "ad": "Bursa", "lat": 40.19, "lon": 29.06 },
+    { "ad": "Antalya", "lat": 36.9, "lon": 30.7 },
+    { "ad": "Adana", "lat": 37.0, "lon": 35.32 },
+    { "ad": "Konya", "lat": 37.87, "lon": 32.48 },
+    { "ad": "Gaziantep", "lat": 37.07, "lon": 37.38 },
+    { "ad": "Diyarbakır", "lat": 37.91, "lon": 40.24 },
+    { "ad": "Erzurum", "lat": 39.9, "lon": 41.27 },
+    { "ad": "Samsun", "lat": 41.29, "lon": 36.33 },
+    { "ad": "Trabzon", "lat": 41.0, "lon": 39.72 }
+  ]
+}
